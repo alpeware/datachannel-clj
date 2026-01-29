@@ -97,8 +97,10 @@
         #_(println "Ignored chunk type:" (:type chunk))))))
 
 
-(defn- run-loop [channel selector ssl-engine peer-addr connection]
+(defn- run-loop [channel selector ssl-engine peer-addr connection & [initial-data]]
   (let [net-in (make-buffer)
+        _ (when (and initial-data (.hasRemaining initial-data))
+            (.put net-in initial-data))
         net-out (make-buffer)
         app-in (make-buffer)  ;; Decrypted DTLS (Incoming SCTP)
         app-out (make-buffer) ;; To be Encrypted DTLS (Outgoing SCTP)
@@ -300,7 +302,7 @@
                           (when (.hasRemaining app-in)
                              (println "Got data on first packet?"))))
 
-                    (run-loop channel selector engine peer-addr connection))
+                    (run-loop channel selector engine peer-addr connection temp-buf))
                   (catch Exception e
                     (println "Server Loop Error:" e)))))]
       (.start t))
