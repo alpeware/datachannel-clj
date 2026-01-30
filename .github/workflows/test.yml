@@ -25,4 +25,4 @@ jobs:
         cli: 'latest'
 
     - name: Run tests
-      run: clj -M:test -m datachannel.test-runner
+      run: clojure -M:test -m datachannel.test-runner
