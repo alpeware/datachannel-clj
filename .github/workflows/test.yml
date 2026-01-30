@@ -28,4 +28,4 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y libpulse0
 
     - name: Run tests
-      run: clojure -M:test -m datachannel.test-runner
+      run: clojure -J--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED -J--add-exports=java.base/sun.security.x509=ALL-UNNAMED -M:test -m datachannel.test-runner
