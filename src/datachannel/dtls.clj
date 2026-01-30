@@ -56,41 +56,88 @@
     (.setNeedClientAuth engine true) ;; WebRTC requires mutual auth
     engine))
 
-;; Packet handling
+(def buffer-size 65536)
 
-(defn- handle-handshake [^SSLEngine engine ^ByteBuffer net-in ^ByteBuffer net-out app-in ^ByteBuffer app-out]
-  (let [status (.getHandshakeStatus engine)]
-    (condp = status
-      SSLEngineResult$HandshakeStatus/NEED_TASK
-      (do
-        (.run (.getDelegatedTask engine))
-        :need-task)
+(defn- make-buffer []
+  (ByteBuffer/allocateDirect buffer-size))
 
-      SSLEngineResult$HandshakeStatus/NEED_WRAP
-      (let [res (.wrap engine app-in net-out)]
-        #_(println "WRAP" (.getStatus res) (.getHandshakeStatus res))
-        :wrapped)
+(defn- buffer->bytes [^ByteBuffer buf]
+  (let [len (.remaining buf)
+        bs (byte-array len)]
+    (.get buf bs)
+    bs))
 
-      SSLEngineResult$HandshakeStatus/NEED_UNWRAP
-      (let [res (.unwrap engine net-in app-out)]
-        #_(println "UNWRAP" (.getStatus res) (.getHandshakeStatus res))
-        (if (= (.getStatus res) SSLEngineResult$Status/BUFFER_UNDERFLOW)
-           :underflow
-           :unwrapped))
+(defn handshake
+  "Runs a single step of the DTLS handshake.
+  `engine`: The SSLEngine.
+  `in`: A ByteBuffer containing incoming handshake data from the peer. Can be empty.
+  `out`: A ByteBuffer to write outgoing handshake data to.
+
+  Returns a map with:
+  :status - The SSLEngineResult$HandshakeStatus.
+  :bytes - A byte array of outgoing data to be sent to the peer, if any."
+  [^SSLEngine engine ^ByteBuffer in ^ByteBuffer out]
+  (.clear out)
+  (let [empty-app-buffer (ByteBuffer/allocate 0)
+        hs-status (.getHandshakeStatus engine)]
+    (condp = hs-status
+      SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
+      (if (.hasRemaining in)
+        (let [res (.unwrap engine in (make-buffer))]
+          {:status (.getHandshakeStatus res)})
+        {:status hs-status})
 
       SSLEngineResult$HandshakeStatus/FINISHED
-      :finished
+      {:status hs-status}
 
-      SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
-      :not-handshaking
+      SSLEngineResult$HandshakeStatus/NEED_TASK
+      (do
+        (when-let [task (.getDelegatedTask engine)]
+          (.run task))
+        {:status (.getHandshakeStatus engine)})
 
-      status)))
+      SSLEngineResult$HandshakeStatus/NEED_WRAP
+      (let [res (.wrap engine empty-app-buffer out)]
+        (.flip out)
+        {:status (.getHandshakeStatus res)
+         :bytes (buffer->bytes out)})
 
-;; This is a high-level wrapper.
-;; `engine`: SSLEngine
-;; `net-in`: ByteBuffer containing incoming UDP packet
-;; `net-out`: ByteBuffer to write outgoing UDP packet
-;; `app-in`: ByteBuffer containing outgoing Application data (SCTP)
-;; `app-out`: ByteBuffer to write incoming Application data (SCTP)
-(defn step [^SSLEngine engine ^ByteBuffer net-in ^ByteBuffer net-out ^ByteBuffer app-in ^ByteBuffer app-out]
-  (handle-handshake engine net-in net-out app-in app-out))
+      SSLEngineResult$HandshakeStatus/NEED_UNWRAP
+      (let [res (.unwrap engine in (make-buffer))]
+        {:status (.getHandshakeStatus res)})
+
+      SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN
+      (let [res (.unwrap engine in (make-buffer))]
+        {:status (.getHandshakeStatus res)}))))
+
+(defn send-app-data
+  "Encrypts and sends application data. Should only be called after handshake is complete.
+  `engine`: The SSLEngine.
+  `app-data`: A ByteBuffer with the application data to send.
+  `net-out`: A ByteBuffer to write the encrypted data to.
+
+  Returns a map with:
+  :status - The SSLEngineResult$Status.
+  :bytes - A byte array of the encrypted data to be sent."
+  [^SSLEngine engine ^ByteBuffer app-data ^ByteBuffer net-out]
+  (.clear net-out)
+  (let [res (.wrap engine app-data net-out)]
+    (.flip net-out)
+    {:status (.getStatus res)
+     :bytes (buffer->bytes net-out)}))
+
+(defn receive-app-data
+  "Receives and decrypts application data.
+  `engine`: The SSLEngine.
+  `net-in`: A ByteBuffer containing encrypted data from the peer.
+  `app-out`: A ByteBuffer to write the decrypted application data to.
+
+  Returns a map with:
+  :status - The SSLEngineResult$Status.
+  :bytes - A byte array of the decrypted application data, if any."
+  [^SSLEngine engine ^ByteBuffer net-in ^ByteBuffer app-out]
+  (.clear app-out)
+  (let [res (.unwrap engine net-in app-out)]
+    (.flip app-out)
+    {:status (.getStatus res)
+     :bytes (buffer->bytes app-out)}))
