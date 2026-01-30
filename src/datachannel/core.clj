@@ -99,11 +99,38 @@
 
 (defn- run-loop [channel selector ssl-engine peer-addr connection & [initial-data]]
   (let [net-in (make-buffer)
-        _ (when (and initial-data (.hasRemaining initial-data))
-            (.put net-in initial-data))
         net-out (make-buffer)
         app-in (make-buffer)  ;; Decrypted DTLS (Incoming SCTP)
         app-out (make-buffer) ;; To be Encrypted DTLS (Outgoing SCTP)
+
+        ;; Process initial data
+        _ (when (and initial-data (.hasRemaining initial-data))
+            (.put net-in initial-data)
+            (.flip net-in)
+            (loop [retry false]
+              (when (or (.hasRemaining net-in) retry)
+                (let [res (.unwrap ssl-engine net-in app-in)
+                      status (.getStatus res)
+                      hs-status (.getHandshakeStatus res)]
+                  (let [should-retry (= hs-status SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN)]
+                    (condp = status
+                      SSLEngineResult$Status/OK
+                      (do
+                        (.flip app-in)
+                        (when (.hasRemaining app-in)
+                          (try
+                            (let [packet (sctp/decode-packet app-in)]
+                              (handle-sctp-packet packet connection))
+                            (catch Exception e
+                              (println "SCTP Decode Error:" e))))
+                        (.compact app-in)
+                        (recur should-retry))
+                      SSLEngineResult$Status/BUFFER_UNDERFLOW
+                      (.compact net-in)
+                      (do
+                        #_(println "DTLS Initial Unwrap Status:" status)
+                        (.compact net-in))))))))
+
         sctp-out (:sctp-out connection)
         pending-app-out (atom nil)]
 
@@ -294,13 +321,6 @@
                                       addr))]
                     (println "Accepted connection from" peer-addr)
                     #_(println "Received UDP packet from" peer-addr "bytes:" (.limit temp-buf))
-
-                    (let [app-in (make-buffer)
-                          res (.unwrap engine temp-buf app-in)]
-                       (when (= (.getStatus res) SSLEngineResult$Status/OK)
-                          (.flip app-in)
-                          (when (.hasRemaining app-in)
-                             (println "Got data on first packet?"))))
 
                     (run-loop channel selector engine peer-addr connection temp-buf))
                   (catch Exception e
