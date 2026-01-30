@@ -27,7 +27,7 @@
           cert (.getSelfCertificate key-pair-generator
                                     x500-name
                                     (Date.)
-                                    (* 1000 60 60 24 3650))]
+                                    (* 60 60 24 3650))]
       {:cert cert
        :key key
        :fingerprint (fingerprint cert)})))
