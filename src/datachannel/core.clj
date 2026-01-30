@@ -1,6 +1,7 @@
 (ns datachannel.core
   (:require [datachannel.sctp :as sctp]
-            [datachannel.dtls :as dtls])
+            [datachannel.dtls :as dtls]
+            [datachannel.stun :as stun])
   (:import [java.nio ByteBuffer]
            [java.net InetSocketAddress StandardSocketOptions]
            [java.nio.channels DatagramChannel Selector SelectionKey]
@@ -186,42 +187,50 @@
                       ;; Loop to consume all records in the packet
                       (loop [retry false]
                         (when (or (.hasRemaining net-in) retry)
-                          (let [res (.unwrap ssl-engine net-in app-in)
-                                status (.getStatus res)
-                                hs-status (.getHandshakeStatus res)]
-                            #_(println "Unwrap result:" res)
-                            #_(when (or (> (.bytesConsumed res) 0) (> (.bytesProduced res) 0))
-                               (println "DTLS Unwrap consumed" (.bytesConsumed res) "produced" (.bytesProduced res) "HS Status:" hs-status))
+                          (if (let [b (if (.hasRemaining net-in) (.get net-in (.position net-in)) -1)]
+                                (or (= b 0) (= b 1)))
+                            ;; STUN packet
+                            (do
+                              (when-let [resp (stun/handle-packet net-in peer-addr connection)]
+                                (.send channel resp peer-addr))
+                              (.clear net-in))
+                            ;; DTLS packet
+                            (let [res (.unwrap ssl-engine net-in app-in)
+                                  status (.getStatus res)
+                                  hs-status (.getHandshakeStatus res)]
+                              #_(println "Unwrap result:" res)
+                              #_(when (or (> (.bytesConsumed res) 0) (> (.bytesProduced res) 0))
+                                 (println "DTLS Unwrap consumed" (.bytesConsumed res) "produced" (.bytesProduced res) "HS Status:" hs-status))
 
-                            (let [should-retry (= hs-status SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN)]
-                              (condp = status
-                                SSLEngineResult$Status/OK
-                                (do
-                                  (.flip app-in)
-                                  (when (.hasRemaining app-in)
-                                    ;; We have decrypted data! Parse SCTP.
-                                    (try
-                                      (let [packet (sctp/decode-packet app-in)]
-                                        (handle-sctp-packet packet connection))
-                                      (catch Exception e
-                                        (println "SCTP Decode Error:" e))))
-                                  (.compact app-in)
-                                  (recur should-retry))
+                              (let [should-retry (= hs-status SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN)]
+                                (condp = status
+                                  SSLEngineResult$Status/OK
+                                  (do
+                                    (.flip app-in)
+                                    (when (.hasRemaining app-in)
+                                      ;; We have decrypted data! Parse SCTP.
+                                      (try
+                                        (let [packet (sctp/decode-packet app-in)]
+                                          (handle-sctp-packet packet connection))
+                                        (catch Exception e
+                                          (println "SCTP Decode Error:" e))))
+                                    (.compact app-in)
+                                    (recur should-retry))
 
-                                SSLEngineResult$Status/BUFFER_UNDERFLOW
-                                (do
-                                  ;; Need more data
-                                  (.compact net-in))
+                                  SSLEngineResult$Status/BUFFER_UNDERFLOW
+                                  (do
+                                    ;; Need more data
+                                    (.compact net-in))
 
-                                (do
-                                  (println "DTLS Unwrap Status:" status)
-                                  (.compact net-in))))))))))
+                                  (do
+                                    (println "DTLS Unwrap Status:" status)
+                                    (.compact net-in)))))))))))
                 (.clear keys))))
           (recur))
         (println "Channel closed.")))))
 
-(defn connect [host port]
-  (let [cert-data (dtls/generate-cert)
+(defn connect [host port & {:as options}]
+  (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
         engine (dtls/create-engine ctx true) ;; Client mode
         channel (DatagramChannel/open)
@@ -235,7 +244,11 @@
                                   :next-tsn 0
                                   :ssn 0})
                     :on-message (atom nil)
-                    :on-open (atom nil)}]
+                    :on-open (atom nil)
+                    :cert-data cert-data
+                    :ice-ufrag (:ice-ufrag options)
+                    :ice-pwd (:ice-pwd options)
+                    :channel channel}]
     (.configureBlocking channel false)
     (.connect channel peer-addr)
 
@@ -264,8 +277,8 @@
 
     connection))
 
-(defn listen [port]
-  (let [cert-data (dtls/generate-cert)
+(defn listen [port & {:as options}]
+  (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
         engine (dtls/create-engine ctx false) ;; Server mode
         channel (DatagramChannel/open)
@@ -278,9 +291,15 @@
                                   :next-tsn 0
                                   :ssn 0})
                     :on-message (atom nil)
-                    :on-open (atom nil)}]
+                    :on-open (atom nil)
+                    :cert-data cert-data
+                    :ice-ufrag (:ice-ufrag options)
+                    :ice-pwd (:ice-pwd options)
+                    :channel channel}]
     (.configureBlocking channel false)
-    (.bind channel (InetSocketAddress. port))
+    (if-let [host (:host options)]
+      (.bind channel (InetSocketAddress. ^String host (int port)))
+      (.bind channel (InetSocketAddress. (int port))))
 
     (let [t (Thread.
               (fn []
