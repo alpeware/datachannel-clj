@@ -114,8 +114,8 @@
           v-bytes (if (bytes? v) v (byte-array 0))
           len (+ 4 (alength v-bytes))
           padding (pad len)]
-      (.putShort buf type-code)
-      (.putShort buf len)
+      (.putShort buf (unchecked-short type-code))
+      (.putShort buf (unchecked-short len))
       (.put buf v-bytes)
       (dotimes [_ padding] (.put buf (byte 0))))))
 
@@ -217,6 +217,15 @@
                  (.position buf (+ chunk-start val-len))
                  chunk-data)
 
+              :cookie-ack
+              chunk-data
+
+              :shutdown
+              chunk-data
+
+              :shutdown-ack
+              chunk-data
+
               ;; Default: just consume the body bytes
               (let [body (byte-array val-len)]
                 (.get buf body)
@@ -258,28 +267,28 @@
     (case type-key
       :data
       (do
-        (.putInt buf (int (:tsn chunk)))
-        (.putShort buf (short (:stream-id chunk)))
-        (.putShort buf (short (:seq-num chunk)))
-        (.putInt buf (int (get protocols (:protocol chunk) (:protocol chunk))))
+        (.putInt buf (unchecked-int (:tsn chunk)))
+        (.putShort buf (unchecked-short (:stream-id chunk)))
+        (.putShort buf (unchecked-short (:seq-num chunk)))
+        (.putInt buf (unchecked-int (get protocols (:protocol chunk) (:protocol chunk))))
         (.put buf ^bytes (:payload chunk)))
 
       :init
       (do
-        (.putInt buf (int (:init-tag chunk)))
-        (.putInt buf (int (:a-rwnd chunk)))
-        (.putShort buf (short (:outbound-streams chunk)))
-        (.putShort buf (short (:inbound-streams chunk)))
-        (.putInt buf (int (:initial-tsn chunk)))
+        (.putInt buf (unchecked-int (:init-tag chunk)))
+        (.putInt buf (unchecked-int (:a-rwnd chunk)))
+        (.putShort buf (unchecked-short (:outbound-streams chunk)))
+        (.putShort buf (unchecked-short (:inbound-streams chunk)))
+        (.putInt buf (unchecked-int (:initial-tsn chunk)))
         (encode-params buf (:params chunk)))
 
       :init-ack
       (do
-        (.putInt buf (int (:init-tag chunk)))
-        (.putInt buf (int (:a-rwnd chunk)))
-        (.putShort buf (short (:outbound-streams chunk)))
-        (.putShort buf (short (:inbound-streams chunk)))
-        (.putInt buf (int (:initial-tsn chunk)))
+        (.putInt buf (unchecked-int (:init-tag chunk)))
+        (.putInt buf (unchecked-int (:a-rwnd chunk)))
+        (.putShort buf (unchecked-short (:outbound-streams chunk)))
+        (.putShort buf (unchecked-short (:inbound-streams chunk)))
+        (.putInt buf (unchecked-int (:initial-tsn chunk)))
         (encode-params buf (:params chunk)))
 
       :cookie-echo
@@ -287,15 +296,15 @@
 
       :sack
       (do
-        (.putInt buf (int (:cum-tsn-ack chunk)))
-        (.putInt buf (int (:a-rwnd chunk)))
-        (.putShort buf (short (count (:gap-blocks chunk))))
-        (.putShort buf (short (count (:duplicate-tsns chunk))))
+        (.putInt buf (unchecked-int (:cum-tsn-ack chunk)))
+        (.putInt buf (unchecked-int (:a-rwnd chunk)))
+        (.putShort buf (unchecked-short (count (:gap-blocks chunk))))
+        (.putShort buf (unchecked-short (count (:duplicate-tsns chunk))))
         (doseq [[start end] (:gap-blocks chunk)]
-          (.putShort buf (short start))
-          (.putShort buf (short end)))
+          (.putShort buf (unchecked-short start))
+          (.putShort buf (unchecked-short end)))
         (doseq [dup (:duplicate-tsns chunk)]
-          (.putInt buf (int dup))))
+          (.putInt buf (unchecked-int dup))))
 
       :heartbeat
       (encode-params buf (:params chunk))
@@ -310,7 +319,7 @@
     (let [end-pos (.position buf)
           len (- end-pos start-pos)
           padding (pad len)]
-      (.putShort buf (+ start-pos 2) (short len))
+      (.putShort buf (+ start-pos 2) (unchecked-short len))
       (dotimes [_ padding] (.put buf (byte 0))))))
 
 (defn update-checksum [^ByteBuffer buf]
@@ -327,9 +336,9 @@
       buf)))
 
 (defn encode-packet [packet ^ByteBuffer buf]
-  (.putShort buf (short (:src-port packet)))
-  (.putShort buf (short (:dst-port packet)))
-  (.putInt buf (int (:verification-tag packet)))
+  (.putShort buf (unchecked-short (:src-port packet)))
+  (.putShort buf (unchecked-short (:dst-port packet)))
+  (.putInt buf (unchecked-int (:verification-tag packet)))
   (.putInt buf 0) ;; Checksum placeholder
   (doseq [chunk (:chunks packet)]
     (encode-chunk buf chunk))
