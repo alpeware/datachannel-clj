@@ -1,13 +1,15 @@
 (ns datachannel.dtls
   (:require [clojure.string :as string]
-            [clojure.java.shell :refer [sh]]
             [clojure.java.io :as io])
   (:import
    [java.nio ByteBuffer]
-   [java.security KeyStore SecureRandom MessageDigest]
+   [java.security KeyStore SecureRandom MessageDigest PrivateKey]
    [javax.net.ssl SSLContext SSLEngine SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
    [java.security.cert X509Certificate]
-   [java.io File FileInputStream]))
+   [java.io File FileInputStream]
+   [sun.security.tools.keytool CertAndKeyGen]
+   [sun.security.x509 X500Name]
+   [java.util Date]))
 
 (defn fingerprint [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
@@ -18,34 +20,17 @@
          (string/join ":"))))
 
 (defn generate-cert []
-  (let [filename (str "temp-keystore-" (java.util.UUID/randomUUID) ".p12")
-        password "password"
-        alias "webrtc"]
-    (try
-      (let [result (sh "keytool" "-genkeypair"
-                       "-alias" alias
-                       "-keyalg" "RSA"
-                       "-keysize" "2048"
-                       "-storetype" "PKCS12"
-                       "-keystore" filename
-                       "-storepass" password
-                       "-keypass" password
-                       "-dname" "CN=WebRTC, O=Clojure, C=US"
-                       "-validity" "3650")]
-        (if (not= 0 (:exit result))
-          (do
-            (println "Keytool error:" (:err result))
-            nil)
-          (let [ks (KeyStore/getInstance "PKCS12")]
-            (with-open [fis (FileInputStream. filename)]
-              (.load ks fis (.toCharArray password)))
-            (let [key (.getKey ks alias (.toCharArray password))
-                  cert (.getCertificate ks alias)]
-              {:cert cert
-               :key key
-               :fingerprint (fingerprint cert)}))))
-      (finally
-        (io/delete-file filename true)))))
+  (let [key-pair-generator (CertAndKeyGen. "RSA" "SHA256WithRSA" nil)
+        x500-name (X500Name. "CN=WebRTC, O=Clojure, C=US")]
+    (.generate key-pair-generator 2048)
+    (let [key (.getPrivateKey key-pair-generator)
+          cert (.getSelfCertificate key-pair-generator
+                                    x500-name
+                                    (Date.)
+                                    (* 60 60 24 3650))]
+      {:cert cert
+       :key key
+       :fingerprint (fingerprint cert)})))
 
 (defn create-ssl-context [cert key]
   (let [ks (KeyStore/getInstance "PKCS12")
