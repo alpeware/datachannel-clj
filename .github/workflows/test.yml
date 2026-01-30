@@ -20,7 +20,7 @@ jobs:
         distribution: 'temurin'
 
     - name: Install Clojure
-      uses: DeLaGuardo/setup-clojure@v12
+      uses: DeLaGuardo/setup-clojure@13
       with:
         cli: 'latest'
 
