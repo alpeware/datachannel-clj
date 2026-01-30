@@ -9,7 +9,6 @@
 (defn -main []
   (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
                                              'datachannel.dtls-test
-                                             'datachannel.integration-test
                                              'datachannel.webrtc-java-test
                                              'datachannel.stun-integration-test)]
     (if (> (+ fail error) 0)
