@@ -98,135 +98,69 @@
         #_(println "Ignored chunk type:" (:type chunk))))))
 
 
-(defn- run-loop [channel selector ssl-engine peer-addr connection & [initial-data]]
+(defn- run-loop [^DatagramChannel channel ^Selector selector ^SSLEngine ssl-engine peer-addr connection & [initial-data]]
   (let [net-in (make-buffer)
         _ (when (and initial-data (.hasRemaining initial-data))
-            (.put net-in initial-data))
+            (.put net-in initial-data)
+            (.flip net-in))
         net-out (make-buffer)
         app-in (make-buffer)  ;; Decrypted DTLS (Incoming SCTP)
         app-out (make-buffer) ;; To be Encrypted DTLS (Outgoing SCTP)
-        sctp-out (:sctp-out connection)
-        pending-app-out (atom nil)]
+        sctp-out (:sctp-out connection)]
 
     (.register channel selector SelectionKey/OP_READ)
 
     (if (.getUseClientMode ssl-engine)
       (.beginHandshake ssl-engine))
 
-    (loop []
+    (loop [net-in-loop net-in]
       (if (.isOpen channel)
         (do
-          #_(let [hs-status (.getHandshakeStatus ssl-engine)]
-            (when (not= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
-               (println "Loop HS Status:" hs-status)))
+          ;; Process incoming data first, if any
+          (when (.hasRemaining net-in-loop)
+            (if (let [b (.get net-in-loop (.position net-in-loop))] (or (= b 0) (= b 1)))
+              (when-let [resp (stun/handle-packet net-in-loop peer-addr connection)]
+                (.send channel resp peer-addr))
+              (if (= (.getHandshakeStatus ssl-engine) SSLEngineResult$HandshakeStatus/FINISHED)
+                (let [res (dtls/receive-app-data ssl-engine net-in-loop app-in)]
+                  (when-let [bytes (:bytes res)]
+                    (when (> (count bytes) 0)
+                      (try (-> (ByteBuffer/wrap bytes) sctp/decode-packet (handle-sctp-packet connection))
+                           (catch Exception e (println "SCTP Decode Error:" e))))))
+                (let [res (dtls/handshake ssl-engine net-in-loop net-out)]
+                  (when-let [bytes (:bytes res)]
+                    (when (> (count bytes) 0)
+                      (.send channel (ByteBuffer/wrap bytes) peer-addr)))))))
+          (.compact net-in-loop)
 
-          (let [count (.select selector 10)] ;; Faster polling
+          ;; Handle handshake and outgoing data
+          (let [hs-status (.getHandshakeStatus ssl-engine)]
+            (cond
+              (not= hs-status SSLEngineResult$HandshakeStatus/FINISHED)
+              (let [res (dtls/handshake ssl-engine (ByteBuffer/allocate 0) net-out)]
+                (when-let [bytes (:bytes res)]
+                  (when (> (count bytes) 0)
+                    (.send channel (ByteBuffer/wrap bytes) peer-addr))))
+              :else
+              (when-let [packet (.poll sctp-out)]
+                (.clear app-out)
+                (sctp/encode-packet packet app-out)
+                (.flip app-out)
+                (let [res (dtls/send-app-data ssl-engine app-out net-out)]
+                  (when-let [bytes (:bytes res)]
+                    (when (> (count bytes) 0)
+                      (.send channel (ByteBuffer/wrap bytes) peer-addr)))))))
 
-            ;; Check for outgoing SCTP packets to wrap
-            ;; Only try to send app data if handshake is finished
-            (when (contains? #{SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING SSLEngineResult$HandshakeStatus/FINISHED} (.getHandshakeStatus ssl-engine))
-              (when (or @pending-app-out (not (.isEmpty sctp-out)))
-                 (let [packet (or @pending-app-out (.poll sctp-out))]
-                   (when packet
-                     (reset! pending-app-out nil)
-                     (.clear app-out)
-                     (sctp/encode-packet packet app-out)
-                     (.flip app-out)
-
-                     (let [res (.wrap ssl-engine app-out net-out)]
-                       #_(println "Wrap App Data Result:" res)
-                       (when (= (.getStatus res) SSLEngineResult$Status/OK)
-                         (.flip net-out)
-                         (if (.hasRemaining net-out)
-                            (do
-                              (.send channel net-out peer-addr)
-                              #_(println "Sent Encrypted SCTP packet bytes:" (.limit net-out)))
-                            #_(println "Wrap produced 0 bytes"))
-                         (.compact net-out))
-
-                       (if (> (.bytesConsumed res) 0)
-                         (do
-                           #_(println "Consumed SCTP packet, type:" (map :type (:chunks packet)))
-                           (reset! pending-app-out nil))
-                         (do
-                           #_(println "SCTP packet not consumed, requeuing. HS Status:" (.getHandshakeStatus ssl-engine))
-                           (reset! pending-app-out packet))))))))
-
-            ;; DTLS Handshake Wrap (for pure handshake messages)
-            (when (= (.getHandshakeStatus ssl-engine) SSLEngineResult$HandshakeStatus/NEED_WRAP)
-              (.clear net-out)
-              ;; Use empty app-in for handshake wrap
-              (.clear app-in)
-              (.flip app-in)
-              (let [res (.wrap ssl-engine app-in net-out)]
-                 (.flip net-out)
-                 (if (.hasRemaining net-out)
-                   (do
-                     (.send channel net-out peer-addr)
-                     #_(println "Sent DTLS Handshake packet bytes:" (.limit net-out)))
-                   #_(println "Warning: NEED_WRAP produced 0 bytes. Status:" (.getStatus res) "HS Status:" (.getHandshakeStatus res)))
-                 (.compact net-out)))
-
-            ;; DTLS Task
-            (loop []
-              (when (= (.getHandshakeStatus ssl-engine) SSLEngineResult$HandshakeStatus/NEED_TASK)
-                 (let [task (.getDelegatedTask ssl-engine)]
-                   (when task
-                     (.run task)
-                     (recur)))))
-
+          ;; Wait for new data
+          (let [count (.select selector 10)]
             (if (> count 0)
               (let [keys (.selectedKeys selector)]
                 (doseq [key keys]
                   (when (.isReadable key)
-                    (.clear net-in)
-                    (let [addr (.receive channel net-in)]
-                      #_(println "Received UDP packet from" addr "bytes:" (.position net-in))
-                      (.flip net-in)
-
-                      ;; Loop to consume all records in the packet
-                      (loop [retry false]
-                        (when (or (.hasRemaining net-in) retry)
-                          (if (let [b (if (.hasRemaining net-in) (.get net-in (.position net-in)) -1)]
-                                (or (= b 0) (= b 1)))
-                            ;; STUN packet
-                            (do
-                              (when-let [resp (stun/handle-packet net-in peer-addr connection)]
-                                (.send channel resp peer-addr))
-                              (.clear net-in))
-                            ;; DTLS packet
-                            (let [res (.unwrap ssl-engine net-in app-in)
-                                  status (.getStatus res)
-                                  hs-status (.getHandshakeStatus res)]
-                              #_(println "Unwrap result:" res)
-                              #_(when (or (> (.bytesConsumed res) 0) (> (.bytesProduced res) 0))
-                                 (println "DTLS Unwrap consumed" (.bytesConsumed res) "produced" (.bytesProduced res) "HS Status:" hs-status))
-
-                              (let [should-retry (= hs-status SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN)]
-                                (condp = status
-                                  SSLEngineResult$Status/OK
-                                  (do
-                                    (.flip app-in)
-                                    (when (.hasRemaining app-in)
-                                      ;; We have decrypted data! Parse SCTP.
-                                      (try
-                                        (let [packet (sctp/decode-packet app-in)]
-                                          (handle-sctp-packet packet connection))
-                                        (catch Exception e
-                                          (println "SCTP Decode Error:" e))))
-                                    (.compact app-in)
-                                    (recur should-retry))
-
-                                  SSLEngineResult$Status/BUFFER_UNDERFLOW
-                                  (do
-                                    ;; Need more data
-                                    (.compact net-in))
-
-                                  (do
-                                    (println "DTLS Unwrap Status:" status)
-                                    (.compact net-in)))))))))))
+                    (.receive channel net-in-loop)
+                    (.flip net-in-loop)))
                 (.clear keys))))
-          (recur))
+          (recur net-in-loop))
         (println "Channel closed.")))))
 
 (defn connect [host port & {:as options}]
@@ -309,18 +243,9 @@
                                     (.configureBlocking channel true)
                                     (let [addr (.receive channel temp-buf)]
                                       (.configureBlocking channel false)
-                                      (.flip temp-buf)
                                       addr))]
                     (println "Accepted connection from" peer-addr)
-                    #_(println "Received UDP packet from" peer-addr "bytes:" (.limit temp-buf))
-
-                    (let [app-in (make-buffer)
-                          res (.unwrap engine temp-buf app-in)]
-                       (when (= (.getStatus res) SSLEngineResult$Status/OK)
-                          (.flip app-in)
-                          (when (.hasRemaining app-in)
-                             (println "Got data on first packet?"))))
-
+                    (.flip temp-buf)
                     (run-loop channel selector engine peer-addr connection temp-buf))
                   (catch Exception e
                     (println "Server Loop Error:" e)))))]
