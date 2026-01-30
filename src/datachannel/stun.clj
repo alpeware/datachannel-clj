@@ -109,6 +109,65 @@
     (.flip buf)
     buf))
 
+(defn make-simple-binding-request []
+  (let [buf (ByteBuffer/allocate 1024)
+        _ (.order buf ByteOrder/BIG_ENDIAN)
+        tx-id (byte-array 12)]
+    (.nextBytes (java.util.Random.) tx-id)
+
+    ;; Header
+    (put-unsigned-short buf 0x0001) ;; Binding Request
+    (put-unsigned-short buf 0) ;; Length is 0
+    (.putInt buf magic-cookie)
+    (.put buf tx-id)
+
+    (.flip buf)
+    buf))
+
+(defn decode-xor-mapped-address [val-bytes cookie]
+  (let [buf (ByteBuffer/wrap val-bytes)
+        _ (.order buf ByteOrder/BIG_ENDIAN)
+        _ (get-unsigned-byte buf) ;; reserved
+        family (get-unsigned-byte buf)
+        port (get-unsigned-short buf)]
+    (if (= family 0x01)
+      (let [addr-bytes (byte-array 4)]
+        (.get buf addr-bytes)
+        ;; XOR logic
+        (let [xport (bit-xor port (bit-shift-right cookie 16))
+              cookie-bytes (ByteBuffer/allocate 4)
+              _ (.putInt cookie-bytes cookie)
+              _ (.flip cookie-bytes)
+              magic-bytes (.array cookie-bytes)
+              decoded-addr (byte-array 4)]
+           (dotimes [i 4]
+              (aset decoded-addr i (byte (bit-xor (aget addr-bytes i) (aget magic-bytes i)))))
+           {:family family :port xport :address (java.net.InetAddress/getByAddress decoded-addr)}))
+      (throw (ex-info "Only IPv4 supported for now" {:family family})))))
+
+(defn parse-packet [^ByteBuffer buf]
+  (let [_ (.order buf ByteOrder/BIG_ENDIAN)
+        msg-type (get-unsigned-short buf)
+        msg-len (get-unsigned-short buf)
+        cookie (.getInt buf)
+        tx-id (byte-array 12)]
+    (.get buf tx-id)
+    ;; Loop through attributes
+    (loop [attrs {}]
+       (if (< (.position buf) (.limit buf))
+         (let [attr-type (get-unsigned-short buf)
+               attr-len (get-unsigned-short buf)
+               ;; Read value
+               val-bytes (byte-array attr-len)
+               _ (.get buf val-bytes)
+               ;; Handle padding
+               padding (mod attr-len 4)
+               _ (when (and (> padding 0) (< padding 4))
+                   (let [pad-len (- 4 padding)]
+                      (dotimes [_ pad-len] (.get buf))))]
+             (recur (assoc attrs attr-type val-bytes)))
+         {:type msg-type :length msg-len :cookie cookie :tx-id tx-id :attributes attrs}))))
+
 (defn handle-packet [^ByteBuffer buf ^InetSocketAddress peer-addr connection]
   (try
     (let [start-pos (.position buf)
