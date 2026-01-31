@@ -286,3 +286,6 @@
                           :protocol :webrtc/string
                           :payload (.getBytes msg "UTF-8")}]}]
      (.offer (:sctp-out connection) packet)))
+
+(defn close [connection]
+  (close-channel (:channel connection)))

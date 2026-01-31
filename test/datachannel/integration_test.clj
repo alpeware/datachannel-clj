@@ -38,4 +38,7 @@
       (is (= "World" (deref client-received 30000 :timeout)))
 
       (catch Exception e
-        (is false (str "Exception during integration test: " (.getMessage e)))))))
+        (is false (str "Exception during integration test: " (.getMessage e))))
+      (finally
+        (dc/close client)
+        (dc/close server)))))
