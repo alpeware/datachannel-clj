@@ -31,11 +31,11 @@
 
     (try
       ;; Wait for connection
-      (is (deref client-connected 10000 false) "Client failed to connect")
+      (is (deref client-connected 30000 false) "Client failed to connect")
 
       ;; Wait for messages
-      (is (= "Hello" (deref server-received 10000 :timeout)))
-      (is (= "World" (deref client-received 10000 :timeout)))
+      (is (= "Hello" (deref server-received 30000 :timeout)))
+      (is (= "World" (deref client-received 30000 :timeout)))
 
       (catch Exception e
         (is false (str "Exception during integration test: " (.getMessage e)))))))

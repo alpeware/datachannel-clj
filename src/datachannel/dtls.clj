@@ -6,10 +6,10 @@
    [java.security KeyStore SecureRandom MessageDigest PrivateKey]
    [javax.net.ssl SSLContext SSLEngine SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
    [java.security.cert X509Certificate]
-   [java.io File FileInputStream]
+   [java.io File FileInputStream ByteArrayOutputStream]
    [sun.security.tools.keytool CertAndKeyGen]
    [sun.security.x509 X500Name]
-   [java.util Date]))
+   [java.util Date ArrayList]))
 
 (defn fingerprint [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
@@ -68,47 +68,88 @@
     bs))
 
 (defn handshake
-  "Runs a single step of the DTLS handshake.
+  "Runs the DTLS handshake loop until I/O is required.
   `engine`: The SSLEngine.
   `in`: A ByteBuffer containing incoming handshake data from the peer. Can be empty.
-  `out`: A ByteBuffer to write outgoing handshake data to.
+  `out`: A ByteBuffer to use as scratch space for outgoing data.
 
   Returns a map with:
   :status - The SSLEngineResult$HandshakeStatus.
-  :bytes - A byte array of outgoing data to be sent to the peer, if any."
+  :packets - A vector of byte arrays (outgoing packets).
+  :app-data - A byte array of decrypted application data (if any)."
   [^SSLEngine engine ^ByteBuffer in ^ByteBuffer out]
   (.clear out)
   (let [empty-app-buffer (ByteBuffer/allocate 0)
-        hs-status (.getHandshakeStatus engine)]
-    (condp = hs-status
-      SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
-      (if (.hasRemaining in)
-        (let [res (.unwrap engine in (make-buffer))]
-          {:status (.getHandshakeStatus res)})
-        {:status hs-status})
+        packets (ArrayList.)
+        app-data-out (ByteArrayOutputStream.)]
+    (loop [loops 0]
+      (if (> loops 100)
+        (throw (Exception. "Too many handshake loops"))
+        (let [hs-status (.getHandshakeStatus engine)]
+          (condp = hs-status
+            SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
+            {:status hs-status
+             :packets (vec packets)
+             :app-data (.toByteArray app-data-out)}
 
-      SSLEngineResult$HandshakeStatus/FINISHED
-      {:status hs-status}
+            SSLEngineResult$HandshakeStatus/FINISHED
+            {:status hs-status
+             :packets (vec packets)
+             :app-data (.toByteArray app-data-out)}
 
-      SSLEngineResult$HandshakeStatus/NEED_TASK
-      (do
-        (when-let [task (.getDelegatedTask engine)]
-          (.run task))
-        {:status (.getHandshakeStatus engine)})
+            SSLEngineResult$HandshakeStatus/NEED_TASK
+            (do
+              (when-let [task (.getDelegatedTask engine)]
+                (.run task))
+              (recur (inc loops)))
 
-      SSLEngineResult$HandshakeStatus/NEED_WRAP
-      (let [res (.wrap engine empty-app-buffer out)]
-        (.flip out)
-        {:status (.getHandshakeStatus res)
-         :bytes (buffer->bytes out)})
+            SSLEngineResult$HandshakeStatus/NEED_WRAP
+            (do
+              (.clear out)
+              (let [res (.wrap engine empty-app-buffer out)]
+                (.flip out)
+                (when (> (.remaining out) 0)
+                  (.add packets (buffer->bytes out)))
+                (condp = (.getStatus res)
+                  SSLEngineResult$Status/BUFFER_OVERFLOW
+                  (throw (Exception. "Buffer overflow during handshake wrap"))
+                  SSLEngineResult$Status/CLOSED
+                  (throw (Exception. "SSLEngine closed during handshake"))
+                  (recur (inc loops)))))
 
-      SSLEngineResult$HandshakeStatus/NEED_UNWRAP
-      (let [res (.unwrap engine in (make-buffer))]
-        {:status (.getHandshakeStatus res)})
+            SSLEngineResult$HandshakeStatus/NEED_UNWRAP
+            (if (.hasRemaining in)
+              (let [temp-app (make-buffer)
+                    res (.unwrap engine in temp-app)]
+                (.flip temp-app)
+                (when (> (.remaining temp-app) 0)
+                  (.write app-data-out (buffer->bytes temp-app) 0 (.remaining temp-app)))
+                (condp = (.getStatus res)
+                  SSLEngineResult$Status/BUFFER_UNDERFLOW
+                  {:status (.getHandshakeStatus engine)
+                   :packets (vec packets)
+                   :app-data (.toByteArray app-data-out)}
+                  SSLEngineResult$Status/CLOSED
+                  (throw (Exception. "SSLEngine closed during handshake"))
+                  (recur (inc loops))))
+              {:status hs-status
+               :packets (vec packets)
+               :app-data (.toByteArray app-data-out)})
 
-      SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN
-      (let [res (.unwrap engine in (make-buffer))]
-        {:status (.getHandshakeStatus res)}))))
+            SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN
+            (let [temp-app (make-buffer)
+                  res (.unwrap engine in temp-app)]
+              (.flip temp-app)
+              (when (> (.remaining temp-app) 0)
+                (.write app-data-out (buffer->bytes temp-app) 0 (.remaining temp-app)))
+              (condp = (.getStatus res)
+                  SSLEngineResult$Status/BUFFER_UNDERFLOW
+                  {:status (.getHandshakeStatus engine)
+                   :packets (vec packets)
+                   :app-data (.toByteArray app-data-out)}
+                  SSLEngineResult$Status/CLOSED
+                  (throw (Exception. "SSLEngine closed during handshake"))
+                  (recur (inc loops))))))))))
 
 (defn send-app-data
   "Encrypts and sends application data. Should only be called after handshake is complete.
