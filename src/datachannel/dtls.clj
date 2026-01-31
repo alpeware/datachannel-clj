@@ -68,47 +68,40 @@
     bs))
 
 (defn handshake
-  "Runs a single step of the DTLS handshake.
+  "Runs the DTLS handshake, driving the SSLEngine until it's finished,
+  needs more data from the peer, or produces data for the peer.
   `engine`: The SSLEngine.
   `in`: A ByteBuffer containing incoming handshake data from the peer. Can be empty.
   `out`: A ByteBuffer to write outgoing handshake data to.
-
   Returns a map with:
   :status - The SSLEngineResult$HandshakeStatus.
   :bytes - A byte array of outgoing data to be sent to the peer, if any."
   [^SSLEngine engine ^ByteBuffer in ^ByteBuffer out]
   (.clear out)
-  (let [empty-app-buffer (ByteBuffer/allocate 0)
-        hs-status (.getHandshakeStatus engine)]
-    (condp = hs-status
-      SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
-      (if (.hasRemaining in)
-        (let [res (.unwrap engine in (make-buffer))]
-          {:status (.getHandshakeStatus res)})
-        {:status hs-status})
-
-      SSLEngineResult$HandshakeStatus/FINISHED
-      {:status hs-status}
+  (loop [status (.getHandshakeStatus engine)]
+    (condp = status
+      (SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING SSLEngineResult$HandshakeStatus/FINISHED)
+      {:status status}
 
       SSLEngineResult$HandshakeStatus/NEED_TASK
       (do
         (when-let [task (.getDelegatedTask engine)]
           (.run task))
-        {:status (.getHandshakeStatus engine)})
+        (recur (.getHandshakeStatus engine)))
 
       SSLEngineResult$HandshakeStatus/NEED_WRAP
-      (let [res (.wrap engine empty-app-buffer out)]
+      (let [res (.wrap engine (ByteBuffer/allocate 0) out)]
         (.flip out)
         {:status (.getHandshakeStatus res)
          :bytes (buffer->bytes out)})
 
-      SSLEngineResult$HandshakeStatus/NEED_UNWRAP
-      (let [res (.unwrap engine in (make-buffer))]
-        {:status (.getHandshakeStatus res)})
-
-      SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN
-      (let [res (.unwrap engine in (make-buffer))]
-        {:status (.getHandshakeStatus res)}))))
+      (SSLEngineResult$HandshakeStatus/NEED_UNWRAP SSLEngineResult$HandshakeStatus/NEED_UNWRAP_AGAIN)
+      (if (.hasRemaining in)
+        (let [res (.unwrap engine in (make-buffer))]
+          (if (= (.getStatus res) SSLEngineResult$Status/BUFFER_UNDERFLOW)
+            {:status status}
+            (recur (.getHandshakeStatus res))))
+        {:status status}))))
 
 (defn send-app-data
   "Encrypts and sends application data. Should only be called after handshake is complete.
