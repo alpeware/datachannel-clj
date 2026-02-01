@@ -103,7 +103,6 @@
         _ (when (and initial-data (.hasRemaining initial-data))
             (.put net-in initial-data)
             (.flip net-in))
-        net-out (make-buffer)
         app-in (make-buffer)  ;; Decrypted DTLS (Incoming SCTP)
         app-out (make-buffer) ;; To be Encrypted DTLS (Outgoing SCTP)
         sctp-out (:sctp-out connection)]
@@ -139,7 +138,7 @@
                     (.clear app-out)
                     (sctp/encode-packet packet app-out)
                     (.flip app-out)
-                    (let [res (dtls/send-app-data ssl-engine app-out net-out)]
+                    (let [res (dtls/send-app-data ssl-engine app-out (make-buffer))]
                       (when-let [bytes (:bytes res)]
                         (when (> (count bytes) 0)
                           (.send channel (ByteBuffer/wrap bytes) peer-addr))))))
@@ -154,7 +153,7 @@
                       (.send channel resp peer-addr))
 
                     ;; DTLS Handshake
-                    (let [res (dtls/handshake ssl-engine net-in-loop net-out)]
+                    (let [res (dtls/handshake ssl-engine net-in-loop)]
                       (doseq [packet (:packets res)]
                         (.send channel (ByteBuffer/wrap packet) peer-addr))
                       (when-let [app-data (:app-data res)]
