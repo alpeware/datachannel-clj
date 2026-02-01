@@ -1,60 +1,50 @@
 (ns datachannel.handshake-test
   (:require [clojure.test :refer :all]
             [datachannel.dtls :as dtls])
-  (:import [java.nio ByteBuffer]
-           [javax.net.ssl SSLEngine SSLEngineResult$HandshakeStatus]))
+  (:import [java.nio ByteBuffer]))
 
-(defn- run-handshake [client-engine server-engine]
-  (let [client-out (ByteBuffer/allocate 65536)
-        server-out (ByteBuffer/allocate 65536)
-        client-in (ByteBuffer/allocate 65536)
-        server-in (ByteBuffer/allocate 65536)
-        max-loops 100]
+(deftest handshake-test
+  (testing "Full DTLS handshake and data exchange"
+    (let [{:keys [cert key]} (dtls/generate-cert)
+          ssl-context (dtls/create-ssl-context cert key)
+          client-engine (dtls/create-engine ssl-context true)
+          server-engine (dtls/create-engine ssl-context false)]
 
-    ;; Initialize buffers to read mode (empty)
-    (.flip client-in)
-    (.flip server-in)
+      (.beginHandshake client-engine)
 
-    (.beginHandshake client-engine)
-    (.beginHandshake server-engine)
+      (loop [client-to-server-packets (list (byte-array 0))
+             server-to-client-packets '()
+             loops 0]
+        (if (> loops 20)
+          (throw (Exception. "Too many handshake loops"))
+          (let [client-in-bb (ByteBuffer/wrap (byte-array (apply concat server-to-client-packets)))
+                server-in-bb (ByteBuffer/wrap (byte-array (apply concat client-to-server-packets)))
 
-    (loop [i 0]
-      (if (> i max-loops)
-        (throw (Exception. "Handshake failed to complete in max loops"))
-        (let [client-status (.getHandshakeStatus client-engine)
-              server-status (.getHandshakeStatus server-engine)]
+                client-hs-res (dtls/handshake client-engine client-in-bb)
+                server-hs-res (dtls/handshake server-engine server-in-bb)
 
-          (if (and (= client-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
-                   (= server-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING))
-            :success
-            (do
-              ;; Run client step
-              (let [res-c (dtls/handshake client-engine client-in client-out)
-                    packets-c (:packets res-c)]
+                client-finished? (= (:status client-hs-res) javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                server-finished? (= (:status server-hs-res) javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)]
 
-                ;; Append output to server input
-                (.compact server-in)
-                (doseq [p packets-c]
-                  (.put server-in (ByteBuffer/wrap p)))
-                (.flip server-in))
+            (if (and client-finished? server-finished?)
+              :finished
+              (recur
+               (:packets client-hs-res)
+               (:packets server-hs-res)
+               (inc loops))))))
 
-              ;; Run server step
-              (let [res-s (dtls/handshake server-engine server-in server-out)
-                    packets-s (:packets res-s)]
+      (is (= javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
+             (.getHandshakeStatus client-engine)))
+      (is (= javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
+             (.getHandshakeStatus server-engine)))
 
-                ;; Append output to client input
-                (.compact client-in)
-                (doseq [p packets-s]
-                  (.put client-in (ByteBuffer/wrap p)))
-                (.flip client-in))
-
-              (recur (inc i)))))))))
-
-(deftest test-dtls-handshake
-  (testing "Full DTLS handshake between client and server"
-    (let [cert-data (dtls/generate-cert)
-          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
-          client-engine (dtls/create-engine ctx true)
-          server-engine (dtls/create-engine ctx false)]
-
-      (is (= :success (run-handshake client-engine server-engine))))))
+      (let [client-out-bb (ByteBuffer/allocate dtls/buffer-size)
+            server-out-bb (ByteBuffer/allocate dtls/buffer-size)
+            client-app-data (ByteBuffer/wrap (.getBytes "Hello from client"))
+            server-app-data (ByteBuffer/wrap (.getBytes "Hello from server"))
+            client-encrypted (dtls/send-app-data client-engine client-app-data client-out-bb)
+            server-decrypted (dtls/receive-app-data server-engine (ByteBuffer/wrap (:bytes client-encrypted)) server-out-bb)
+            server-encrypted (dtls/send-app-data server-engine server-app-data server-out-bb)
+            client-decrypted (dtls/receive-app-data client-engine (ByteBuffer/wrap (:bytes server-encrypted)) client-out-bb)]
+        (is (= "Hello from client" (String. (:bytes server-decrypted))))
+        (is (= "Hello from server" (String. (:bytes client-decrypted))))))))
