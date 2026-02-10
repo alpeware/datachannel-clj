@@ -88,9 +88,23 @@
         (let [hs-status (.getHandshakeStatus engine)]
           (condp = hs-status
             SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING
-            {:status hs-status
-             :packets (vec packets)
-             :app-data (.toByteArray app-data-out)}
+            (if (.hasRemaining in)
+              (let [temp-app (make-buffer)
+                    res (.unwrap engine in temp-app)]
+                (.flip temp-app)
+                (when (> (.remaining temp-app) 0)
+                  (.write app-data-out (buffer->bytes temp-app) 0 (.remaining temp-app)))
+                (condp = (.getStatus res)
+                  SSLEngineResult$Status/BUFFER_UNDERFLOW
+                  {:status (.getHandshakeStatus engine)
+                   :packets (vec packets)
+                   :app-data (.toByteArray app-data-out)}
+                  SSLEngineResult$Status/CLOSED
+                  (throw (Exception. "SSLEngine closed during handshake"))
+                  (recur (inc loops))))
+              {:status hs-status
+               :packets (vec packets)
+               :app-data (.toByteArray app-data-out)})
 
             SSLEngineResult$HandshakeStatus/FINISHED
             {:status hs-status
