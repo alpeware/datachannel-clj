@@ -77,10 +77,10 @@
     (put-unsigned-short buf 8)
     (.putLong buf (.nextLong (java.util.Random.)))
 
-    ;; Update Header Length for MI and FINGERPRINT
+    ;; Update Header Length for MI (FINGERPRINT comes after, but length in header for MI should only include MI)
     (let [len-before-mi (- (.position buf) 20)
-          total-len (+ len-before-mi 24 8)]
-       (.putShort buf 2 (unchecked-short total-len)))
+          len-with-mi (+ len-before-mi 24)]
+       (.putShort buf 2 (unchecked-short len-with-mi)))
 
     ;; MESSAGE-INTEGRITY
     (let [len-to-sign (.position buf)
@@ -95,6 +95,11 @@
           (.put buf hmac)))
 
     ;; FINGERPRINT
+    ;; Update Header Length to include FINGERPRINT
+    (let [len-before-fp (- (.position buf) 20)
+          total-len (+ len-before-fp 8)]
+       (.putShort buf 2 (unchecked-short total-len)))
+
     (let [len-to-crc (.position buf)
           data-to-crc (byte-array len-to-crc)]
        (.position buf 0)
@@ -211,11 +216,11 @@
                 (aset xor-addr i (byte (bit-xor (aget addr-bytes i) (aget magic-bytes i)))))
               (.put resp-buf xor-addr))
 
-            ;; Update Header Length to include MI (24) and FINGERPRINT (8)
+            ;; Update Header Length to include MI (24)
             ;; Current Body Length = Pos - 20
             (let [len-before-mi (- (.position resp-buf) 20)
-                  total-len (+ len-before-mi 24 8)]
-               (.putShort resp-buf 2 (unchecked-short total-len)))
+                  len-with-mi (+ len-before-mi 24)]
+               (.putShort resp-buf 2 (unchecked-short len-with-mi)))
 
             ;; Compute HMAC over [0 .. current_pos]
             (let [len-to-sign (.position resp-buf)
@@ -228,6 +233,11 @@
                   (put-unsigned-short resp-buf ATTR_MESSAGE_INTEGRITY)
                   (put-unsigned-short resp-buf 20)
                   (.put resp-buf hmac)))
+
+            ;; Update Header Length to include FINGERPRINT (8)
+            (let [len-before-fp (- (.position resp-buf) 20)
+                  total-len (+ len-before-fp 8)]
+               (.putShort resp-buf 2 (unchecked-short total-len)))
 
             ;; Compute CRC32 over [0 .. current_pos]
             (let [len-to-crc (.position resp-buf)
