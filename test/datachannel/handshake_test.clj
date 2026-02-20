@@ -87,3 +87,10 @@
       (.beginHandshake server-engine)
       (is (= :success (run-handshake-loop client-engine server-engine)))
       (is (= "Hello Frag" (exchange-data client-engine server-engine "Hello Frag"))))))
+
+(deftest test-default-max-packet-size
+  (testing "Verify default max packet size in created engine"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          engine (dtls/create-engine ctx true)]
+      (is (= 1024 (.getMaximumPacketSize (.getSSLParameters engine)))))))

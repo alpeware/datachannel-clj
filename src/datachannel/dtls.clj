@@ -4,7 +4,7 @@
   (:import
    [java.nio ByteBuffer]
    [java.security KeyStore SecureRandom MessageDigest PrivateKey]
-   [javax.net.ssl SSLContext SSLEngine SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
+   [javax.net.ssl SSLContext SSLEngine SSLParameters SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
    [java.security.cert X509Certificate]
    [java.io File FileInputStream ByteArrayOutputStream]
    [sun.security.tools.keytool CertAndKeyGen]
@@ -51,9 +51,12 @@
     ctx))
 
 (defn create-engine [^SSLContext context client-mode]
-  (let [engine (.createSSLEngine context)]
+  (let [engine (.createSSLEngine context)
+        params (.getSSLParameters engine)]
     (.setUseClientMode engine client-mode)
     (.setNeedClientAuth engine true) ;; WebRTC requires mutual auth
+    (.setMaximumPacketSize params 1024)
+    (.setSSLParameters engine params)
     engine))
 
 (def buffer-size 65536)
