@@ -93,4 +93,4 @@
     (let [cert-data (dtls/generate-cert)
           ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
           engine (dtls/create-engine ctx true)]
-      (is (= 1024 (.getMaximumPacketSize (.getSSLParameters engine)))))))
+      (is (= dtls/DEFAULT-PACKET-SIZE (.getMaximumPacketSize (.getSSLParameters engine)))))))

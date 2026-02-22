@@ -11,6 +11,8 @@
    [sun.security.x509 X500Name]
    [java.util Date ArrayList]))
 
+(def DEFAULT-PACKET-SIZE 1024)
+
 (defn fingerprint [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
     (->> (.getEncoded cert)
@@ -51,13 +53,13 @@
     ctx))
 
 (defn create-engine [^SSLContext context client-mode]
-  (let [engine (.createSSLEngine context)
-        params (.getSSLParameters engine)]
+  (let [engine (.createSSLEngine context)]
     (.setUseClientMode engine client-mode)
-    (.setNeedClientAuth engine true) ;; WebRTC requires mutual auth
-    (.setMaximumPacketSize params 1024)
-    (.setSSLParameters engine params)
-    engine))
+    (let [params (.getSSLParameters engine)]
+      (.setNeedClientAuth params true) ;; WebRTC requires mutual auth
+      (.setMaximumPacketSize params DEFAULT-PACKET-SIZE)
+      (.setSSLParameters engine params)
+      engine)))
 
 (def buffer-size 65536)
 
