@@ -102,8 +102,7 @@
           ;; Skip padding
           (let [padding (pad len)]
              (if (< (.remaining buf) padding)
-               (do ;; Error or incomplete buffer, just skip what we can or return
-                 params)
+               params
                (do
                  (.position buf (+ (.position buf) padding))
                  (recur (assoc params type-key val-bytes))))))))))
@@ -127,7 +126,7 @@
         val-len (- len 4)]
     (cond
       (or (< len 4) (> val-len (.remaining buf)))
-      nil ;; Invalid length
+      nil
 
       :else
       (let [chunk-start (.position buf)
@@ -213,7 +212,6 @@
 
               :abort
               (do
-                 ;; Just skip for now
                  (.position buf (+ chunk-start val-len))
                  chunk-data)
 
@@ -226,12 +224,10 @@
               :shutdown-ack
               chunk-data
 
-              ;; Default: just consume the body bytes
               (let [body (byte-array val-len)]
                 (.get buf body)
                 (merge chunk-data {:body body})))]
 
-        ;; Handle padding
         (let [padding (pad len)]
           (if (<= (+ (.position buf) padding) (.limit buf))
              (.position buf (+ (.position buf) padding))
@@ -239,21 +235,42 @@
 
         parsed-data))))
 
+(defn update-checksum [^ByteBuffer buf]
+  (let [crc (CRC32C.)
+        pos (.position buf)
+        orig-order (.order buf)]
+    (.flip buf)
+    ;; Checksum field is at offset 8.
+    ;; We must use LITTLE_ENDIAN for the checksum itself.
+    (.order buf ByteOrder/BIG_ENDIAN)
+    (.putInt buf 8 0)
+    (.update crc buf)
+    (let [checksum (.getValue crc)]
+      (.order buf ByteOrder/LITTLE_ENDIAN)
+      (.putInt buf 8 (unchecked-int checksum))
+      (.order buf orig-order)
+      (.position buf pos)
+      buf)))
+
 (defn decode-packet [^ByteBuffer buf]
-  (let [src-port (get-unsigned-short buf)
-        dst-port (get-unsigned-short buf)
-        ver-tag (get-unsigned-int buf)
-        checksum (get-unsigned-int buf)]
-    {:src-port src-port
-     :dst-port dst-port
-     :verification-tag ver-tag
-     :checksum checksum
-     :chunks (loop [chunks []]
-               (if (.hasRemaining buf)
-                 (if-let [chunk (decode-chunk buf)]
-                   (recur (conj chunks chunk))
-                   chunks)
-                 chunks))}))
+  (let [orig-order (.order buf)]
+    (.order buf ByteOrder/BIG_ENDIAN)
+    (let [src-port (get-unsigned-short buf)
+          dst-port (get-unsigned-short buf)
+          ver-tag (get-unsigned-int buf)
+          _ (.order buf ByteOrder/LITTLE_ENDIAN)
+          checksum (get-unsigned-int buf)
+          _ (.order buf ByteOrder/BIG_ENDIAN)]
+      {:src-port src-port
+       :dst-port dst-port
+       :verification-tag ver-tag
+       :checksum checksum
+       :chunks (loop [chunks []]
+                 (if (.hasRemaining buf)
+                   (if-let [chunk (decode-chunk buf)]
+                     (recur (conj chunks chunk))
+                     chunks)
+                   chunks))})))
 
 (defn encode-chunk [^ByteBuffer buf chunk]
   (let [start-pos (.position buf)
@@ -262,7 +279,7 @@
         flags (:flags chunk 0)]
     (.put buf (byte type-code))
     (.put buf (byte flags))
-    (.putShort buf 0) ;; Length placeholder
+    (.putShort buf 0)
 
     (case type-key
       :data
@@ -312,7 +329,6 @@
       :heartbeat-ack
       (encode-params buf (:params chunk))
 
-      ;; Default
       (when (:body chunk)
         (.put buf ^bytes (:body chunk))))
 
@@ -322,24 +338,14 @@
       (.putShort buf (+ start-pos 2) (unchecked-short len))
       (dotimes [_ padding] (.put buf (byte 0))))))
 
-(defn update-checksum [^ByteBuffer buf]
-  (let [crc (CRC32C.)
-        pos (.position buf)]
-    (.flip buf)
-    ;; CRC calculation logic:
-    ;; The checksum field is at offset 8 (0-indexed). It is filled with 0s for calculation.
-    (.putInt buf 8 0)
-    (.update crc buf)
-    (let [checksum (.getValue crc)]
-      (.putInt buf 8 (unchecked-int checksum))
-      (.position buf pos)
-      buf)))
-
 (defn encode-packet [packet ^ByteBuffer buf]
-  (.putShort buf (unchecked-short (:src-port packet)))
-  (.putShort buf (unchecked-short (:dst-port packet)))
-  (.putInt buf (unchecked-int (:verification-tag packet)))
-  (.putInt buf 0) ;; Checksum placeholder
-  (doseq [chunk (:chunks packet)]
-    (encode-chunk buf chunk))
-  (update-checksum buf))
+  (let [orig-order (.order buf)]
+    (.order buf ByteOrder/BIG_ENDIAN)
+    (.putShort buf (unchecked-short (:src-port packet)))
+    (.putShort buf (unchecked-short (:dst-port packet)))
+    (.putInt buf (unchecked-int (:verification-tag packet)))
+    (.putInt buf 0)
+    (doseq [chunk (:chunks packet)]
+      (encode-chunk buf chunk))
+    (update-checksum buf)
+    (.order buf orig-order)))

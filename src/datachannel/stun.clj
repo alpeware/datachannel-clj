@@ -180,83 +180,68 @@
           msg-type (get-unsigned-short buf)
           msg-len (get-unsigned-short buf)
           cookie (.getInt buf)
-          tx-id (byte-array 12)]
-      (.get buf tx-id)
+          tx-id (byte-array 12)
+          _ (.get buf tx-id)]
 
-      ;; Check if it's a Binding Request (0x0001)
-      (when (= msg-type 0x0001)
-        (println "Received STUN Binding Request from" peer-addr)
-        ;; We need ICE password to calculate MESSAGE-INTEGRITY
-        (if-let [password (:ice-pwd connection)]
-          (let [resp-buf (ByteBuffer/allocate 1024) ;; Should be enough
-                _ (.order resp-buf ByteOrder/BIG_ENDIAN)]
+      (let [res (if (= msg-type 0x0001) ;; Binding Request
+                  (if-let [password (:ice-pwd connection)]
+                    (let [resp-buf (ByteBuffer/allocate 1024)
+                          _ (.order resp-buf ByteOrder/BIG_ENDIAN)]
+                      ;; Header
+                      (put-unsigned-short resp-buf 0x0101) ;; Success Response
+                      (put-unsigned-short resp-buf 0)
+                      (.putInt resp-buf magic-cookie)
+                      (.put resp-buf tx-id)
 
-            ;; Header
-            (put-unsigned-short resp-buf 0x0101) ;; Binding Success Response
-            (put-unsigned-short resp-buf 0) ;; Length placeholder
-            (.putInt resp-buf magic-cookie)
-            (.put resp-buf tx-id)
+                      ;; XOR-MAPPED-ADDRESS
+                      (put-unsigned-short resp-buf ATTR_XOR_MAPPED_ADDRESS)
+                      (put-unsigned-short resp-buf 8)
+                      (.put resp-buf (byte 0))
+                      (.put resp-buf (byte 1))
+                      (put-unsigned-short resp-buf (bit-xor (.getPort peer-addr) (bit-shift-right magic-cookie 16)))
+                      (let [addr-bytes (.getAddress (.getAddress peer-addr))
+                            cookie-bytes (ByteBuffer/allocate 4)
+                            _ (.putInt cookie-bytes magic-cookie)
+                            _ (.flip cookie-bytes)
+                            magic-bytes (.array cookie-bytes)
+                            xor-addr (byte-array 4)]
+                        (dotimes [i 4]
+                          (aset xor-addr i (byte (bit-xor (aget addr-bytes i) (aget magic-bytes i)))))
+                        (.put resp-buf xor-addr))
 
-            ;; Attributes
+                      ;; MESSAGE-INTEGRITY
+                      (let [len-before-mi (- (.position resp-buf) 20)
+                            len-with-mi (+ len-before-mi 24)]
+                         (.putShort resp-buf 2 (unchecked-short len-with-mi)))
+                      (let [len-to-sign (.position resp-buf)
+                            data-to-sign (byte-array len-to-sign)]
+                         (.position resp-buf 0)
+                         (.get resp-buf data-to-sign)
+                         (.position resp-buf len-to-sign)
+                         (let [hmac (compute-hmac-sha1 password data-to-sign)]
+                            (put-unsigned-short resp-buf ATTR_MESSAGE_INTEGRITY)
+                            (put-unsigned-short resp-buf 20)
+                            (.put resp-buf hmac)))
 
-            ;; XOR-MAPPED-ADDRESS
-            (put-unsigned-short resp-buf ATTR_XOR_MAPPED_ADDRESS)
-            (put-unsigned-short resp-buf 8) ;; Length
-            (.put resp-buf (byte 0)) ;; Reserved
-            (.put resp-buf (byte 1)) ;; Family IPv4
-            (put-unsigned-short resp-buf (bit-xor (.getPort peer-addr) (bit-shift-right magic-cookie 16)))
+                      ;; FINGERPRINT
+                      (let [len-before-fp (- (.position resp-buf) 20)
+                            total-len (+ len-before-fp 8)]
+                         (.putShort resp-buf 2 (unchecked-short total-len)))
+                      (let [len-to-crc (.position resp-buf)
+                            data-to-crc (byte-array len-to-crc)]
+                         (.position resp-buf 0)
+                         (.get resp-buf data-to-crc)
+                         (.position resp-buf len-to-crc)
+                         (let [crc (compute-crc32 data-to-crc)]
+                            (put-unsigned-short resp-buf ATTR_FINGERPRINT)
+                            (put-unsigned-short resp-buf 4)
+                            (.putInt resp-buf (unchecked-int crc))))
 
-            (let [addr-bytes (.getAddress (.getAddress peer-addr))
-                  cookie-bytes (ByteBuffer/allocate 4)
-                  _ (.putInt cookie-bytes magic-cookie)
-                  _ (.flip cookie-bytes)
-                  magic-bytes (.array cookie-bytes)
-                  xor-addr (byte-array 4)]
-              (dotimes [i 4]
-                (aset xor-addr i (byte (bit-xor (aget addr-bytes i) (aget magic-bytes i)))))
-              (.put resp-buf xor-addr))
-
-            ;; Update Header Length to include MI (24)
-            ;; Current Body Length = Pos - 20
-            (let [len-before-mi (- (.position resp-buf) 20)
-                  len-with-mi (+ len-before-mi 24)]
-               (.putShort resp-buf 2 (unchecked-short len-with-mi)))
-
-            ;; Compute HMAC over [0 .. current_pos]
-            (let [len-to-sign (.position resp-buf)
-                  data-to-sign (byte-array len-to-sign)]
-               (.position resp-buf 0)
-               (.get resp-buf data-to-sign)
-               (.position resp-buf len-to-sign) ;; Restore pos
-
-               (let [hmac (compute-hmac-sha1 password data-to-sign)]
-                  (put-unsigned-short resp-buf ATTR_MESSAGE_INTEGRITY)
-                  (put-unsigned-short resp-buf 20)
-                  (.put resp-buf hmac)))
-
-            ;; Update Header Length to include FINGERPRINT (8)
-            (let [len-before-fp (- (.position resp-buf) 20)
-                  total-len (+ len-before-fp 8)]
-               (.putShort resp-buf 2 (unchecked-short total-len)))
-
-            ;; Compute CRC32 over [0 .. current_pos]
-            (let [len-to-crc (.position resp-buf)
-                  data-to-crc (byte-array len-to-crc)]
-               (.position resp-buf 0)
-               (.get resp-buf data-to-crc)
-               (.position resp-buf len-to-crc) ;; Restore pos
-
-               (let [crc (compute-crc32 data-to-crc)]
-                  (put-unsigned-short resp-buf ATTR_FINGERPRINT)
-                  (put-unsigned-short resp-buf 4)
-                  (.putInt resp-buf (unchecked-int crc))))
-
-            (.flip resp-buf)
-            resp-buf)
-          (do
-            (println "STUN Binding Request received but no ice-pwd configured.")
-            nil))))
-
-    (catch Exception e
-      (println "Error handling STUN packet:" e)
+                      (.flip resp-buf)
+                      resp-buf)
+                    nil)
+                  nil)]
+        (.position buf (min (.limit buf) (+ start-pos 20 msg-len)))
+        res))
+    (catch Exception _
       nil)))
