@@ -18,32 +18,66 @@
     (try (.close ch) (catch Exception _))))
 
 (defn- handle-sctp-packet [packet connection]
-  #_(println "Handling SCTP packet:" packet)
   (let [chunks (:chunks packet)
         state (:state connection)]
     (doseq [chunk chunks]
       (case (:type chunk)
         :data
-        (do
-          #_(println "Received DATA chunk")
-          ;; Send SACK? (Not implemented yet, but we should ack eventually)
-          ;; Deliver data
-          (when-let [cb @(:on-message connection)]
-             (cb (:payload chunk))))
+        (let [proto (:protocol chunk)
+              tsn (:tsn chunk)]
+          ;; Update remote TSN and send SACK
+          (swap! state (fn [s]
+                         (if (> tsn (:remote-tsn s))
+                           (assoc s :remote-tsn tsn)
+                           s)))
+          (let [sack-packet {:src-port (:dst-port packet)
+                             :dst-port (:src-port packet)
+                             :verification-tag (:remote-ver-tag @state)
+                             :chunks [{:type :sack
+                                       :cum-tsn-ack (:remote-tsn @state)
+                                       :a-rwnd 100000
+                                       :gap-blocks []
+                                       :duplicate-tsns []}]}]
+             (.offer (:sctp-out connection) sack-packet))
+
+          (cond
+            (= proto :webrtc/dcep)
+            (let [payload (:payload chunk)
+                  msg-type (bit-and (aget ^bytes payload 0) 0xff)]
+              (when (= msg-type 3) ;; OPEN
+                ;; Send DCEP ACK
+                (let [ack-tsn (let [t (:next-tsn @state)]
+                                (swap! state update :next-tsn inc)
+                                t)
+                      ack-ssn (let [s (:ssn @state)]
+                                (swap! state update :ssn inc)
+                                s)
+                      ack-packet {:src-port (:dst-port packet)
+                                  :dst-port (:src-port packet)
+                                  :verification-tag (:remote-ver-tag @state)
+                                  :chunks [{:type :data
+                                            :flags 3 ;; B and E bits
+                                            :tsn ack-tsn
+                                            :stream-id (:stream-id chunk)
+                                            :seq-num ack-ssn
+                                            :protocol :webrtc/dcep
+                                            :payload (byte-array [(byte 2)])}]}]
+                   (.offer (:sctp-out connection) ack-packet))))
+
+            :else
+            (when-let [cb @(:on-message connection)]
+               (cb (:payload chunk)))))
 
         :init
         (do
-          #_(println "Received INIT")
-          ;; Update remote-ver-tag from INIT chunk
-          (swap! state assoc :remote-ver-tag (:init-tag chunk))
-
-          ;; Respond with INIT_ACK
+          (swap! state assoc :remote-ver-tag (:init-tag chunk)
+                             :remote-tsn (dec (:initial-tsn chunk)))
           (let [init-ack {:type :init-ack
                           :init-tag (:local-ver-tag @state)
                           :a-rwnd 100000
                           :outbound-streams (:inbound-streams chunk)
                           :inbound-streams (:outbound-streams chunk)
-                          :initial-tsn (rand-int 2147483647)
+                          :initial-tsn (:next-tsn @state)
                           :params {:cookie (.getBytes (str (System/currentTimeMillis)) "UTF-8")}}
                 packet {:src-port (:dst-port packet)
                         :dst-port (:src-port packet)
@@ -53,11 +87,8 @@
 
         :init-ack
         (do
-          #_(println "Received INIT_ACK")
-          ;; Update remote-ver-tag from INIT_ACK chunk
-          (swap! state assoc :remote-ver-tag (:init-tag chunk))
-
-          ;; Respond with COOKIE_ECHO
+          (swap! state assoc :remote-ver-tag (:init-tag chunk)
+                             :remote-tsn (dec (:initial-tsn chunk)))
           (let [cookie (get-in chunk [:params :cookie])
                 packet {:src-port (:dst-port packet)
                         :dst-port (:src-port packet)
@@ -67,9 +98,6 @@
 
         :cookie-echo
         (do
-           #_(println "Received COOKIE_ECHO")
-           ;; Respond with COOKIE_ACK
-           ;; Use remote-ver-tag for the response packet header
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
                          :verification-tag (:remote-ver-tag @state)
@@ -80,22 +108,21 @@
 
         :cookie-ack
         (do
-           #_(println "Received COOKIE_ACK")
            (when-let [cb @(:on-open connection)]
              (cb)))
 
         :heartbeat
         (do
-           #_(println "Received HEARTBEAT")
-           ;; Respond with HEARTBEAT_ACK
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
                          :verification-tag (:verification-tag packet)
                          :chunks [{:type :heartbeat-ack :params (:params chunk)}]}]
               (.offer (:sctp-out connection) packet)))
 
-        ;; Ignore others for now
-        #_(println "Ignored chunk type:" (:type chunk))))))
+        :sack nil
+        :heartbeat-ack nil
+        :abort (println "Received SCTP ABORT")
+        nil))))
 
 
 (defn- run-loop [^DatagramChannel channel ^Selector selector ^SSLEngine ssl-engine peer-addr connection & [initial-data]]
@@ -104,8 +131,8 @@
             (.put net-in initial-data)
             (.flip net-in))
         net-out (make-buffer)
-        app-in (make-buffer)  ;; Decrypted DTLS (Incoming SCTP)
-        app-out (make-buffer) ;; To be Encrypted DTLS (Outgoing SCTP)
+        app-in (make-buffer)
+        app-out (make-buffer)
         sctp-out (:sctp-out connection)]
 
     (.register channel selector SelectionKey/OP_READ)
@@ -123,50 +150,56 @@
                 ;; ESTABLISHED
                 (do
                   ;; Incoming
-                  (when (.hasRemaining net-in-loop)
-                    (if (let [b (.get net-in-loop (.position net-in-loop))] (or (= b 0) (= b 1)))
-                      (when-let [resp (stun/handle-packet net-in-loop peer-addr connection)]
-                        (.send channel resp peer-addr))
-                      ;; DTLS App Data
-                      (let [res (dtls/receive-app-data ssl-engine net-in-loop app-in)]
-                        (when-let [bytes (:bytes res)]
-                          (when (> (count bytes) 0)
-                            (try (-> (ByteBuffer/wrap bytes) sctp/decode-packet (handle-sctp-packet connection))
-                                 (catch Exception e (println "SCTP Decode Error:" e))))))))
+                  (while (.hasRemaining net-in-loop)
+                    (let [b (bit-and (.get net-in-loop (.position net-in-loop)) 0xff)]
+                      (cond
+                        (or (= b 0) (= b 1))
+                        (if-let [resp (stun/handle-packet net-in-loop peer-addr connection)]
+                          (.send channel resp peer-addr))
+
+                        (and (>= b 20) (<= b 63))
+                        (let [res (dtls/receive-app-data ssl-engine net-in-loop app-in)]
+                          (when-let [bytes (:bytes res)]
+                            (when (> (count bytes) 0)
+                              (try (-> (ByteBuffer/wrap bytes) sctp/decode-packet (handle-sctp-packet connection))
+                                   (catch Exception e (println "SCTP Decode Error:" e))))))
+
+                        :else
+                        (.position net-in-loop (.limit net-in-loop)))))
 
                   ;; Outgoing
-                  (when-let [packet (.poll sctp-out)]
-                    (.clear app-out)
-                    (sctp/encode-packet packet app-out)
-                    (.flip app-out)
-                    (let [res (dtls/send-app-data ssl-engine app-out net-out)]
-                      (when-let [bytes (:bytes res)]
-                        (when (> (count bytes) 0)
-                          (.send channel (ByteBuffer/wrap bytes) peer-addr))))))
+                  (while (let [packet (.poll sctp-out)]
+                           (when packet
+                             (.clear app-out)
+                             (sctp/encode-packet packet app-out)
+                             (.flip app-out)
+                             (let [res (dtls/send-app-data ssl-engine app-out net-out)]
+                               (when-let [bytes (:bytes res)]
+                                 (when (> (count bytes) 0)
+                                   (.send channel (ByteBuffer/wrap bytes) peer-addr))))
+                             packet))))
 
                 ;; HANDSHAKING
                 (do
-                  ;; Incoming STUN?
                   (if (and (.hasRemaining net-in-loop)
-                           (>= (.remaining net-in-loop) 20)
-                           (let [b (.get net-in-loop (.position net-in-loop))] (or (= b 0) (= b 1))))
+                           (let [b (bit-and (.get net-in-loop (.position net-in-loop)) 0xff)]
+                             (or (= b 0) (= b 1))))
                     (when-let [resp (stun/handle-packet net-in-loop peer-addr connection)]
                       (.send channel resp peer-addr))
 
-                    ;; DTLS Handshake
-                    (let [res (dtls/handshake ssl-engine net-in-loop net-out)]
-                      (doseq [packet (:packets res)]
-                        (.send channel (ByteBuffer/wrap packet) peer-addr))
-                      (when-let [app-data (:app-data res)]
-                        (when (> (count app-data) 0)
-                          (try (-> (ByteBuffer/wrap app-data) sctp/decode-packet (handle-sctp-packet connection))
-                               (catch Exception e (println "SCTP Decode Error (Handshake):" e))))))))))
+                    (when (or (.hasRemaining net-in-loop)
+                              (not= hs-status SSLEngineResult$HandshakeStatus/NEED_UNWRAP))
+                      (let [res (dtls/handshake ssl-engine net-in-loop net-out)]
+                        (doseq [packet (:packets res)]
+                          (.send channel (ByteBuffer/wrap packet) peer-addr))
+                        (when-let [app-data (:app-data res)]
+                          (when (> (count app-data) 0)
+                            (try (-> (ByteBuffer/wrap app-data) sctp/decode-packet (handle-sctp-packet connection))
+                                 (catch Exception e (println "SCTP Decode Error (Handshake):" e)))))))))))
             (catch Exception e
               (println "Error in run-loop processing:" e)))
 
           (.clear net-in-loop)
-
-          ;; Wait for new data
           (let [count (.select selector 10)]
             (if (> count 0)
               (let [keys (.selectedKeys selector)]
@@ -201,7 +234,6 @@
     (.configureBlocking channel false)
     (.connect channel peer-addr)
 
-    ;; Start IO Loop
     (let [t (Thread.
               (fn []
                 (try
@@ -210,7 +242,6 @@
                     (println "Connection Loop Error:" e)))))]
       (.start t))
 
-    ;; Send SCTP INIT
     (let [init-chunk {:type :init
                       :init-tag local-ver-tag
                       :a-rwnd 100000
@@ -229,7 +260,7 @@
 (defn listen [port & {:as options}]
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
-        engine (dtls/create-engine ctx false) ;; Server mode
+        engine (dtls/create-engine ctx (boolean (:dtls-client options)))
         channel (DatagramChannel/open)
         selector (Selector/open)
         sctp-out (LinkedBlockingQueue.)
@@ -271,15 +302,17 @@
 (defn send-msg [connection msg]
   (let [state (:state connection)
         ver-tag (:remote-ver-tag @state)
-        tsn (:next-tsn @state)
-        ssn (:ssn @state)
-        _ (swap! state #(-> %
-                            (update :next-tsn inc)
-                            (update :ssn inc)))
+        tsn (let [t (:next-tsn @state)]
+              (swap! state update :next-tsn inc)
+              t)
+        ssn (let [s (:ssn @state)]
+              (swap! state update :ssn inc)
+              s)
         packet {:src-port 5000
                 :dst-port 5000
                 :verification-tag ver-tag
                 :chunks [{:type :data
+                          :flags 3 ;; B and E bits
                           :tsn tsn
                           :stream-id 0
                           :seq-num ssn

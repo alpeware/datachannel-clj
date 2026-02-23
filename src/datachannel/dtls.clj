@@ -11,7 +11,7 @@
    [sun.security.x509 X500Name]
    [java.util Date ArrayList]))
 
-(def DEFAULT-PACKET-SIZE 1024)
+(def DEFAULT-PACKET-SIZE 16384)
 
 (defn fingerprint [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
@@ -118,8 +118,10 @@
 
             SSLEngineResult$HandshakeStatus/NEED_TASK
             (do
-              (when-let [task (.getDelegatedTask engine)]
-                (.run task))
+              (while (let [task (.getDelegatedTask engine)]
+                       (when task
+                         (.run task)
+                         task)))
               (recur (inc loops)))
 
             SSLEngineResult$HandshakeStatus/NEED_WRAP
