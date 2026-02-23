@@ -4,12 +4,14 @@
   (:import
    [java.nio ByteBuffer]
    [java.security KeyStore SecureRandom MessageDigest PrivateKey]
-   [javax.net.ssl SSLContext SSLEngine SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
+   [javax.net.ssl SSLContext SSLEngine SSLParameters SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
    [java.security.cert X509Certificate]
    [java.io File FileInputStream ByteArrayOutputStream]
    [sun.security.tools.keytool CertAndKeyGen]
    [sun.security.x509 X500Name]
    [java.util Date ArrayList]))
+
+(def DEFAULT-PACKET-SIZE 1024)
 
 (defn fingerprint [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
@@ -53,8 +55,11 @@
 (defn create-engine [^SSLContext context client-mode]
   (let [engine (.createSSLEngine context)]
     (.setUseClientMode engine client-mode)
-    (.setNeedClientAuth engine true) ;; WebRTC requires mutual auth
-    engine))
+    (let [params (.getSSLParameters engine)]
+      (.setNeedClientAuth params true) ;; WebRTC requires mutual auth
+      (.setMaximumPacketSize params DEFAULT-PACKET-SIZE)
+      (.setSSLParameters engine params)
+      engine)))
 
 (def buffer-size 65536)
 
