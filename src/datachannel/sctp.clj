@@ -5,6 +5,8 @@
    [java.nio ByteBuffer ByteOrder]
    [java.util.zip CRC32C]))
 
+(def ^:private EMPTY-BYTE-ARRAY (byte-array 0))
+
 ;; Chunk types
 (def chunk-types
   {:data 0
@@ -110,7 +112,7 @@
 (defn encode-params [^ByteBuffer buf params]
   (doseq [[k v] params]
     (let [type-code (if (keyword? k) (get parameters k) k)
-          v-bytes (if (bytes? v) v (byte-array 0))
+          v-bytes (if (bytes? v) v EMPTY-BYTE-ARRAY)
           len (+ 4 (alength v-bytes))
           padding (pad len)]
       (.putShort buf (unchecked-short type-code))
