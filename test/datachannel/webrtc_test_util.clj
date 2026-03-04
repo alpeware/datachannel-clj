@@ -1,0 +1,77 @@
+(ns datachannel.webrtc-test-util
+  (:require [datachannel.stun :as stun])
+  (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType RTCOfferOptions RTCAnswerOptions SetSessionDescriptionObserver CreateSessionDescriptionObserver]
+           [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
+           [java.util ArrayList]
+           [java.net InetAddress InetSocketAddress]))
+
+(defn get-local-ip []
+  (.getHostAddress (InetAddress/getLocalHost)))
+
+(defn extract-ice-credentials [sdp]
+  {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))
+   :pwd (second (re-find #"a=ice-pwd:([^\r\n]+)" sdp))})
+
+(defn parse-candidate [candidate-sdp]
+  (let [parts (.split candidate-sdp " ")]
+    {:ip (get parts 4)
+     :port (Integer/parseInt (get parts 5))}))
+
+(defn create-offer [pc]
+  (let [p (promise)]
+    (.createOffer pc (RTCOfferOptions.)
+                  (reify CreateSessionDescriptionObserver
+                    (onSuccess [_ desc] (deliver p desc))
+                    (onFailure [_ err] (deliver p (ex-info "CreateOffer failed" {:error err})))))
+    @p))
+
+(defn create-answer [pc]
+  (let [p (promise)]
+    (.createAnswer pc (RTCAnswerOptions.)
+                   (reify CreateSessionDescriptionObserver
+                     (onSuccess [_ desc] (deliver p desc))
+                     (onFailure [_ err] (deliver p (ex-info "CreateAnswer failed" {:error err})))))
+    @p))
+
+(defn set-local-description [pc desc]
+  (let [p (promise)]
+    (.setLocalDescription pc desc
+                          (reify SetSessionDescriptionObserver
+                            (onSuccess [_] (deliver p true))
+                            (onFailure [_ err] (deliver p (ex-info "SetLocal failed" {:error err})))))
+    @p))
+
+(defn set-remote-description [pc desc]
+  (let [p (promise)]
+    (.setRemoteDescription pc desc
+                           (reify SetSessionDescriptionObserver
+                             (onSuccess [_] (deliver p true))
+                             (onFailure [_ err] (deliver p (ex-info "SetRemote failed" {:error err})))))
+    @p))
+
+(defn make-pc-observer [{:keys [on-ice-candidate]}]
+  (reify PeerConnectionObserver
+    (onIceCandidate [_ candidate] (when on-ice-candidate (on-ice-candidate candidate)))
+    (onIceConnectionChange [_ state] (println "Java ICE Connection State:" state))
+    (onConnectionChange [_ state] (println "Java Connection State:" state))
+    (onDataChannel [_ _])
+    (onSignalingChange [_ _]) (onIceGatheringChange [_ _]) (onIceCandidatesRemoved [_ _])
+    (onAddStream [_ _]) (onRemoveStream [_ _]) (onRenegotiationNeeded [_])
+    (onAddTrack [_ _ _]) (onTrack [_ _]) (onIceCandidateError [_ _])))
+
+(defn build-answer-sdp [local-ip port fingerprint ice-ufrag ice-pwd]
+  (str "v=0\r\n"
+       "o=- 123456789 2 IN IP4 " local-ip "\r\n"
+       "s=-\r\n"
+       "t=0 0\r\n"
+       "a=group:BUNDLE 0\r\n"
+       "m=application " port " UDP/DTLS/SCTP webrtc-datachannel\r\n"
+       "c=IN IP4 " local-ip "\r\n"
+       "a=setup:passive\r\n"
+       "a=mid:0\r\n"
+       "a=sctp-port:5000\r\n"
+       "a=max-message-size:100000\r\n"
+       "a=fingerprint:sha-256 " fingerprint "\r\n"
+       "a=ice-ufrag:" ice-ufrag "\r\n"
+       "a=ice-pwd:" ice-pwd "\r\n"
+       "a=ice-lite\r\n"))

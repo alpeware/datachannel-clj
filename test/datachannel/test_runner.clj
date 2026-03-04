@@ -8,7 +8,8 @@
             [datachannel.stun-test]
             [datachannel.stun-integration-test]
             [datachannel.stun-webrtc-integration-test]
-            [datachannel.webrtc-integration-test]))
+            [datachannel.webrtc-integration-test]
+            [datachannel.webrtc-extended-test]))
 
 (defn -main []
   (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
@@ -19,7 +20,8 @@
                                              'datachannel.stun-test
                                              'datachannel.stun-integration-test
                                              'datachannel.stun-webrtc-integration-test
-                                             'datachannel.webrtc-integration-test)]
+                                             'datachannel.webrtc-integration-test
+                                             'datachannel.webrtc-extended-test)]
     (if (> (+ fail error) 0)
       (System/exit 1)
       (System/exit 0))))
