@@ -3,7 +3,10 @@
            [java.net InetSocketAddress]
            [javax.crypto Mac]
            [javax.crypto.spec SecretKeySpec]
-           [java.util.zip CRC32]))
+           [java.util.zip CRC32]
+           [java.security SecureRandom]))
+
+(defonce ^:private secure-rand (SecureRandom.))
 
 (def magic-cookie 0x2112A442)
 
@@ -46,7 +49,7 @@
   (let [buf (ByteBuffer/allocate 1024)
         _ (.order buf ByteOrder/BIG_ENDIAN)
         tx-id (byte-array 12)]
-    (.nextBytes (java.util.Random.) tx-id)
+    (.nextBytes secure-rand tx-id)
 
     ;; Header
     (put-unsigned-short buf 0x0001) ;; Binding Request
@@ -75,7 +78,7 @@
     ;; Since we are passive/lite, we usually are controlled.
     (put-unsigned-short buf ATTR_ICE_CONTROLLED)
     (put-unsigned-short buf 8)
-    (.putLong buf (.nextLong (java.util.Random.)))
+    (.putLong buf (.nextLong secure-rand))
 
     ;; Update Header Length for MI (FINGERPRINT comes after, but length in header for MI should only include MI)
     (let [len-before-mi (- (.position buf) 20)
@@ -118,7 +121,7 @@
   (let [buf (ByteBuffer/allocate 1024)
         _ (.order buf ByteOrder/BIG_ENDIAN)
         tx-id (byte-array 12)]
-    (.nextBytes (java.util.Random.) tx-id)
+    (.nextBytes secure-rand tx-id)
 
     ;; Header
     (put-unsigned-short buf 0x0001) ;; Binding Request

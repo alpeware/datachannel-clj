@@ -6,7 +6,10 @@
            [java.net InetSocketAddress StandardSocketOptions]
            [java.nio.channels DatagramChannel Selector SelectionKey]
            [javax.net.ssl SSLEngine SSLEngineResult SSLEngineResult$Status SSLEngineResult$HandshakeStatus]
-           [java.util.concurrent LinkedBlockingQueue TimeUnit]))
+           [java.util.concurrent LinkedBlockingQueue TimeUnit]
+           [java.security SecureRandom]))
+
+(defonce ^:private secure-rand (SecureRandom.))
 
 (def buffer-size 65536)
 
@@ -219,7 +222,7 @@
         selector (Selector/open)
         peer-addr (InetSocketAddress. host port)
         sctp-out (LinkedBlockingQueue.)
-        local-ver-tag (rand-int 2147483647)
+        local-ver-tag (.nextInt secure-rand 2147483647)
         connection {:sctp-out sctp-out
                     :state (atom {:remote-ver-tag 0
                                   :local-ver-tag local-ver-tag
@@ -264,7 +267,7 @@
         channel (DatagramChannel/open)
         selector (Selector/open)
         sctp-out (LinkedBlockingQueue.)
-        local-ver-tag (rand-int 2147483647)
+        local-ver-tag (.nextInt secure-rand 2147483647)
         connection {:sctp-out sctp-out
                     :state (atom {:remote-ver-tag 0
                                   :local-ver-tag local-ver-tag
