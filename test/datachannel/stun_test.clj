@@ -6,7 +6,7 @@
 (deftest test-decode-xor-mapped-address-ipv4
   (let [cookie stun/magic-cookie
         original-port 12345
-        original-addr (byte-array (map byte [192 168 0 1]))
+        original-addr (byte-array [(unchecked-byte 192) (unchecked-byte 168) (unchecked-byte 0) (unchecked-byte 1)])
 
         ;; XORed port
         xport (bit-xor original-port (bit-shift-right cookie 16))
