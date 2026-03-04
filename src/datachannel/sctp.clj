@@ -120,6 +120,101 @@
       (.put buf v-bytes)
       (dotimes [_ padding] (.put buf (byte 0))))))
 
+(defmulti decode-chunk-payload (fn [type-key buf chunk-data val-len chunk-start flags] type-key))
+
+(defmethod decode-chunk-payload :cookie-ack [_ _ chunk-data _ _ _]
+  chunk-data)
+
+(defmethod decode-chunk-payload :shutdown [_ _ chunk-data _ _ _]
+  chunk-data)
+
+(defmethod decode-chunk-payload :shutdown-ack [_ _ chunk-data _ _ _]
+  chunk-data)
+
+(defmethod decode-chunk-payload :abort [_ buf chunk-data val-len chunk-start _]
+  (.position buf (+ chunk-start val-len))
+  chunk-data)
+
+(defmethod decode-chunk-payload :default [_ buf chunk-data val-len _ _]
+  (let [body (byte-array val-len)]
+    (.get buf body)
+    (merge chunk-data {:body body})))
+
+(defmethod decode-chunk-payload :data [_ buf chunk-data val-len _ flags]
+  (let [tsn (get-unsigned-int buf)
+        stream-id (get-unsigned-short buf)
+        seq-num (get-unsigned-short buf)
+        proto-id (get-unsigned-int buf)
+        payload-len (- val-len 12)
+        payload (byte-array payload-len)]
+    (.get buf payload)
+    (merge chunk-data
+           {:tsn tsn
+            :stream-id stream-id
+            :seq-num seq-num
+            :protocol (get protocol-map proto-id proto-id)
+            :payload payload
+            :unordered (bit-test flags 2)
+            :beginning (bit-test flags 1)
+            :ending (bit-test flags 0)})))
+
+(defmethod decode-chunk-payload :init [_ buf chunk-data val-len _ _]
+  (let [init-tag (get-unsigned-int buf)
+        a-rwnd (get-unsigned-int buf)
+        outbound-streams (get-unsigned-short buf)
+        inbound-streams (get-unsigned-short buf)
+        initial-tsn (get-unsigned-int buf)
+        params-len (- val-len 20)]
+    (merge chunk-data
+           {:init-tag init-tag
+            :a-rwnd a-rwnd
+            :outbound-streams outbound-streams
+            :inbound-streams inbound-streams
+            :initial-tsn initial-tsn
+            :params (decode-params buf params-len)})))
+
+(defmethod decode-chunk-payload :init-ack [_ buf chunk-data val-len _ _]
+  (let [init-tag (get-unsigned-int buf)
+        a-rwnd (get-unsigned-int buf)
+        outbound-streams (get-unsigned-short buf)
+        inbound-streams (get-unsigned-short buf)
+        initial-tsn (get-unsigned-int buf)
+        params-len (- val-len 20)]
+    (merge chunk-data
+           {:init-tag init-tag
+            :a-rwnd a-rwnd
+            :outbound-streams outbound-streams
+            :inbound-streams inbound-streams
+            :initial-tsn initial-tsn
+            :params (decode-params buf params-len)})))
+
+(defmethod decode-chunk-payload :cookie-echo [_ buf chunk-data val-len _ _]
+  (let [cookie (byte-array val-len)]
+    (.get buf cookie)
+    (merge chunk-data {:cookie cookie})))
+
+(defmethod decode-chunk-payload :sack [_ buf chunk-data _ _ _]
+  (let [cum-tsn-ack (get-unsigned-int buf)
+        a-rwnd (get-unsigned-int buf)
+        num-gap-ack-blocks (get-unsigned-short buf)
+        num-duplicate-tsns (get-unsigned-short buf)
+        gap-blocks (vec (repeatedly num-gap-ack-blocks
+                                    #(vector (get-unsigned-short buf) (get-unsigned-short buf))))
+        duplicate-tsns (vec (repeatedly num-duplicate-tsns #(get-unsigned-int buf)))]
+    (merge chunk-data
+           {:cum-tsn-ack cum-tsn-ack
+            :a-rwnd a-rwnd
+            :gap-blocks gap-blocks
+            :duplicate-tsns duplicate-tsns})))
+
+(defmethod decode-chunk-payload :heartbeat [_ buf chunk-data val-len _ _]
+  (let [params (decode-params buf val-len)]
+    (merge chunk-data {:params params})))
+
+(defmethod decode-chunk-payload :heartbeat-ack [_ buf chunk-data val-len _ _]
+  (let [params (decode-params buf val-len)]
+    (merge chunk-data {:params params})))
+
 (defn decode-chunk [^ByteBuffer buf]
   (let [type-code (get-unsigned-byte buf)
         flags (get-unsigned-byte buf)
@@ -136,99 +231,7 @@
                         :flags flags
                         :length len}
             parsed-data
-            (case type-key
-              :data
-              (let [tsn (get-unsigned-int buf)
-                    stream-id (get-unsigned-short buf)
-                    seq-num (get-unsigned-short buf)
-                    proto-id (get-unsigned-int buf)
-                    payload-len (- val-len 12)
-                    payload (byte-array payload-len)]
-                (.get buf payload)
-                (merge chunk-data
-                       {:tsn tsn
-                        :stream-id stream-id
-                        :seq-num seq-num
-                        :protocol (get protocol-map proto-id proto-id)
-                        :payload payload
-                        :unordered (bit-test flags 2)
-                        :beginning (bit-test flags 1)
-                        :ending (bit-test flags 0)}))
-
-              :init
-              (let [init-tag (get-unsigned-int buf)
-                    a-rwnd (get-unsigned-int buf)
-                    outbound-streams (get-unsigned-short buf)
-                    inbound-streams (get-unsigned-short buf)
-                    initial-tsn (get-unsigned-int buf)
-                    params-len (- val-len 20)]
-                 (merge chunk-data
-                        {:init-tag init-tag
-                         :a-rwnd a-rwnd
-                         :outbound-streams outbound-streams
-                         :inbound-streams inbound-streams
-                         :initial-tsn initial-tsn
-                         :params (decode-params buf params-len)}))
-
-              :init-ack
-              (let [init-tag (get-unsigned-int buf)
-                    a-rwnd (get-unsigned-int buf)
-                    outbound-streams (get-unsigned-short buf)
-                    inbound-streams (get-unsigned-short buf)
-                    initial-tsn (get-unsigned-int buf)
-                    params-len (- val-len 20)]
-                 (merge chunk-data
-                        {:init-tag init-tag
-                         :a-rwnd a-rwnd
-                         :outbound-streams outbound-streams
-                         :inbound-streams inbound-streams
-                         :initial-tsn initial-tsn
-                         :params (decode-params buf params-len)}))
-
-              :cookie-echo
-              (let [cookie (byte-array val-len)]
-                (.get buf cookie)
-                (merge chunk-data {:cookie cookie}))
-
-              :sack
-              (let [cum-tsn-ack (get-unsigned-int buf)
-                    a-rwnd (get-unsigned-int buf)
-                    num-gap-ack-blocks (get-unsigned-short buf)
-                    num-duplicate-tsns (get-unsigned-short buf)
-                    gap-blocks (vec (repeatedly num-gap-ack-blocks
-                                              #(vector (get-unsigned-short buf) (get-unsigned-short buf))))
-                    duplicate-tsns (vec (repeatedly num-duplicate-tsns #(get-unsigned-int buf)))]
-                (merge chunk-data
-                       {:cum-tsn-ack cum-tsn-ack
-                        :a-rwnd a-rwnd
-                        :gap-blocks gap-blocks
-                        :duplicate-tsns duplicate-tsns}))
-
-              :heartbeat
-              (let [params (decode-params buf val-len)]
-                 (merge chunk-data {:params params}))
-
-              :heartbeat-ack
-              (let [params (decode-params buf val-len)]
-                 (merge chunk-data {:params params}))
-
-              :abort
-              (do
-                 (.position buf (+ chunk-start val-len))
-                 chunk-data)
-
-              :cookie-ack
-              chunk-data
-
-              :shutdown
-              chunk-data
-
-              :shutdown-ack
-              chunk-data
-
-              (let [body (byte-array val-len)]
-                (.get buf body)
-                (merge chunk-data {:body body})))]
+            (decode-chunk-payload type-key buf chunk-data val-len chunk-start flags)]
 
         (let [padding (pad len)]
           (if (<= (+ (.position buf) padding) (.limit buf))
