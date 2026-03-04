@@ -5,6 +5,7 @@
             [datachannel.handshake-test]
             [datachannel.integration-test]
             [datachannel.webrtc-java-test]
+            [datachannel.stun-test]
             [datachannel.stun-integration-test]
             [datachannel.stun-webrtc-integration-test]
             [datachannel.webrtc-integration-test]))
@@ -15,6 +16,7 @@
                                              'datachannel.handshake-test
                                              'datachannel.integration-test
                                              'datachannel.webrtc-java-test
+                                             'datachannel.stun-test
                                              'datachannel.stun-integration-test
                                              'datachannel.stun-webrtc-integration-test
                                              'datachannel.webrtc-integration-test)]
