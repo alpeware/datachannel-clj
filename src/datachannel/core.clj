@@ -20,6 +20,10 @@
   (when ch
     (try (.close ch) (catch Exception _))))
 
+(defn- close-selector [sel]
+  (when sel
+    (try (.close sel) (catch Exception _))))
+
 (defn- handle-sctp-packet [packet connection]
   (let [chunks (:chunks packet)
         state (:state connection)]
@@ -200,7 +204,9 @@
                             (try (-> (ByteBuffer/wrap app-data) sctp/decode-packet (handle-sctp-packet connection))
                                  (catch Exception e (println "SCTP Decode Error (Handshake):" e)))))))))))
             (catch Exception e
-              (println "Error in run-loop processing:" e)))
+              (if-not (or (instance? java.nio.channels.ClosedChannelException e)
+                          (instance? java.nio.channels.ClosedSelectorException e))
+                (println "Error in run-loop processing:" e))))
 
           (.clear net-in-loop)
           (let [count (.select selector 10)]
@@ -233,7 +239,8 @@
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
                     :ice-pwd (:ice-pwd options)
-                    :channel channel}]
+                    :channel channel
+                    :selector selector}]
     (.configureBlocking channel false)
     (.connect channel peer-addr)
 
@@ -242,7 +249,9 @@
                 (try
                   (run-loop channel selector engine peer-addr connection)
                   (catch Exception e
-                    (println "Connection Loop Error:" e)))))]
+                    (if-not (or (instance? java.nio.channels.ClosedChannelException e)
+                                (instance? java.nio.channels.ClosedSelectorException e))
+                      (println "Connection Loop Error:" e))))))]
       (.start t))
 
     (let [init-chunk {:type :init
@@ -278,7 +287,8 @@
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
                     :ice-pwd (:ice-pwd options)
-                    :channel channel}]
+                    :channel channel
+                    :selector selector}]
     (.configureBlocking channel false)
     (if-let [host (:host options)]
       (.bind channel (InetSocketAddress. ^String host (int port)))
@@ -297,7 +307,9 @@
                     (.flip temp-buf)
                     (run-loop channel selector engine peer-addr connection temp-buf))
                   (catch Exception e
-                    (println "Server Loop Error:" e)))))]
+                    (if-not (or (instance? java.nio.channels.ClosedChannelException e)
+                                (instance? java.nio.channels.ClosedSelectorException e))
+                      (println "Server Loop Error:" e))))))]
       (.start t))
 
     connection))
@@ -324,4 +336,5 @@
      (.offer (:sctp-out connection) packet)))
 
 (defn close [connection]
-  (close-channel (:channel connection)))
+  (close-channel (:channel connection))
+  (close-selector (:selector connection)))
