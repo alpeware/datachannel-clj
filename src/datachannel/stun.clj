@@ -22,6 +22,8 @@
 (def ATTR_ICE_CONTROLLED 0x8029)
 (def ATTR_ICE_CONTROLLING 0x802A)
 
+(def DEFAULT_PRIORITY 1853824767)
+
 (defn- put-unsigned-short [^ByteBuffer buf val]
   (.putShort buf (unchecked-short val)))
 
@@ -72,7 +74,7 @@
     ;; PRIORITY (optional, but good practice)
     (put-unsigned-short buf ATTR_PRIORITY)
     (put-unsigned-short buf 4)
-    (.putInt buf 1853824767) ;; Some priority
+    (.putInt buf DEFAULT_PRIORITY)
 
     ;; ICE-CONTROLLING (or CONTROLLED)
     ;; Since we are passive/lite, we usually are controlled.
