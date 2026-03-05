@@ -109,16 +109,22 @@
                  (.position buf (+ (.position buf) padding))
                  (recur (assoc params type-key val-bytes))))))))))
 
+(defn- set-length-and-padding [^ByteBuffer buf start-pos]
+  (let [end-pos (.position buf)
+        len (- end-pos start-pos)
+        padding (pad len)]
+    (.putShort buf (+ start-pos 2) (unchecked-short len))
+    (dotimes [_ padding] (.put buf (byte 0)))))
+
 (defn encode-params [^ByteBuffer buf params]
   (doseq [[k v] params]
-    (let [type-code (if (keyword? k) (get parameters k) k)
-          v-bytes (if (bytes? v) v EMPTY-BYTE-ARRAY)
-          len (+ 4 (alength v-bytes))
-          padding (pad len)]
+    (let [start-pos (.position buf)
+          type-code (if (keyword? k) (get parameters k) k)
+          v-bytes (if (bytes? v) v EMPTY-BYTE-ARRAY)]
       (.putShort buf (unchecked-short type-code))
-      (.putShort buf (unchecked-short len))
+      (.putShort buf 0)
       (.put buf v-bytes)
-      (dotimes [_ padding] (.put buf (byte 0))))))
+      (set-length-and-padding buf start-pos))))
 
 (defmulti decode-chunk-payload (fn [type-key buf chunk-data val-len chunk-start flags] type-key))
 
@@ -131,16 +137,22 @@
 (defmethod decode-chunk-payload :shutdown-ack [_ _ chunk-data _ _ _]
   chunk-data)
 
-(defmethod decode-chunk-payload :abort [_ buf chunk-data val-len chunk-start _]
+(defn decode-abort-chunk [buf chunk-data val-len chunk-start]
   (.position buf (+ chunk-start val-len))
   chunk-data)
 
-(defmethod decode-chunk-payload :default [_ buf chunk-data val-len _ _]
+(defmethod decode-chunk-payload :abort [_ buf chunk-data val-len chunk-start _]
+  (decode-abort-chunk buf chunk-data val-len chunk-start))
+
+(defn decode-default-chunk [buf chunk-data val-len]
   (let [body (byte-array val-len)]
     (.get buf body)
     (merge chunk-data {:body body})))
 
-(defmethod decode-chunk-payload :data [_ buf chunk-data val-len _ flags]
+(defmethod decode-chunk-payload :default [_ buf chunk-data val-len _ _]
+  (decode-default-chunk buf chunk-data val-len))
+
+(defn decode-data-chunk [buf chunk-data val-len flags]
   (let [tsn (get-unsigned-int buf)
         stream-id (get-unsigned-short buf)
         seq-num (get-unsigned-short buf)
@@ -158,7 +170,28 @@
             :beginning (bit-test flags 1)
             :ending (bit-test flags 0)})))
 
+(defmethod decode-chunk-payload :data [_ buf chunk-data val-len _ flags]
+  (decode-data-chunk buf chunk-data val-len flags))
+
+(defn decode-init-chunk [buf chunk-data val-len]
+  (let [init-tag (get-unsigned-int buf)
+        a-rwnd (get-unsigned-int buf)
+        outbound-streams (get-unsigned-short buf)
+        inbound-streams (get-unsigned-short buf)
+        initial-tsn (get-unsigned-int buf)
+        params-len (- val-len 20)]
+    (merge chunk-data
+           {:init-tag init-tag
+            :a-rwnd a-rwnd
+            :outbound-streams outbound-streams
+            :inbound-streams inbound-streams
+            :initial-tsn initial-tsn
+            :params (decode-params buf params-len)})))
+
 (defmethod decode-chunk-payload :init [_ buf chunk-data val-len _ _]
+  (decode-init-chunk buf chunk-data val-len))
+
+(defn decode-init-ack-chunk [buf chunk-data val-len]
   (let [init-tag (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
         outbound-streams (get-unsigned-short buf)
@@ -174,26 +207,17 @@
             :params (decode-params buf params-len)})))
 
 (defmethod decode-chunk-payload :init-ack [_ buf chunk-data val-len _ _]
-  (let [init-tag (get-unsigned-int buf)
-        a-rwnd (get-unsigned-int buf)
-        outbound-streams (get-unsigned-short buf)
-        inbound-streams (get-unsigned-short buf)
-        initial-tsn (get-unsigned-int buf)
-        params-len (- val-len 20)]
-    (merge chunk-data
-           {:init-tag init-tag
-            :a-rwnd a-rwnd
-            :outbound-streams outbound-streams
-            :inbound-streams inbound-streams
-            :initial-tsn initial-tsn
-            :params (decode-params buf params-len)})))
+  (decode-init-ack-chunk buf chunk-data val-len))
 
-(defmethod decode-chunk-payload :cookie-echo [_ buf chunk-data val-len _ _]
+(defn decode-cookie-echo-chunk [buf chunk-data val-len]
   (let [cookie (byte-array val-len)]
     (.get buf cookie)
     (merge chunk-data {:cookie cookie})))
 
-(defmethod decode-chunk-payload :sack [_ buf chunk-data _ _ _]
+(defmethod decode-chunk-payload :cookie-echo [_ buf chunk-data val-len _ _]
+  (decode-cookie-echo-chunk buf chunk-data val-len))
+
+(defn decode-sack-chunk [buf chunk-data]
   (let [cum-tsn-ack (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
         num-gap-ack-blocks (get-unsigned-short buf)
@@ -207,13 +231,22 @@
             :gap-blocks gap-blocks
             :duplicate-tsns duplicate-tsns})))
 
+(defmethod decode-chunk-payload :sack [_ buf chunk-data _ _ _]
+  (decode-sack-chunk buf chunk-data))
+
+(defn decode-heartbeat-chunk [buf chunk-data val-len]
+  (let [params (decode-params buf val-len)]
+    (merge chunk-data {:params params})))
+
 (defmethod decode-chunk-payload :heartbeat [_ buf chunk-data val-len _ _]
+  (decode-heartbeat-chunk buf chunk-data val-len))
+
+(defn decode-heartbeat-ack-chunk [buf chunk-data val-len]
   (let [params (decode-params buf val-len)]
     (merge chunk-data {:params params})))
 
 (defmethod decode-chunk-payload :heartbeat-ack [_ buf chunk-data val-len _ _]
-  (let [params (decode-params buf val-len)]
-    (merge chunk-data {:params params})))
+  (decode-heartbeat-ack-chunk buf chunk-data val-len))
 
 (defn decode-chunk [^ByteBuffer buf]
   (let [type-code (get-unsigned-byte buf)
@@ -277,6 +310,55 @@
                      chunks)
                    chunks))})))
 
+(defmulti encode-chunk-payload (fn [type-key buf chunk] type-key))
+
+(defmethod encode-chunk-payload :data [_ ^ByteBuffer buf chunk]
+  (.putInt buf (unchecked-int (:tsn chunk)))
+  (.putShort buf (unchecked-short (:stream-id chunk)))
+  (.putShort buf (unchecked-short (:seq-num chunk)))
+  (.putInt buf (unchecked-int (get protocols (:protocol chunk) (:protocol chunk))))
+  (.put buf ^bytes (:payload chunk)))
+
+(defmethod encode-chunk-payload :init [_ ^ByteBuffer buf chunk]
+  (.putInt buf (unchecked-int (:init-tag chunk)))
+  (.putInt buf (unchecked-int (:a-rwnd chunk)))
+  (.putShort buf (unchecked-short (:outbound-streams chunk)))
+  (.putShort buf (unchecked-short (:inbound-streams chunk)))
+  (.putInt buf (unchecked-int (:initial-tsn chunk)))
+  (encode-params buf (:params chunk)))
+
+(defmethod encode-chunk-payload :init-ack [_ ^ByteBuffer buf chunk]
+  (.putInt buf (unchecked-int (:init-tag chunk)))
+  (.putInt buf (unchecked-int (:a-rwnd chunk)))
+  (.putShort buf (unchecked-short (:outbound-streams chunk)))
+  (.putShort buf (unchecked-short (:inbound-streams chunk)))
+  (.putInt buf (unchecked-int (:initial-tsn chunk)))
+  (encode-params buf (:params chunk)))
+
+(defmethod encode-chunk-payload :cookie-echo [_ ^ByteBuffer buf chunk]
+  (.put buf ^bytes (:cookie chunk)))
+
+(defmethod encode-chunk-payload :sack [_ ^ByteBuffer buf chunk]
+  (.putInt buf (unchecked-int (:cum-tsn-ack chunk)))
+  (.putInt buf (unchecked-int (:a-rwnd chunk)))
+  (.putShort buf (unchecked-short (count (:gap-blocks chunk))))
+  (.putShort buf (unchecked-short (count (:duplicate-tsns chunk))))
+  (doseq [[start end] (:gap-blocks chunk)]
+    (.putShort buf (unchecked-short start))
+    (.putShort buf (unchecked-short end)))
+  (doseq [dup (:duplicate-tsns chunk)]
+    (.putInt buf (unchecked-int dup))))
+
+(defmethod encode-chunk-payload :heartbeat [_ ^ByteBuffer buf chunk]
+  (encode-params buf (:params chunk)))
+
+(defmethod encode-chunk-payload :heartbeat-ack [_ ^ByteBuffer buf chunk]
+  (encode-params buf (:params chunk)))
+
+(defmethod encode-chunk-payload :default [_ ^ByteBuffer buf chunk]
+  (when (:body chunk)
+    (.put buf ^bytes (:body chunk))))
+
 (defn encode-chunk [^ByteBuffer buf chunk]
   (let [start-pos (.position buf)
         type-key (:type chunk)
@@ -286,62 +368,9 @@
     (.put buf (byte flags))
     (.putShort buf 0)
 
-    (case type-key
-      :data
-      (do
-        (.putInt buf (unchecked-int (:tsn chunk)))
-        (.putShort buf (unchecked-short (:stream-id chunk)))
-        (.putShort buf (unchecked-short (:seq-num chunk)))
-        (.putInt buf (unchecked-int (get protocols (:protocol chunk) (:protocol chunk))))
-        (.put buf ^bytes (:payload chunk)))
+    (encode-chunk-payload type-key buf chunk)
 
-      :init
-      (do
-        (.putInt buf (unchecked-int (:init-tag chunk)))
-        (.putInt buf (unchecked-int (:a-rwnd chunk)))
-        (.putShort buf (unchecked-short (:outbound-streams chunk)))
-        (.putShort buf (unchecked-short (:inbound-streams chunk)))
-        (.putInt buf (unchecked-int (:initial-tsn chunk)))
-        (encode-params buf (:params chunk)))
-
-      :init-ack
-      (do
-        (.putInt buf (unchecked-int (:init-tag chunk)))
-        (.putInt buf (unchecked-int (:a-rwnd chunk)))
-        (.putShort buf (unchecked-short (:outbound-streams chunk)))
-        (.putShort buf (unchecked-short (:inbound-streams chunk)))
-        (.putInt buf (unchecked-int (:initial-tsn chunk)))
-        (encode-params buf (:params chunk)))
-
-      :cookie-echo
-      (.put buf ^bytes (:cookie chunk))
-
-      :sack
-      (do
-        (.putInt buf (unchecked-int (:cum-tsn-ack chunk)))
-        (.putInt buf (unchecked-int (:a-rwnd chunk)))
-        (.putShort buf (unchecked-short (count (:gap-blocks chunk))))
-        (.putShort buf (unchecked-short (count (:duplicate-tsns chunk))))
-        (doseq [[start end] (:gap-blocks chunk)]
-          (.putShort buf (unchecked-short start))
-          (.putShort buf (unchecked-short end)))
-        (doseq [dup (:duplicate-tsns chunk)]
-          (.putInt buf (unchecked-int dup))))
-
-      :heartbeat
-      (encode-params buf (:params chunk))
-
-      :heartbeat-ack
-      (encode-params buf (:params chunk))
-
-      (when (:body chunk)
-        (.put buf ^bytes (:body chunk))))
-
-    (let [end-pos (.position buf)
-          len (- end-pos start-pos)
-          padding (pad len)]
-      (.putShort buf (+ start-pos 2) (unchecked-short len))
-      (dotimes [_ padding] (.put buf (byte 0))))))
+    (set-length-and-padding buf start-pos)))
 
 (defn encode-packet [packet ^ByteBuffer buf]
   (let [orig-order (.order buf)]
