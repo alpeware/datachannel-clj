@@ -84,13 +84,14 @@
         (do
           (swap! state assoc :remote-ver-tag (:init-tag chunk)
                              :remote-tsn (dec (:initial-tsn chunk)))
-          (let [init-ack {:type :init-ack
+          (let [cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
+                init-ack {:type :init-ack
                           :init-tag (:local-ver-tag @state)
                           :a-rwnd 100000
                           :outbound-streams (:inbound-streams chunk)
                           :inbound-streams (:outbound-streams chunk)
                           :initial-tsn (:next-tsn @state)
-                          :params {:cookie (.getBytes (str (System/currentTimeMillis)) "UTF-8")}}
+                          :params {:cookie cookie-bytes}}
                 packet {:src-port (:dst-port packet)
                         :dst-port (:src-port packet)
                         :verification-tag (:init-tag chunk)
