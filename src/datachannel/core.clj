@@ -225,13 +225,12 @@
           (recur net-in-loop))
         (println "Channel closed.")))))
 
-(defn connect [host port & {:as options}]
+(defn- create-connection [options client-mode?]
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
-        engine (dtls/create-engine ctx true) ;; Client mode
+        engine (dtls/create-engine ctx client-mode?)
         channel (DatagramChannel/open)
         selector (Selector/open)
-        peer-addr (InetSocketAddress. host port)
         sctp-out (LinkedBlockingQueue.)
         local-ver-tag (.nextInt secure-rand 2147483647)
         connection {:sctp-out sctp-out
@@ -247,6 +246,15 @@
                     :ice-pwd (:ice-pwd options)
                     :channel channel
                     :selector selector}]
+    {:engine engine
+     :channel channel
+     :selector selector
+     :connection connection
+     :local-ver-tag local-ver-tag}))
+
+(defn connect [host port & {:as options}]
+  (let [{:keys [engine channel selector connection local-ver-tag]} (create-connection options true)
+        peer-addr (InetSocketAddress. host port)]
     (.configureBlocking channel false)
     (.connect channel peer-addr)
 
@@ -271,31 +279,12 @@
                   :dst-port 5000
                   :verification-tag 0
                   :chunks [init-chunk]}]
-       (.offer sctp-out packet))
+       (.offer (:sctp-out connection) packet))
 
     connection))
 
 (defn listen [port & {:as options}]
-  (let [cert-data (or (:cert-data options) (dtls/generate-cert))
-        ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
-        engine (dtls/create-engine ctx (boolean (:dtls-client options)))
-        channel (DatagramChannel/open)
-        selector (Selector/open)
-        sctp-out (LinkedBlockingQueue.)
-        local-ver-tag (.nextInt secure-rand 2147483647)
-        connection {:sctp-out sctp-out
-                    :state (atom {:remote-ver-tag 0
-                                  :local-ver-tag local-ver-tag
-                                  :next-tsn 0
-                                  :ssn 0})
-                    :on-message (atom nil)
-                    :on-data (atom nil)
-                    :on-open (atom nil)
-                    :cert-data cert-data
-                    :ice-ufrag (:ice-ufrag options)
-                    :ice-pwd (:ice-pwd options)
-                    :channel channel
-                    :selector selector}]
+  (let [{:keys [engine channel selector connection]} (create-connection options (boolean (:dtls-client options)))]
     (.configureBlocking channel false)
     (if-let [host (:host options)]
       (.bind channel (InetSocketAddress. ^String host (int port)))
