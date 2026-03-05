@@ -34,7 +34,8 @@
               tsn (:tsn chunk)]
           ;; Update remote TSN and send SACK
           (swap! state (fn [s]
-                         (if (> tsn (:remote-tsn s))
+                         ;; Serial number arithmetic for 32-bit unsigned TSN
+                         (if (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int (:remote-tsn s)))))
                            (assoc s :remote-tsn tsn)
                            s)))
           (let [sack-packet {:src-port (:dst-port packet)
