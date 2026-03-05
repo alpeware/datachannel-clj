@@ -4,7 +4,7 @@
 - [ ] [ClientAuth](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/ClientAuth.java)
 - [ ] [DTLSBufferOverflowUnderflowTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSBufferOverflowUnderflowTest.java)
 - [ ] [DTLSEnginesClosureTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSEnginesClosureTest.java)
-- [ ] [DTLSHandshakeWithReplicatedPacketsTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSHandshakeWithReplicatedPacketsTest.java)
+- [x] [DTLSHandshakeWithReplicatedPacketsTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSHandshakeWithReplicatedPacketsTest.java)
 - [ ] [DTLSIncorrectAppDataTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSIncorrectAppDataTest.java)
 - [ ] [DTLSMFLNTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSMFLNTest.java)
 - [ ] [DTLSNamedGroups](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSNamedGroups.java)
