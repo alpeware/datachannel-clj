@@ -72,8 +72,13 @@
                    (.offer (:sctp-out connection) ack-packet))))
 
             :else
-            (when-let [cb @(:on-message connection)]
-               (cb (:payload chunk)))))
+            (do
+              (when-let [cb @(:on-message connection)]
+                (cb (:payload chunk)))
+              (when-let [cb @(:on-data connection)]
+                (cb {:payload (:payload chunk)
+                     :stream-id (:stream-id chunk)
+                     :protocol proto})))))
 
         :init
         (do
@@ -235,6 +240,7 @@
                                   :next-tsn 0
                                   :ssn 0})
                     :on-message (atom nil)
+                    :on-data (atom nil)
                     :on-open (atom nil)
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
@@ -283,6 +289,7 @@
                                   :next-tsn 0
                                   :ssn 0})
                     :on-message (atom nil)
+                    :on-data (atom nil)
                     :on-open (atom nil)
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
@@ -314,7 +321,7 @@
 
     connection))
 
-(defn send-msg [connection msg]
+(defn send-data [connection ^bytes payload stream-id protocol]
   (let [state (:state connection)
         ver-tag (:remote-ver-tag @state)
         tsn (let [t (:next-tsn @state)]
@@ -329,11 +336,14 @@
                 :chunks [{:type :data
                           :flags 3 ;; B and E bits
                           :tsn tsn
-                          :stream-id 0
+                          :stream-id stream-id
                           :seq-num ssn
-                          :protocol :webrtc/string
-                          :payload (.getBytes msg "UTF-8")}]}]
+                          :protocol protocol
+                          :payload payload}]}]
      (.offer (:sctp-out connection) packet)))
+
+(defn send-msg [connection msg]
+  (send-data connection (.getBytes msg "UTF-8") 0 :webrtc/string))
 
 (defn close [connection]
   (close-channel (:channel connection))
