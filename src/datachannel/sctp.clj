@@ -99,8 +99,9 @@
               len (get-unsigned-short buf)
               val-len (- len 4)
               type-key (get parameter-map type-code type-code)
-              val-bytes (byte-array val-len)]
-          (.get buf val-bytes)
+              val-bytes (if (zero? val-len) EMPTY-BYTE-ARRAY (byte-array val-len))]
+          (when-not (zero? val-len)
+            (.get buf val-bytes))
           ;; Skip padding
           (let [padding (pad len)]
              (if (< (.remaining buf) padding)
@@ -136,8 +137,9 @@
   chunk-data)
 
 (defmethod decode-chunk-payload :default [_ buf chunk-data val-len _ _]
-  (let [body (byte-array val-len)]
-    (.get buf body)
+  (let [body (if (zero? val-len) EMPTY-BYTE-ARRAY (byte-array val-len))]
+    (when-not (zero? val-len)
+      (.get buf body))
     (merge chunk-data {:body body})))
 
 (defmethod decode-chunk-payload :data [_ buf chunk-data val-len _ flags]
@@ -146,8 +148,9 @@
         seq-num (get-unsigned-short buf)
         proto-id (get-unsigned-int buf)
         payload-len (- val-len 12)
-        payload (byte-array payload-len)]
-    (.get buf payload)
+        payload (if (zero? payload-len) EMPTY-BYTE-ARRAY (byte-array payload-len))]
+    (when-not (zero? payload-len)
+      (.get buf payload))
     (merge chunk-data
            {:tsn tsn
             :stream-id stream-id
@@ -189,8 +192,9 @@
             :params (decode-params buf params-len)})))
 
 (defmethod decode-chunk-payload :cookie-echo [_ buf chunk-data val-len _ _]
-  (let [cookie (byte-array val-len)]
-    (.get buf cookie)
+  (let [cookie (if (zero? val-len) EMPTY-BYTE-ARRAY (byte-array val-len))]
+    (when-not (zero? val-len)
+      (.get buf cookie))
     (merge chunk-data {:cookie cookie})))
 
 (defmethod decode-chunk-payload :sack [_ buf chunk-data _ _ _]
