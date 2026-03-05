@@ -20,7 +20,7 @@
 - [ ] [InvalidRecords](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidRecords.java)
 - [ ] [NoMacInitialClientHello](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/NoMacInitialClientHello.java)
 - [ ] [PacketLossRetransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/PacketLossRetransmission.java)
-- [ ] [Reordered](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Reordered.java)
+- [x] [Reordered](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Reordered.java)
 - [ ] [RespondToRetransmit](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/RespondToRetransmit.java)
 - [ ] [Retransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Retransmission.java)
 - [ ] [WeakCipherSuite](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/WeakCipherSuite.java)
