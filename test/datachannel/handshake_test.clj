@@ -237,3 +237,46 @@
                 res)
               reconstructed-msg (String. reconstructed-bytes)]
           (is (= big-message reconstructed-msg)))))))
+
+(defn- check-incorrect-app-data-unwrap [send-engine recv-engine]
+  (let [message "Hello peer!"
+        app-in (ByteBuffer/wrap (.getBytes message))
+        net-out (ByteBuffer/allocate (.getPacketBufferSize (.getSession send-engine)))
+        _ (.wrap send-engine app-in net-out)
+        _ (.flip net-out)
+
+        ;; Mutate a random byte in the wrapped data
+        net-bytes (byte-array (.remaining net-out))
+        _ (.get net-out net-bytes)
+        random-place (rand-int (alength net-bytes))
+        _ (aset net-bytes random-place (byte (inc (aget net-bytes random-place))))
+        mutated-net-in (ByteBuffer/wrap net-bytes)
+
+        app-out (ByteBuffer/allocate (.getApplicationBufferSize (.getSession recv-engine)))]
+
+    (try
+      (.unwrap recv-engine mutated-net-in app-out)
+      (.flip app-out)
+      (is (= 0 (.remaining app-out)) "Unwrapped app data should be empty for corrupted packet")
+      (catch javax.net.ssl.SSLException e
+        ;; SSLException might also be acceptable depending on the specific engine behavior,
+        ;; but typically DTLS ignores incorrect packets to prevent DOS attacks,
+        ;; as shown in the Java test which expects the length to be 0 or SSLException.
+        (is true "Caught expected SSLException or ignored packet")))))
+
+(deftest test-incorrect-app-data
+  (testing "DTLS incorrect app data packages unwrapping"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop client-engine server-engine)))
+
+      (testing "Sending incorrect data from client to server"
+        (check-incorrect-app-data-unwrap client-engine server-engine))
+
+      (testing "Sending incorrect data from server to client"
+        (check-incorrect-app-data-unwrap server-engine client-engine)))))
