@@ -2,7 +2,7 @@
   (:require [clojure.test :refer :all]
             [datachannel.dtls :as dtls])
   (:import [java.nio ByteBuffer]
-           [javax.net.ssl SSLEngine SSLEngineResult$HandshakeStatus]))
+           [javax.net.ssl SSLEngine SSLEngineResult$HandshakeStatus SSLEngineResult]))
 
 (defn- run-handshake-loop [client-engine server-engine]
   (let [client-out (ByteBuffer/allocate 65536)
@@ -164,3 +164,76 @@
           ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
           engine (dtls/create-engine ctx true)]
       (is (= dtls/DEFAULT-PACKET-SIZE (.getMaximumPacketSize (.getSSLParameters engine)))))))
+
+(deftest test-sequence-number
+  (testing "DTLS Sequence Number support in application data exchange"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop client-engine server-engine)))
+
+      (let [big-message "Very very big message. One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty."
+            big-message-bytes (.getBytes big-message)
+            pieces-number 15
+            symbols-in-a-message (quot (alength big-message-bytes) pieces-number)
+            symbols-in-the-last-message (+ symbols-in-a-message (rem (alength big-message-bytes) pieces-number))
+
+            ;; Create pieces
+            sent-messages
+            (vec (for [i (range pieces-number)]
+                   (if (= i (dec pieces-number))
+                     (ByteBuffer/wrap big-message-bytes (* i symbols-in-a-message) symbols-in-the-last-message)
+                     (ByteBuffer/wrap big-message-bytes (* i symbols-in-a-message) symbols-in-a-message))))
+
+            ;; Wrap messages in direct order
+            wrapped-results
+            (loop [i 0
+                   prev-seq -1
+                   results []]
+              (if (< i pieces-number)
+                (let [in-buf (sent-messages i)
+                      out-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession client-engine)))
+                      result (.wrap client-engine in-buf out-buf)
+                      seq-num (.sequenceNumber result)]
+                  (is (> seq-num prev-seq) "Sequence number should be monotonically increasing")
+                  (.flip out-buf)
+                  (let [arr (byte-array (.remaining out-buf))]
+                    (.get out-buf arr)
+                    (recur (inc i) seq-num (conj results {:seq-num seq-num :bytes arr}))))
+                results))
+
+            ;; Unwrap messages in random order
+            receiving-sequence (shuffle (range pieces-number))
+            recv-map
+            (loop [i 0
+                   m (sorted-map)]
+              (if (< i pieces-number)
+                (let [recv-now (nth receiving-sequence i)
+                      wrapped-bytes (:bytes (wrapped-results recv-now))
+                      in-buf (ByteBuffer/wrap wrapped-bytes)
+                      out-buf (ByteBuffer/allocate (.getApplicationBufferSize (.getSession server-engine)))
+                      result (.unwrap server-engine in-buf out-buf)
+                      seq-num (.sequenceNumber result)]
+                  (.flip out-buf)
+                  (let [arr (byte-array (.remaining out-buf))]
+                    (.get out-buf arr)
+                    (recur (inc i) (assoc m seq-num arr))))
+                m))]
+
+        ;; Reconstruct and verify
+        (is (= pieces-number (count recv-map)))
+
+        (let [reconstructed-bytes
+              (let [total-len (reduce + (map alength (vals recv-map)))
+                    res (byte-array total-len)]
+                (loop [chunks (vals recv-map)
+                       offset 0]
+                  (when-let [chunk (first chunks)]
+                    (System/arraycopy chunk 0 res offset (alength chunk))
+                    (recur (rest chunks) (+ offset (alength chunk)))))
+                res)
+              reconstructed-msg (String. reconstructed-bytes)]
+          (is (= big-message reconstructed-msg)))))))
