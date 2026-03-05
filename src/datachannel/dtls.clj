@@ -17,9 +17,9 @@
   (let [md (MessageDigest/getInstance "SHA-256")]
     (->> (.getEncoded cert)
          (.update md))
-    (->> (.digest md)
-         (map #(format "%02X" (bit-and % 0xff)))
-         (string/join ":"))))
+    (-> (java.util.HexFormat/ofDelimiter ":")
+        (.withUpperCase)
+        (.formatHex (.digest md)))))
 
 (defn generate-cert []
   (let [key-pair-generator (CertAndKeyGen. "RSA" "SHA256WithRSA" nil)
