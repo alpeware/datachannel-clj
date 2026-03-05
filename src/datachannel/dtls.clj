@@ -38,10 +38,11 @@
   (let [ks (KeyStore/getInstance "PKCS12")
         kmf (KeyManagerFactory/getInstance "SunX509")
         tmf (TrustManagerFactory/getInstance "SunX509")
-        ctx (SSLContext/getInstance "DTLS")]
+        ctx (SSLContext/getInstance "DTLS")
+        pwd (char-array (str (java.util.UUID/randomUUID)))]
     (.load ks nil nil)
-    (.setKeyEntry ks "webrtc" key (char-array "password") (into-array X509Certificate [cert]))
-    (.init kmf ks (char-array "password"))
+    (.setKeyEntry ks "webrtc" key pwd (into-array X509Certificate [cert]))
+    (.init kmf ks pwd)
     (.init tmf ks)
 
     ;; Create a trust manager that accepts the peer's certificate (for WebRTC DTLS-SRTP, we verify via fingerprint in SDP)
