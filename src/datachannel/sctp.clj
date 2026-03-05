@@ -109,16 +109,22 @@
                  (.position buf (+ (.position buf) padding))
                  (recur (assoc params type-key val-bytes))))))))))
 
+(defn- set-length-and-padding [^ByteBuffer buf start-pos]
+  (let [end-pos (.position buf)
+        len (- end-pos start-pos)
+        padding (pad len)]
+    (.putShort buf (+ start-pos 2) (unchecked-short len))
+    (dotimes [_ padding] (.put buf (byte 0)))))
+
 (defn encode-params [^ByteBuffer buf params]
   (doseq [[k v] params]
-    (let [type-code (if (keyword? k) (get parameters k) k)
-          v-bytes (if (bytes? v) v EMPTY-BYTE-ARRAY)
-          len (+ 4 (alength v-bytes))
-          padding (pad len)]
+    (let [start-pos (.position buf)
+          type-code (if (keyword? k) (get parameters k) k)
+          v-bytes (if (bytes? v) v EMPTY-BYTE-ARRAY)]
       (.putShort buf (unchecked-short type-code))
-      (.putShort buf (unchecked-short len))
+      (.putShort buf 0)
       (.put buf v-bytes)
-      (dotimes [_ padding] (.put buf (byte 0))))))
+      (set-length-and-padding buf start-pos))))
 
 (defmulti decode-chunk-payload (fn [type-key buf chunk-data val-len chunk-start flags] type-key))
 
@@ -337,11 +343,7 @@
       (when (:body chunk)
         (.put buf ^bytes (:body chunk))))
 
-    (let [end-pos (.position buf)
-          len (- end-pos start-pos)
-          padding (pad len)]
-      (.putShort buf (+ start-pos 2) (unchecked-short len))
-      (dotimes [_ padding] (.put buf (byte 0))))))
+    (set-length-and-padding buf start-pos)))
 
 (defn encode-packet [packet ^ByteBuffer buf]
   (let [orig-order (.order buf)]
