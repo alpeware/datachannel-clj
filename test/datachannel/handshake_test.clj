@@ -140,6 +140,24 @@
       (is (= :success (run-handshake-loop-with-replication client-engine server-engine)))
       (is (= "Hello Dup" (exchange-data client-engine server-engine "Hello Dup"))))))
 
+
+(deftest test-client-auth
+  (testing "DTLS client authentication requirement"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      ;; Verify server is configured for mutual auth by default in create-engine
+      (is (.getNeedClientAuth (.getSSLParameters server-engine)))
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      ;; Handshake should succeed as both have certificates (mutual auth)
+      (is (= :success (run-handshake-loop client-engine server-engine)))
+      (is (= "Auth OK" (exchange-data client-engine server-engine "Auth OK")))
+      ;; Verify peer certificate was received
+      (is (some? (.getPeerCertificates (.getSession server-engine))))
+      (is (some? (.getPeerCertificates (.getSession client-engine)))))))
+
 (deftest test-default-max-packet-size
   (testing "Verify default max packet size in created engine"
     (let [cert-data (dtls/generate-cert)
