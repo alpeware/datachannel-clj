@@ -330,3 +330,72 @@
 
       (testing "Sending incorrect data from server to client"
         (check-incorrect-app-data-unwrap server-engine client-engine)))))
+
+(defn- run-handshake-loop-invalid-cookie [client-engine server-engine]
+  (let [client-out (ByteBuffer/allocate 65536)
+        server-out (ByteBuffer/allocate 65536)
+        client-in (ByteBuffer/allocate 65536)
+        server-in (ByteBuffer/allocate 65536)
+        max-loops 100]
+    (.flip client-in)
+    (.flip server-in)
+    (loop [i 0
+           invalidated-cookie false]
+      (if (> i max-loops)
+        (throw (Exception. "Handshake failed to complete in max loops"))
+        (let [client-status (.getHandshakeStatus client-engine)
+              server-status (.getHandshakeStatus server-engine)]
+          (if (and (or (= client-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                       (= client-status SSLEngineResult$HandshakeStatus/FINISHED))
+                   (or (= server-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                       (= server-status SSLEngineResult$HandshakeStatus/FINISHED))
+                   (not (.hasRemaining client-in))
+                   (not (.hasRemaining server-in)))
+            :success
+            (do
+              ;; Run client step
+              (let [res-c (dtls/handshake client-engine client-in client-out)
+                    packets-c (:packets res-c)]
+                (.compact server-in)
+                (doseq [p packets-c]
+                  (.put server-in (ByteBuffer/wrap p)))
+                (.flip server-in))
+
+              ;; Run server step
+              (let [res-s (dtls/handshake server-engine server-in server-out)
+                    packets-s (:packets res-s)
+                    mutated-packets
+                    (map (fn [^bytes p]
+                           (if (and (not invalidated-cookie)
+                                    (>= (alength p) 60)
+                                    (= (aget p 0) (unchecked-byte 0x16))
+                                    (= (aget p 13) (unchecked-byte 0x03)))
+                             (do
+                               (let [last-idx (dec (alength p))
+                                     last-byte (aget p last-idx)]
+                                 (if (= last-byte (unchecked-byte 0xFF))
+                                   (aset p last-idx (unchecked-byte 0xFE))
+                                   (aset p last-idx (unchecked-byte 0xFF))))
+                               p)
+                             p))
+                         packets-s)
+                    has-mutated (some #(and (>= (alength %) 60)
+                                            (= (aget % 0) (unchecked-byte 0x16))
+                                            (= (aget % 13) (unchecked-byte 0x03)))
+                                      packets-s)]
+                (.compact client-in)
+                (doseq [p mutated-packets]
+                  (.put client-in (ByteBuffer/wrap p)))
+                (.flip client-in)
+                (recur (inc i) (or invalidated-cookie has-mutated))))))))))
+
+(deftest test-invalid-cookie
+  (testing "DTLS handshake with invalid HelloVerifyRequest cookie"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop-invalid-cookie client-engine server-engine)))
+      (is (= "Hello after invalid cookie" (exchange-data client-engine server-engine "Hello after invalid cookie"))))))
