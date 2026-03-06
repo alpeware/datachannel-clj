@@ -350,3 +350,68 @@
       ;; Verify state tags
       (is (= 2222 (:remote-ver-tag @client-a-state)))
       (is (= 1111 (:remote-ver-tag @client-z-state))))))
+
+(deftest establish-connection-lost-cookie-ack-test
+  (testing "Establish Connection Lost Cookie Ack"
+    (let [client-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-opened (atom false)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-open (atom (fn [] (reset! client-opened true)))}
+
+          server-state (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-opened (atom false)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-open (atom (fn [] (reset! server-opened true)))}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; 1. Client initiates connection with INIT
+      (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-state)
+                                   :params {}}]}]
+        (handle-sctp-packet init-packet server-conn))
+
+      ;; 2. Server processes INIT and generates INIT-ACK
+      (let [init-ack-packet (.poll server-out)]
+        (is init-ack-packet "Server should produce INIT-ACK")
+        (is (= :init-ack (-> init-ack-packet :chunks first :type)))
+        (handle-sctp-packet init-ack-packet client-conn))
+
+      ;; 3. Client processes INIT-ACK and generates COOKIE-ECHO
+      (let [cookie-echo-packet (.poll client-out)]
+        (is cookie-echo-packet "Client should produce COOKIE-ECHO")
+        (is (= :cookie-echo (-> cookie-echo-packet :chunks first :type)))
+        (handle-sctp-packet cookie-echo-packet server-conn)
+
+        ;; 4. Server processes COOKIE-ECHO, generates COOKIE-ACK, and becomes established
+        (let [cookie-ack-packet (.poll server-out)]
+          (is cookie-ack-packet "Server should produce COOKIE-ACK")
+          (is (= :cookie-ack (-> cookie-ack-packet :chunks first :type)))
+          (is (true? @server-opened) "Server should be in open state")
+
+          ;; Simulate COOKIE-ACK loss (do not deliver to client)
+          (is (false? @client-opened) "Client should NOT be in open state yet")
+
+          ;; Client doesn't know it's established because COOKIE-ACK was lost.
+          ;; Simulate client timeout/retransmission of COOKIE-ECHO
+          (handle-sctp-packet cookie-echo-packet server-conn)
+
+          ;; Server should process the duplicate COOKIE-ECHO and generate another COOKIE-ACK
+          (let [cookie-ack-packet2 (.poll server-out)]
+            (is cookie-ack-packet2 "Server should produce another COOKIE-ACK")
+            (is (= :cookie-ack (-> cookie-ack-packet2 :chunks first :type)))
+
+            ;; Deliver the second COOKIE-ACK to client
+            (handle-sctp-packet cookie-ack-packet2 client-conn)
+
+            ;; Client processes COOKIE-ACK and becomes established
+            (is (true? @client-opened) "Client should be in open state")))))))

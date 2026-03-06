@@ -38,7 +38,7 @@
     - [ ] Shutting Down While Establishing Connection
     - [x] Establish Simultaneous Connection
     - [x] Attempt Connect Without Cookie
-    - [ ] Establish Connection Lost Cookie Ack
+    - [x] Establish Connection Lost Cookie Ack
     - [ ] Resend Init And Establish Connection
     - [ ] Resending Init Too Many Times Aborts
     - [ ] Resend Cookie Echo And Establish Connection
