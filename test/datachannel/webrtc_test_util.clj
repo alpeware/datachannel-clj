@@ -3,7 +3,8 @@
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType RTCOfferOptions RTCAnswerOptions SetSessionDescriptionObserver CreateSessionDescriptionObserver]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
-           [java.net InetAddress InetSocketAddress]))
+           [java.net InetAddress InetSocketAddress]
+           [java.nio.channels UnsupportedAddressTypeException]))
 
 (defn get-local-ip []
   (.getHostAddress (InetAddress/getLocalHost)))
@@ -51,7 +52,10 @@
 
 (defn make-pc-observer [{:keys [on-ice-candidate]}]
   (reify PeerConnectionObserver
-    (onIceCandidate [_ candidate] (when on-ice-candidate (on-ice-candidate candidate)))
+    (onIceCandidate [_ candidate] (when on-ice-candidate
+                                    (try
+                                      (on-ice-candidate candidate)
+                                      (catch UnsupportedAddressTypeException e nil))))
     (onIceConnectionChange [_ state] (println "Java ICE Connection State:" state))
     (onConnectionChange [_ state] (println "Java Connection State:" state))
     (onDataChannel [_ _])
