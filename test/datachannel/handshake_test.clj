@@ -1009,3 +1009,82 @@
       (.beginHandshake server-engine)
       (is (= :success (run-handshake-loop-respond-to-retransmit client-engine server-engine)))
       (is (= "Respond OK" (exchange-data client-engine server-engine "Respond OK"))))))
+
+(defn- test-signature-schemes [server-schemes client-schemes exception-expected?]
+  (let [cert-data (dtls/generate-cert)
+        ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+        client-engine (dtls/create-engine ctx true)
+        server-engine (dtls/create-engine ctx false)]
+
+    (when client-schemes
+      (let [params (.getSSLParameters client-engine)]
+        (.setSignatureSchemes params (into-array String client-schemes))
+        (.setSSLParameters client-engine params)))
+
+    (when server-schemes
+      (let [params (.getSSLParameters server-engine)]
+        (.setSignatureSchemes params (into-array String server-schemes))
+        (.setSSLParameters server-engine params)))
+
+    (.beginHandshake client-engine)
+    (.beginHandshake server-engine)
+
+    (if exception-expected?
+      (try
+        (run-handshake-loop client-engine server-engine)
+        (is false "Expected an exception during handshake, but none was thrown")
+        (catch javax.net.ssl.SSLHandshakeException e
+          (is true "Caught SSLHandshakeException"))
+        (catch javax.net.ssl.SSLProtocolException e
+          (is true "Caught SSLProtocolException"))
+        (catch javax.net.ssl.SSLException e
+          (is true "Caught SSLException")))
+      (do
+        (is (= :success (run-handshake-loop client-engine server-engine)))
+        (is (= "Signature OK" (exchange-data client-engine server-engine "Signature OK")))))))
+
+(deftest test-dtls-signature-schemes
+  (testing "DTLS signature schemes configuration"
+    ;; Note: We are using "rsa_pkcs1_sha256" here because the default certificate generated
+    ;; by dtls/generate-cert is an RSA certificate. "ecdsa_secp256r1_sha256" would require an ECDSA
+    ;; certificate which our test utility currently doesn't generate by default.
+    (test-signature-schemes ["rsa_pkcs1_sha256" "rsa_pss_rsae_sha256"]
+                            ["rsa_pkcs1_sha256" "rsa_pss_rsae_sha256"]
+                            false)
+    (test-signature-schemes ["rsa_pkcs1_sha256"]
+                            ["rsa_pkcs1_sha256"]
+                            false)
+    (test-signature-schemes nil
+                            ["rsa_pkcs1_sha256"]
+                            false)
+    (test-signature-schemes ["rsa_pkcs1_sha256"]
+                            nil
+                            false)
+    (test-signature-schemes []
+                            ["rsa_pkcs1_sha256"]
+                            true)
+    (test-signature-schemes ["rsa_pkcs1_sha256"]
+                            []
+                            true)
+    ;; Test with a non-existent signature algorithm that causes IllegalArgumentException
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          server-engine (dtls/create-engine ctx false)
+          params (.getSSLParameters server-engine)]
+      (try
+        (.setSignatureSchemes params (into-array String ["rsa_pkcs1_shaNA"]))
+        (.setSSLParameters server-engine params)
+        (catch IllegalArgumentException _
+          (is true "Caught IllegalArgumentException during setSignatureSchemes"))
+        (catch Exception e
+          ;; If it didn't throw IllegalArgumentException immediately, we expect it to fail during the handshake
+          (is (thrown? javax.net.ssl.SSLHandshakeException
+                       (let [client-engine (dtls/create-engine ctx true)]
+                         (.beginHandshake client-engine)
+                         (.beginHandshake server-engine)
+                         (run-handshake-loop client-engine server-engine)))))))
+
+    ;; Mismatched valid signature schemes cause SSLHandshakeException
+    (test-signature-schemes ["rsa_pss_rsae_sha256"]
+                            ["rsa_pkcs1_sha256"]
+                            true)))
