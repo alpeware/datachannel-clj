@@ -191,6 +191,30 @@
       (is (= "Hello Reordered" (exchange-data client-engine server-engine "Hello Reordered"))))))
 
 
+(deftest test-not-enabled-rc4
+  (testing "DTLS engines do not enable RC4 ciphers by default"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      (let [cli-ciphers (.getEnabledCipherSuites client-engine)
+            srv-ciphers (.getEnabledCipherSuites server-engine)]
+        (is (every? #(not (.contains ^String % "RC4")) cli-ciphers))
+        (is (every? #(not (.contains ^String % "RC4")) srv-ciphers))))))
+
+(deftest test-unsupported-ciphers
+  (testing "Trying to enable unsupported ciphers causes IllegalArgumentException"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)
+          unsupported-ciphers ["SSL_NULL_WITH_NULL_NULL"]]
+      (doseq [cipher unsupported-ciphers]
+        (is (thrown? IllegalArgumentException
+                     (.setEnabledCipherSuites client-engine (into-array String [cipher]))))
+        (is (thrown? IllegalArgumentException
+                     (.setEnabledCipherSuites server-engine (into-array String [cipher]))))))))
+
 (deftest test-cipher-suite
   (testing "DTLS connection with specific cipher suites"
     (let [cert-data (dtls/generate-cert)
