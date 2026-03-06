@@ -511,6 +511,78 @@
       (is (= :success (run-handshake-loop-invalid-cookie client-engine server-engine)))
       (is (= "Hello after invalid cookie" (exchange-data client-engine server-engine "Hello after invalid cookie"))))))
 
+(defn- run-handshake-loop-invalid-records [client-engine server-engine]
+  (let [client-out (ByteBuffer/allocate 65536)
+        server-out (ByteBuffer/allocate 65536)
+        client-in (ByteBuffer/allocate 65536)
+        server-in (ByteBuffer/allocate 65536)
+        max-loops 100]
+    (.flip client-in)
+    (.flip server-in)
+    (loop [i 0
+           invalidated-record false]
+      (if (> i max-loops)
+        (throw (Exception. "Handshake failed to complete in max loops"))
+        (let [client-status (.getHandshakeStatus client-engine)
+              server-status (.getHandshakeStatus server-engine)]
+          (if (and (or (= client-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                       (= client-status SSLEngineResult$HandshakeStatus/FINISHED))
+                   (or (= server-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                       (= server-status SSLEngineResult$HandshakeStatus/FINISHED))
+                   (not (.hasRemaining client-in))
+                   (not (.hasRemaining server-in)))
+            :success
+            (let [res-c (try (dtls/handshake client-engine client-in client-out)
+                             (catch javax.net.ssl.SSLException e
+                               :ssl-exception))
+                  packets-c (if (= res-c :ssl-exception) [] (:packets res-c))]
+              (if (= res-c :ssl-exception)
+                :failed
+                (do
+                  (.compact server-in)
+                  (let [new-invalidated
+                        (reduce (fn [invalidated p]
+                                  (let [is-client-hello (and (>= (alength p) 60)
+                                                             (= (aget p 0) (unchecked-byte 0x16))
+                                                             (= (aget p 13) (unchecked-byte 0x01))
+                                                             (= (aget p 59) (unchecked-byte 0x00))
+                                                             (pos? (aget p 60)))
+                                        should-mutate (and is-client-hello (not invalidated))]
+                                    (when should-mutate
+                                      (let [last-idx (dec (alength p))
+                                            last-byte (aget p last-idx)]
+                                        (aset p last-idx (if (= last-byte (unchecked-byte 0xFF))
+                                                           (unchecked-byte 0xFE)
+                                                           (unchecked-byte 0xFF)))))
+                                    (.put server-in (ByteBuffer/wrap p))
+                                    (or invalidated should-mutate)))
+                                invalidated-record
+                                packets-c)]
+                    (.flip server-in)
+                    (let [res-s (try (dtls/handshake server-engine server-in server-out)
+                                     (catch javax.net.ssl.SSLException e
+                                       :ssl-exception))
+                          packets-s (if (= res-s :ssl-exception) [] (:packets res-s))]
+                      (if (= res-s :ssl-exception)
+                        :failed
+                        (do
+                          (.compact client-in)
+                          (doseq [p packets-s]
+                            (.put client-in (ByteBuffer/wrap p)))
+                          (.flip client-in)
+                          (recur (inc i) new-invalidated))))))))))))))
+
+(deftest test-invalid-records
+  (testing "DTLS handshake with modified ClientHello fails hash verification"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :failed (run-handshake-loop-invalid-records client-engine server-engine))))))
+
+
 (deftest test-packet-loss-retransmission
   (testing "DTLS handshake recovers from packet loss via timeout and retransmission"
     (let [cert-data (dtls/generate-cert)
