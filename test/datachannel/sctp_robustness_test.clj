@@ -559,6 +559,44 @@
       ;; Client processes COOKIE-ACK and becomes established
       (is (true? @client-opened) "Client should be in open state"))))
 
+(deftest shutdown-connection-test
+  (testing "Shutdown Connection"
+    (let [state (atom {:remote-ver-tag 12345})
+          out-queue (java.util.concurrent.LinkedBlockingQueue.)
+          connection {:state state
+                      :sctp-out out-queue}
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; Simulate receiving a SHUTDOWN chunk
+      (let [shutdown-packet {:src-port 5000 :dst-port 5001 :verification-tag 12345
+                             :chunks [{:type :shutdown}]}]
+        (handle-sctp-packet shutdown-packet connection)
+
+        ;; Expect a SHUTDOWN-ACK chunk in response
+        (let [response-packet (.poll out-queue)]
+          (is response-packet "Should produce a response packet")
+          (is (= 5001 (:src-port response-packet)) "Should swap src/dst ports")
+          (is (= 5000 (:dst-port response-packet)) "Should swap src/dst ports")
+          (is (= 12345 (:verification-tag response-packet)) "Should use same verification tag")
+
+          (let [chunk (first (:chunks response-packet))]
+            (is (= :shutdown-ack (:type chunk)) "Chunk should be SHUTDOWN-ACK"))))
+
+      ;; Simulate receiving a SHUTDOWN-ACK chunk
+      (let [shutdown-ack-packet {:src-port 5000 :dst-port 5001 :verification-tag 12345
+                                 :chunks [{:type :shutdown-ack}]}]
+        (handle-sctp-packet shutdown-ack-packet connection)
+
+        ;; Expect a SHUTDOWN-COMPLETE chunk in response
+        (let [response-packet (.poll out-queue)]
+          (is response-packet "Should produce a response packet")
+          (is (= 5001 (:src-port response-packet)) "Should swap src/dst ports")
+          (is (= 5000 (:dst-port response-packet)) "Should swap src/dst ports")
+          (is (= 12345 (:verification-tag response-packet)) "Should use same verification tag")
+
+          (let [chunk (first (:chunks response-packet))]
+            (is (= :shutdown-complete (:type chunk)) "Chunk should be SHUTDOWN-COMPLETE")))))))
+
 (deftest resend-cookie-echo-and-establish-connection-test
   (testing "Resend Cookie Echo And Establish Connection"
     (let [client-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})

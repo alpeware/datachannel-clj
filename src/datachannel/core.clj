@@ -135,6 +135,21 @@
 
         :sack nil
         :heartbeat-ack nil
+        :shutdown
+        (do
+           (let [packet {:src-port (:dst-port packet)
+                         :dst-port (:src-port packet)
+                         :verification-tag (:remote-ver-tag @state)
+                         :chunks [{:type :shutdown-ack}]}]
+              (.offer (:sctp-out connection) packet)))
+        :shutdown-ack
+        (do
+           (let [packet {:src-port (:dst-port packet)
+                         :dst-port (:src-port packet)
+                         :verification-tag (:remote-ver-tag @state)
+                         :chunks [{:type :shutdown-complete}]}]
+              (.offer (:sctp-out connection) packet)))
+        :shutdown-complete nil
         :abort (println "Received SCTP ABORT")
         nil))))
 
