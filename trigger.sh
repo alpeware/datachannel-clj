@@ -11,10 +11,12 @@ fi
 
 echo "Unfinished tests found. Proceeding with loop..."
 
-# 2. Rate Limiter Check (Fixed to measure true cycle time)
-# Fetch the tip of main to see when the previous cycle finished
-git fetch origin main --depth=1
-BASE_COMMIT_TS=$(git log -1 --format=%ct origin/main)
+# 2. Rate Limiter Check (Fixed to look at the previous merge)
+# Fetch the tip of main AND its parent
+git fetch origin main --depth=2
+
+# Get the timestamp of the PREVIOUS commit on main (before our brand new merge)
+BASE_COMMIT_TS=$(git log -1 --format=%ct origin/main~1)
 NOW=$(date +%s)
 
 ELAPSED=$((NOW - BASE_COMMIT_TS))
