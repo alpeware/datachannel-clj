@@ -17,7 +17,7 @@
 - [ ] [DTLSSignatureSchemes](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSSignatureSchemes.java)
 - [ ] [DTLSUnsupportedCiphersTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSUnsupportedCiphersTest.java)
 - [x] [InvalidCookie](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidCookie.java)
-- [ ] [InvalidRecords](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidRecords.java)
+- [x] [InvalidRecords](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidRecords.java)
 - [ ] [NoMacInitialClientHello](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/NoMacInitialClientHello.java)
 - [x] [PacketLossRetransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/PacketLossRetransmission.java)
 - [x] [Reordered](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Reordered.java)
