@@ -10,12 +10,14 @@
             [datachannel.stun-webrtc-integration-test]
             [datachannel.webrtc-integration-test]
             [datachannel.webrtc-extended-test]
-            [datachannel.sctp-robustness-test]))
+            [datachannel.sctp-robustness-test]
+            [datachannel.rehandshake-test]))
 
 (defn -main []
   (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
                                              'datachannel.dtls-test
                                              'datachannel.handshake-test
+                                             'datachannel.rehandshake-test
                                              'datachannel.integration-test
                                              'datachannel.webrtc-java-test
                                              'datachannel.stun-test
