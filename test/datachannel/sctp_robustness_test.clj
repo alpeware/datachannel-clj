@@ -55,3 +55,62 @@
                           connection)
 
       (is (= ["Second" "First"] @received) "TSN 1 should be delivered when it arrives"))))
+
+(deftest establish-connection-test
+  (testing "Full 4-way handshake (Establish Connection)"
+    (let [client-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-opened (atom false)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-open (atom (fn [] (reset! client-opened true)))}
+
+          server-state (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-opened (atom false)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-open (atom (fn [] (reset! server-opened true)))}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; 1. Client initiates connection with INIT
+      (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-state)
+                                   :params {}}]}]
+        ;; Direct to server
+        (handle-sctp-packet init-packet server-conn))
+
+      ;; 2. Server processes INIT and generates INIT-ACK
+      (let [init-ack-packet (.poll server-out)]
+        (is init-ack-packet "Server should produce INIT-ACK")
+        (is (= :init-ack (-> init-ack-packet :chunks first :type)))
+        ;; Deliver to client
+        (handle-sctp-packet init-ack-packet client-conn))
+
+      ;; 3. Client processes INIT-ACK and generates COOKIE-ECHO
+      (let [cookie-echo-packet (.poll client-out)]
+        (is cookie-echo-packet "Client should produce COOKIE-ECHO")
+        (is (= :cookie-echo (-> cookie-echo-packet :chunks first :type)))
+        ;; Deliver to server
+        (handle-sctp-packet cookie-echo-packet server-conn))
+
+      ;; 4. Server processes COOKIE-ECHO, generates COOKIE-ACK, and becomes established
+      (let [cookie-ack-packet (.poll server-out)]
+        (is cookie-ack-packet "Server should produce COOKIE-ACK")
+        (is (= :cookie-ack (-> cookie-ack-packet :chunks first :type)))
+        (is (true? @server-opened) "Server should be in open state")
+        ;; Deliver to client
+        (handle-sctp-packet cookie-ack-packet client-conn))
+
+      ;; Client processes COOKIE-ACK and becomes established
+      (is (true? @client-opened) "Client should be in open state")
+
+      ;; Verify state tags
+      (is (= 2222 (:remote-ver-tag @client-state)))
+      (is (= 1111 (:remote-ver-tag @server-state))))))
