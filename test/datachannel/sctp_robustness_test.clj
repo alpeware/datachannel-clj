@@ -159,6 +159,86 @@
           (let [cookie-echo-packet (.poll client-out)]
             (is (nil? cookie-echo-packet) "Client should drop INIT-ACK without cookie and not produce COOKIE-ECHO")))))))
 
+(deftest establish-connection-while-sending-data-test
+  (testing "Establish Connection While Sending Data"
+    (let [client-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-opened (atom false)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-open (atom (fn [] (reset! client-opened true)))
+                       :on-message (atom nil)
+                       :on-data (atom nil)}
+
+          server-state (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0 :remote-tsn 0})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-opened (atom false)
+          server-received (atom nil)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-open (atom (fn [] (reset! server-opened true)))
+                       :on-message (atom (fn [payload] (reset! server-received (String. ^bytes payload))))
+                       :on-data (atom nil)}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; 1. Client initiates connection with INIT
+      (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-state)
+                                   :params {}}]}]
+        (handle-sctp-packet init-packet server-conn))
+
+      ;; 2. Server processes INIT and generates INIT-ACK
+      (let [init-ack-packet (.poll server-out)]
+        (is init-ack-packet "Server should produce INIT-ACK")
+        (is (= :init-ack (-> init-ack-packet :chunks first :type)))
+        (handle-sctp-packet init-ack-packet client-conn))
+
+      ;; 3. Client processes INIT-ACK and generates COOKIE-ECHO
+      (let [cookie-echo-packet (.poll client-out)]
+        (is cookie-echo-packet "Client should produce COOKIE-ECHO")
+        (is (= :cookie-echo (-> cookie-echo-packet :chunks first :type)))
+
+        ;; 3.1 Client attempts to send data BEFORE the connection is fully established
+        ;; At this point, client hasn't received COOKIE-ACK yet, but we have remote-ver-tag
+        ;; and remote-tsn (from INIT-ACK). Let's queue data by calling send-data.
+        (core/send-data client-conn (.getBytes "Early Bird") 0 :webrtc/string)
+
+        (let [data-packet (.poll client-out)]
+          (is data-packet "Client should produce DATA packet even while establishing connection")
+          (is (= :data (-> data-packet :chunks first :type)))
+
+          ;; Deliver COOKIE-ECHO to server
+          (handle-sctp-packet cookie-echo-packet server-conn)
+
+          ;; 4. Server processes COOKIE-ECHO, generates COOKIE-ACK, and becomes established
+          (let [cookie-ack-packet (.poll server-out)]
+            (is cookie-ack-packet "Server should produce COOKIE-ACK")
+            (is (= :cookie-ack (-> cookie-ack-packet :chunks first :type)))
+            (is (true? @server-opened) "Server should be in open state")
+
+            ;; Deliver DATA to server
+            (handle-sctp-packet (assoc data-packet :src-port 5000 :dst-port 5000) server-conn)
+
+            (is (= "Early Bird" @server-received) "Server should successfully receive the early data")
+
+            ;; Server should produce SACK
+            (let [sack-packet (.poll server-out)]
+              (is sack-packet "Server should produce SACK packet")
+              (is (= :sack (-> sack-packet :chunks first :type)))
+              (is (= 100 (-> sack-packet :chunks first :cum-tsn-ack)) "SACK should ack TSN 100"))
+
+            ;; Deliver COOKIE-ACK to client
+            (handle-sctp-packet cookie-ack-packet client-conn)
+
+            ;; Client processes COOKIE-ACK and becomes established
+            (is (true? @client-opened) "Client should be in open state")))))))
+
 (deftest send-message-after-established-test
   (testing "Send Message After Established"
     (let [client-state (atom {:remote-ver-tag 2222 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :remote-tsn 200})
