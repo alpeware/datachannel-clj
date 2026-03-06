@@ -32,3 +32,104 @@
 - [x] [TSN Wraparound](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_queue.rs)
 - [ ] [Delayed SACKs](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_timeout.rs)
 - [ ] [Full Socket State Machine](https://github.com/webrtc/dcsctp/blob/main/src/socket/socket_tests.rs)
+    - [ ] Establish Connection
+    - [ ] Send Many Api Method
+    - [ ] Establish Connection With Setup Collision
+    - [ ] Shutting Down While Establishing Connection
+    - [ ] Establish Simultaneous Connection
+    - [ ] Attempt Connect Without Cookie
+    - [ ] Establish Connection Lost Cookie Ack
+    - [ ] Resend Init And Establish Connection
+    - [ ] Resending Init Too Many Times Aborts
+    - [ ] Resend Cookie Echo And Establish Connection
+    - [ ] Resending Cookie Echo Too Many Times Aborts
+    - [ ] Doesnt Send More Packets Until Cookie Ack Has Been Received
+    - [ ] Shutdown Connection
+    - [ ] Shutdown Timer Expires Too Many Time Closes Connection
+    - [ ] Establish Connection While Sending Data
+    - [ ] Send Message After Established
+    - [ ] Timeout Resends Packet
+    - [ ] Send A Lot Of Bytes Missed Second Packet
+    - [ ] Sending Heartbeat Answers With Ack
+    - [ ] Expect Heartbeat To Be Sent
+    - [ ] Expect Heartbeats Not Sent When Sending Data
+    - [ ] Close Connection After First Lost Heartbeat
+    - [ ] Close Connection After Second Lost Heartbeat
+    - [ ] Close Connection After Too Many Lost Heartbeats
+    - [ ] Recovers After A Successful Ack
+    - [ ] Error Counter Is Reset On Heartbeat Ack
+    - [ ] Reset Stream
+    - [ ] Send Reset Stream When Streams Ready
+    - [ ] Reset Stream Will Make Chunks Start At Zero Ssn
+    - [ ] Reset Stream Will Only Reset The Requested Streams
+    - [ ] One Peer Reconnects
+    - [ ] One Peer Reconnects With Pending Data
+    - [ ] Send Message With Limited Rtx
+    - [ ] Close Connection After First Failed Transmission
+    - [ ] Close Connection After One Failed Retransmission
+    - [ ] Error Counter Is Reset On Data Ack
+    - [ ] Both Sides Send Heartbeats
+    - [ ] Close Connection After Too Many Retransmissions
+    - [ ] Recover On Last Retransmission
+    - [ ] Send Many Fragmented Messages With Limited Rtx
+    - [ ] Receiving Unknown Chunk Responds With Error
+    - [ ] Receiving Error Chunk Reports As Callback
+    - [ ] Set Max Message Size
+    - [ ] Send Many Messages
+    - [ ] Sends Messages With Low Lifetime
+    - [ ] Discards Messages With Low Lifetime If Must Buffer
+    - [ ] Respects Per Stream Queue Limit
+    - [ ] Cannot Send Empty Messages
+    - [ ] Cannot Send Too Large Message
+    - [ ] Has Reasonable Buffered Amount Values
+    - [ ] Has Default On Buffered Amount Low Value Zero
+    - [ ] Triggers On Buffered Amount Low With Default Value Zero
+    - [ ] Doesnt Trigger On Buffered Amount Low If Below Threshold
+    - [ ] Triggers On Buffered Amount Multiple Times
+    - [ ] Triggers On Buffered Amount Low Only When Crossing Threshold
+    - [ ] Doesnt Trigger On Total Buffer Amount Low When Below
+    - [ ] Triggers On Total Buffer Amount Low When Crossing Threshold
+    - [ ] Initial Metrics Are Unset
+    - [ ] Message Interleaving Metrics Are Set
+    - [ ] Rx And Tx Packet Metrics Increase
+    - [ ] Retransmission Metrics Are Set For Fast Retransmit
+    - [ ] Retransmission Metrics Are Set For Normal Retransmit
+    - [ ] Unack Data Also Includes Send Queue
+    - [ ] Doesnt Send More Than Max Burst Packets
+    - [ ] Is Ready For Handover When Established
+    - [ ] Send Messages After Handover
+    - [ ] Can Detect Dcsctp Implementation
+    - [ ] Both Can Detect Dcsctp Implementation
+    - [ ] Can Lose First Ordered Message
+    - [ ] Close Two Streams At The Same Time
+    - [ ] Close Three Streams At The Same Time
+    - [ ] Close Streams With Pending Request
+    - [ ] Stream Has Initial Priority
+    - [ ] Can Change Stream Priority
+    - [ ] Will Handover Priority
+    - [ ] Reconnect Socket With Pending Stream Reset
+    - [ ] Small Sent Messages With Prio Will Arrive In Specific Order
+    - [ ] Large Sent Messages With Prio Will Arrive In Specific Order
+    - [ ] Message With Higher Prio Will Interrupt Lower Prio Message
+    - [ ] Lifecycle Events Are Generated For Acked Messages
+    - [ ] Lifecycle Events For Fail Max Retransmissions
+    - [ ] Lifecycle Events For Expired Message With Retransmit Limit
+    - [ ] Lifecycle Events For Expired Message With Lifetime Limit
+    - [ ] Exposes The Number Of Negotiated Streams
+    - [ ] Reset Streams Deferred
+    - [ ] Reset Streams With Paused Sender Resumes When Performed
+    - [ ] Zero Checksum Metrics Are Set
+    - [ ] Always Sends Init With Non Zero Checksum
+    - [ ] May Send Init Ack With Zero Checksum
+    - [ ] Always Sends Cookie Echo With Non Zero Checksum
+    - [ ] Sends Cookie Ack With Zero Checksum
+    - [ ] Sends Data With Zero Checksum
+    - [ ] All Packets After Connect Have Zero Checksum
+    - [ ] Handles Forward Tsn Out Of Order With Stream Resetting
+    - [ ] Resent Init Has Same Parameters
+    - [ ] Resent Init Ack Has Different Parameters
+    - [ ] Connection Can Continue From First Init Ack
+    - [ ] Connection Can Continue From Second Init Ack
+    - [ ] Handover Preserves Stream Reset State
+    - [ ] Establish Simultaneous Connection With Lost Data
+    - [ ] Advance Time Does Not Trigger Spurious Ack
