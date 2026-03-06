@@ -137,6 +137,9 @@
 (defmethod decode-chunk-payload :shutdown-ack [_ _ chunk-data _ _ _]
   chunk-data)
 
+(defmethod decode-chunk-payload :shutdown-complete [_ _ chunk-data _ _ _]
+  chunk-data)
+
 (defn decode-abort-chunk [buf chunk-data val-len chunk-start]
   (.position buf (+ chunk-start val-len))
   chunk-data)
@@ -354,6 +357,10 @@
 
 (defmethod encode-chunk-payload :heartbeat-ack [_ ^ByteBuffer buf chunk]
   (encode-params buf (:params chunk)))
+
+(defmethod encode-chunk-payload :shutdown [_ ^ByteBuffer buf chunk])
+(defmethod encode-chunk-payload :shutdown-ack [_ ^ByteBuffer buf chunk])
+(defmethod encode-chunk-payload :shutdown-complete [_ ^ByteBuffer buf chunk])
 
 (defmethod encode-chunk-payload :default [_ ^ByteBuffer buf chunk]
   (when (:body chunk)
