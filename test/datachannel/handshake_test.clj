@@ -2,7 +2,7 @@
   (:require [clojure.test :refer :all]
             [datachannel.dtls :as dtls])
   (:import [java.nio ByteBuffer]
-           [javax.net.ssl SSLEngine SSLEngineResult$HandshakeStatus SSLEngineResult]))
+           [javax.net.ssl SSLEngine SSLEngineResult$HandshakeStatus SSLEngineResult SSLEngineResult$Status]))
 
 (defn- run-handshake-loop [client-engine server-engine]
   (let [client-out (ByteBuffer/allocate 65536)
@@ -521,3 +521,66 @@
       (.beginHandshake server-engine)
       (is (= :success (run-handshake-loop-with-loss client-engine server-engine)))
       (is (= "Lost and Found" (exchange-data client-engine server-engine "Lost and Found"))))))
+
+(defn- test-engines-closure [from-engine to-engine from-name to-name]
+  (.closeOutbound from-engine)
+  (let [app-buf (ByteBuffer/allocate (.getApplicationBufferSize (.getSession from-engine)))
+        net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession from-engine)))]
+    (let [^SSLEngineResult wrap-res (.wrap from-engine app-buf net-buf)]
+      (is (= SSLEngineResult$Status/CLOSED (.getStatus wrap-res))
+          (str from-name " wrap status should be CLOSED")))
+
+    (.flip net-buf)
+    (let [app-buf-in (ByteBuffer/allocate (.getApplicationBufferSize (.getSession to-engine)))
+          ^SSLEngineResult unwrap-res (.unwrap to-engine net-buf app-buf-in)]
+      (is (= SSLEngineResult$Status/CLOSED (.getStatus unwrap-res))
+          (str to-name " unwrap status should be CLOSED")))
+
+    (let [net-buf-out (ByteBuffer/allocate (.getPacketBufferSize (.getSession to-engine)))
+          ^SSLEngineResult wrap-res-to (.wrap to-engine app-buf net-buf-out)]
+      (is (= SSLEngineResult$Status/CLOSED (.getStatus wrap-res-to))
+          (str to-name " wrap status should be CLOSED"))
+      (.flip net-buf-out)
+      (let [^SSLEngineResult unwrap-res-from (.unwrap from-engine net-buf-out app-buf)]
+        (is (= SSLEngineResult$Status/CLOSED (.getStatus unwrap-res-from))
+            (str from-name " unwrap status should be CLOSED"))))
+
+    (is (.isInboundDone to-engine)
+        (str from-name " sent close request to " to-name " but " to-name " did not close inbound"))
+
+    (.closeInbound from-engine)
+    (.clear app-buf)
+    (.clear net-buf)
+    (let [^SSLEngineResult wrap-res2 (.wrap from-engine app-buf net-buf)]
+      (is (= SSLEngineResult$Status/CLOSED (.getStatus wrap-res2))
+          (str from-name " second wrap status should be CLOSED")))
+
+    (.flip net-buf)
+    (let [app-buf-in2 (ByteBuffer/allocate (.getApplicationBufferSize (.getSession to-engine)))
+          ^SSLEngineResult unwrap-res2 (.unwrap to-engine net-buf app-buf-in2)]
+      (is (= SSLEngineResult$Status/CLOSED (.getStatus unwrap-res2))
+          (str to-name " second unwrap status should be CLOSED")))
+
+    (is (.isOutboundDone to-engine)
+        (str from-name " sent close request to " to-name " but " to-name " did not close outbound"))))
+
+(deftest test-dtls-engines-closure
+  (testing "DTLS engines closing using specific cipher suites"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))]
+
+      (testing "Client initiates close"
+        (let [client-engine (dtls/create-engine ctx true)
+              server-engine (dtls/create-engine ctx false)]
+          (.beginHandshake client-engine)
+          (.beginHandshake server-engine)
+          (is (= :success (run-handshake-loop client-engine server-engine)))
+          (test-engines-closure client-engine server-engine "Client" "Server")))
+
+      (testing "Server initiates close"
+        (let [client-engine (dtls/create-engine ctx true)
+              server-engine (dtls/create-engine ctx false)]
+          (.beginHandshake client-engine)
+          (.beginHandshake server-engine)
+          (is (= :success (run-handshake-loop client-engine server-engine)))
+          (test-engines-closure server-engine client-engine "Server" "Client"))))))
