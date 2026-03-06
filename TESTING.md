@@ -7,7 +7,7 @@
 - [x] [DTLSHandshakeWithReplicatedPacketsTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSHandshakeWithReplicatedPacketsTest.java)
 - [x] [DTLSIncorrectAppDataTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSIncorrectAppDataTest.java)
 - [ ] [DTLSMFLNTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSMFLNTest.java)
-- [ ] [DTLSNamedGroups](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSNamedGroups.java)
+- [x] [DTLSNamedGroups](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSNamedGroups.java)
 - [x] [DTLSNotEnabledRC4Test](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSNotEnabledRC4Test.java)
 - [ ] [DTLSOverDatagram](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSOverDatagram.java)
 - [ ] [DTLSRehandshakeTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSRehandshakeTest.java)
