@@ -37,7 +37,7 @@
     - [ ] Establish Connection With Setup Collision
     - [ ] Shutting Down While Establishing Connection
     - [x] Establish Simultaneous Connection
-    - [ ] Attempt Connect Without Cookie
+    - [x] Attempt Connect Without Cookie
     - [ ] Establish Connection Lost Cookie Ack
     - [ ] Resend Init And Establish Connection
     - [ ] Resending Init Too Many Times Aborts

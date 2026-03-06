@@ -103,12 +103,12 @@
         (do
           (swap! state assoc :remote-ver-tag (:init-tag chunk)
                              :remote-tsn (dec (:initial-tsn chunk)))
-          (let [cookie (get-in chunk [:params :cookie])
-                packet {:src-port (:dst-port packet)
-                        :dst-port (:src-port packet)
-                        :verification-tag (:init-tag chunk)
-                        :chunks [{:type :cookie-echo :cookie cookie}]}]
-             (.offer (:sctp-out connection) packet)))
+          (when-let [cookie (get-in chunk [:params :cookie])]
+            (let [packet {:src-port (:dst-port packet)
+                          :dst-port (:src-port packet)
+                          :verification-tag (:init-tag chunk)
+                          :chunks [{:type :cookie-echo :cookie cookie}]}]
+               (.offer (:sctp-out connection) packet))))
 
         :cookie-echo
         (do

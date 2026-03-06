@@ -115,6 +115,50 @@
       (is (= 2222 (:remote-ver-tag @client-state)))
       (is (= 1111 (:remote-ver-tag @server-state))))))
 
+(deftest attempt-connect-without-cookie-test
+  (testing "Attempt Connect Without Cookie"
+    (let [client-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-opened (atom false)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-open (atom (fn [] (reset! client-opened true)))}
+
+          server-state (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-open (atom (fn [] nil))}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; 1. Client initiates connection with INIT
+      (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-state)
+                                   :params {}}]}]
+        ;; Direct to server
+        (handle-sctp-packet init-packet server-conn))
+
+      ;; 2. Server processes INIT and generates INIT-ACK
+      (let [init-ack-packet (.poll server-out)]
+        (is init-ack-packet "Server should produce INIT-ACK")
+        (is (= :init-ack (-> init-ack-packet :chunks first :type)))
+
+        ;; Mutate INIT-ACK to remove the state cookie parameter
+        (let [malformed-init-ack-packet (update-in init-ack-packet [:chunks 0 :params] dissoc :cookie)]
+
+          ;; Deliver malformed INIT-ACK to client
+          (handle-sctp-packet malformed-init-ack-packet client-conn)
+
+          ;; Client should NOT produce COOKIE-ECHO because cookie is missing
+          (let [cookie-echo-packet (.poll client-out)]
+            (is (nil? cookie-echo-packet) "Client should drop INIT-ACK without cookie and not produce COOKIE-ECHO")))))))
+
 (deftest send-message-after-established-test
   (testing "Send Message After Established"
     (let [client-state (atom {:remote-ver-tag 2222 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :remote-tsn 200})
