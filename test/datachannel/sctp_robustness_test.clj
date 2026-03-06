@@ -114,3 +114,28 @@
       ;; Verify state tags
       (is (= 2222 (:remote-ver-tag @client-state)))
       (is (= 1111 (:remote-ver-tag @server-state))))))
+
+(deftest sending-heartbeat-answers-with-ack-test
+  (testing "Sending Heartbeat Answers With Ack"
+    (let [state (atom {:remote-ver-tag 12345})
+          out-queue (java.util.concurrent.LinkedBlockingQueue.)
+          connection {:state state
+                      :sctp-out out-queue}
+          handle-sctp-packet #'core/handle-sctp-packet
+          heartbeat-params {:heartbeat-info (byte-array [1 2 3 4])}
+          packet {:src-port 5000 :dst-port 5001 :verification-tag 12345
+                  :chunks [{:type :heartbeat :params heartbeat-params}]}]
+
+      (handle-sctp-packet packet connection)
+
+      (let [response-packet (.poll out-queue)]
+        (is response-packet "Should produce a response packet")
+        (is (= 5001 (:src-port response-packet)) "Should swap src/dst ports")
+        (is (= 5000 (:dst-port response-packet)) "Should swap src/dst ports")
+        (is (= 12345 (:verification-tag response-packet)) "Should use same verification tag")
+
+        (let [chunk (first (:chunks response-packet))]
+          (is (= :heartbeat-ack (:type chunk)) "Chunk should be HEARTBEAT-ACK")
+          (is (= (seq (:heartbeat-info heartbeat-params))
+                 (seq (:heartbeat-info (:params chunk))))
+              "HEARTBEAT-ACK should echo the exact params from the HEARTBEAT chunk"))))))
