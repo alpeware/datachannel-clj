@@ -1088,3 +1088,60 @@
     (test-signature-schemes ["rsa_pss_rsae_sha256"]
                             ["rsa_pkcs1_sha256"]
                             true)))
+
+(deftest test-dtls-named-groups
+  (testing "Check DTLS connection behaviors for named groups configuration"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          test-named-groups (fn [server-groups client-groups exception-expected]
+                              (let [client-engine (dtls/create-engine ctx true)
+                                    server-engine (dtls/create-engine ctx false)
+                                    ;; Force ECDHE cipher suites to ensure named groups are actually used for key exchange
+                                    client-ciphers (filter #(.contains ^String % "ECDHE") (.getCipherSuites (.getSSLParameters client-engine)))]
+                                (when server-groups
+                                  (let [params (.getSSLParameters server-engine)]
+                                    (.setNamedGroups params (into-array String server-groups))
+                                    (.setSSLParameters server-engine params)))
+                                (when client-groups
+                                  (let [params (.getSSLParameters client-engine)]
+                                    (.setNamedGroups params (into-array String client-groups))
+                                    (.setCipherSuites params (into-array String client-ciphers))
+                                    (.setSSLParameters client-engine params)))
+                                (if exception-expected
+                                  (try
+                                    (.beginHandshake client-engine)
+                                    (.beginHandshake server-engine)
+                                    (run-handshake-loop client-engine server-engine)
+                                    (is false "Expected exception during handshake")
+                                    (catch Exception _
+                                      (is true "Caught expected exception during handshake")))
+                                  (do
+                                    (.beginHandshake client-engine)
+                                    (.beginHandshake server-engine)
+                                    (is (= :success (run-handshake-loop client-engine server-engine)))))))]
+      (test-named-groups ["x25519" "secp256r1"] ["x25519" "secp256r1"] false)
+      (test-named-groups ["secp256r1"] ["secp256r1"] false)
+      (test-named-groups nil ["secp256r1"] false)
+      (test-named-groups ["secp256r1"] nil false)
+      (test-named-groups [] ["secp256r1"] true)
+      (test-named-groups ["secp256r1"] [] true)
+
+      ;; Test with a non-existent named group that causes IllegalArgumentException
+      (let [server-engine (dtls/create-engine ctx false)
+            params (.getSSLParameters server-engine)]
+        (try
+          (.setNamedGroups params (into-array String ["secp256NA"]))
+          (.setSSLParameters server-engine params)
+          ;; If it didn't throw IllegalArgumentException immediately, we expect it to fail during the handshake
+          (is (thrown? javax.net.ssl.SSLHandshakeException
+                       (let [client-engine (dtls/create-engine ctx true)
+                             client-ciphers (filter #(.contains ^String % "ECDHE") (.getCipherSuites (.getSSLParameters client-engine)))]
+                         (let [c-params (.getSSLParameters client-engine)]
+                           (.setNamedGroups c-params (into-array String ["secp256r1"]))
+                           (.setCipherSuites c-params (into-array String client-ciphers))
+                           (.setSSLParameters client-engine c-params))
+                         (.beginHandshake client-engine)
+                         (.beginHandshake server-engine)
+                         (run-handshake-loop client-engine server-engine))))
+          (catch IllegalArgumentException _
+            (is true "Caught IllegalArgumentException during setNamedGroups")))))))
