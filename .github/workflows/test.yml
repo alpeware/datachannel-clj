@@ -14,6 +14,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    environment: test
 
     steps:
     - uses: actions/checkout@v4
@@ -43,3 +44,19 @@ jobs:
       run: |
         # Optional: You can wrap this in an IF statement to only auto-merge if the PR author is Jules
         gh pr merge ${{ github.event.pull_request.number }} --squash
+
+    - name: Trigger next Jules task
+      if: success() && github.event_name == 'pull_request'
+      env:
+        JULES_API_KEY: ${{ secrets.JULES_API_KEY }} 
+      run: |
+        curl -X POST "https://jules.googleapis.com/v1alpha/sessions" \
+          -H "x-goog-api-key: ${JULES_API_KEY}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "sourceContext": {
+              "githubRepo": "alpeware/datachannel-clj"
+            },
+            "automationMode": "AUTO_CREATE_PR",
+            "prompt": "Implement missing test cases from TESTING.md\n\n- Compare existing tests with the list of incomplete test cases\n- Pick one suitable new test\n- Implement it\n- Mark it as done"
+          }'
