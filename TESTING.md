@@ -46,7 +46,7 @@
     - [ ] Doesnt Send More Packets Until Cookie Ack Has Been Received
     - [ ] Shutdown Connection
     - [ ] Shutdown Timer Expires Too Many Time Closes Connection
-    - [ ] Establish Connection While Sending Data
+    - [x] Establish Connection While Sending Data
     - [x] Send Message After Established
     - [ ] Timeout Resends Packet
     - [ ] Send A Lot Of Bytes Missed Second Packet
