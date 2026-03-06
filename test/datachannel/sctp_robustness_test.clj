@@ -115,6 +115,42 @@
       (is (= 2222 (:remote-ver-tag @client-state)))
       (is (= 1111 (:remote-ver-tag @server-state))))))
 
+(deftest send-message-after-established-test
+  (testing "Send Message After Established"
+    (let [client-state (atom {:remote-ver-tag 2222 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :remote-tsn 200})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-message (atom nil)
+                       :on-data (atom nil)}
+
+          server-state (atom {:remote-ver-tag 1111 :local-ver-tag 2222 :next-tsn 201 :ssn 0 :remote-tsn 99})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-received (atom nil)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-message (atom (fn [payload] (reset! server-received (String. ^bytes payload))))
+                       :on-data (atom nil)}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; Client sends DATA
+      (core/send-data client-conn (.getBytes "Hello") 0 :webrtc/string)
+      (let [data-packet (.poll client-out)]
+        (is data-packet "Client should produce DATA packet")
+        (is (= :data (-> data-packet :chunks first :type)))
+
+        ;; Deliver to server
+        (handle-sctp-packet (assoc data-packet :src-port 5000 :dst-port 5001) server-conn)
+
+        (is (= "Hello" @server-received) "Server should receive the message")
+
+        ;; Server should produce SACK
+        (let [sack-packet (.poll server-out)]
+          (is sack-packet "Server should produce SACK packet")
+          (is (= :sack (-> sack-packet :chunks first :type)))
+          (is (= 100 (-> sack-packet :chunks first :cum-tsn-ack)) "SACK should ack TSN 100"))))))
+
 (deftest sending-heartbeat-answers-with-ack-test
   (testing "Sending Heartbeat Answers With Ack"
     (let [state (atom {:remote-ver-tag 12345})
