@@ -11,13 +11,16 @@ fi
 
 echo "Unfinished tests found. Proceeding with loop..."
 
-# 2. Rate Limiter Check
-LAST_COMMIT_TS=$(git log -1 --format=%ct)
-PREV_COMMIT_TS=$(git log -1 --skip=1 --format=%ct)
-ELAPSED=$((LAST_COMMIT_TS - PREV_COMMIT_TS))
+# 2. Rate Limiter Check (Fixed to measure true cycle time)
+# Fetch the tip of main to see when the previous cycle finished
+git fetch origin main --depth=1
+BASE_COMMIT_TS=$(git log -1 --format=%ct origin/main)
+NOW=$(date +%s)
+
+ELAPSED=$((NOW - BASE_COMMIT_TS))
 MIN_WAIT=300 # 5 minutes in seconds
 
-echo "Time elapsed since previous commit: $ELAPSED seconds."
+echo "Time elapsed since previous Jules cycle completed: $ELAPSED seconds."
 
 if [ "$ELAPSED" -lt "$MIN_WAIT" ]; then
   WAIT_TIME=$((MIN_WAIT - ELAPSED))
