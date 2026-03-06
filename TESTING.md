@@ -14,7 +14,7 @@
 - [ ] [DTLSRehandshakeWithCipherChangeTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSRehandshakeWithCipherChangeTest.java)
 - [ ] [DTLSRehandshakeWithDataExTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSRehandshakeWithDataExTest.java)
 - [x] [DTLSSequenceNumberTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSSequenceNumberTest.java)
-- [ ] [DTLSSignatureSchemes](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSSignatureSchemes.java)
+- [x] [DTLSSignatureSchemes](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSSignatureSchemes.java)
 - [x] [DTLSUnsupportedCiphersTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSUnsupportedCiphersTest.java)
 - [x] [InvalidCookie](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidCookie.java)
 - [x] [InvalidRecords](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidRecords.java)
