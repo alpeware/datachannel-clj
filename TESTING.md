@@ -2,7 +2,7 @@
 
 - [x] [CipherSuite](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/CipherSuite.java)
 - [x] [ClientAuth](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/ClientAuth.java)
-- [ ] [DTLSBufferOverflowUnderflowTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSBufferOverflowUnderflowTest.java)
+- [x] [DTLSBufferOverflowUnderflowTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSBufferOverflowUnderflowTest.java)
 - [x] [DTLSEnginesClosureTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSEnginesClosureTest.java)
 - [x] [DTLSHandshakeWithReplicatedPacketsTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSHandshakeWithReplicatedPacketsTest.java)
 - [x] [DTLSIncorrectAppDataTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSIncorrectAppDataTest.java)
@@ -18,7 +18,7 @@
 - [ ] [DTLSUnsupportedCiphersTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSUnsupportedCiphersTest.java)
 - [x] [InvalidCookie](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidCookie.java)
 - [x] [InvalidRecords](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/InvalidRecords.java)
-- [ ] [NoMacInitialClientHello](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/NoMacInitialClientHello.java)
+- [x] [NoMacInitialClientHello](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/NoMacInitialClientHello.java)
 - [x] [PacketLossRetransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/PacketLossRetransmission.java)
 - [x] [Reordered](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Reordered.java)
 - [ ] [RespondToRetransmit](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/RespondToRetransmit.java)

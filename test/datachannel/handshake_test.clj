@@ -583,6 +583,109 @@
       (.beginHandshake server-engine)
       (is (thrown? javax.net.ssl.SSLHandshakeException
                    (run-handshake-loop-invalid-records client-engine server-engine))))))
+           
+(defn- run-handshake-loop-invalid-initial-client-hello [client-engine server-engine]
+  (let [client-out (ByteBuffer/allocate 65536)
+        server-out (ByteBuffer/allocate 65536)
+        client-in (ByteBuffer/allocate 65536)
+        server-in (ByteBuffer/allocate 65536)
+        max-loops 200]
+    (.flip client-in)
+    (.flip server-in)
+    (loop [i 0
+           invalidated-hello false]
+      (if (> i max-loops)
+        (throw (Exception. "Handshake failed to complete in max loops"))
+        (let [client-status (.getHandshakeStatus client-engine)
+              server-status (.getHandshakeStatus server-engine)]
+          (if (and (or (= client-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                       (= client-status SSLEngineResult$HandshakeStatus/FINISHED))
+                   (or (= server-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                       (= server-status SSLEngineResult$HandshakeStatus/FINISHED))
+                   (not (.hasRemaining client-in))
+                   (not (.hasRemaining server-in)))
+            :success
+            (let [res-c (dtls/handshake client-engine client-in client-out)
+                  packets-c (:packets res-c)
+
+                  ;; Mutate the first ClientHello
+                  mutated-packets-c
+                  (map (fn [^bytes p]
+                         (if (and (not invalidated-hello)
+                                  (>= (alength p) 60)
+                                  (= (aget p 0) (unchecked-byte 0x16))
+                                  (= (aget p 13) (unchecked-byte 0x01)))
+                           (let [mutated (byte-array (alength p))]
+                             (System/arraycopy p 0 mutated 0 (alength p))
+                             (let [last-idx (dec (alength mutated))
+                                   last-byte (aget mutated last-idx)]
+                               (if (= last-byte (unchecked-byte 0xFF))
+                                 (aset mutated last-idx (unchecked-byte 0xFE))
+                                 (aset mutated last-idx (unchecked-byte 0xFF))))
+                             mutated)
+                           p))
+                       packets-c)
+
+                  has-mutated (some #(and (>= (alength %) 60)
+                                          (= (aget % 0) (unchecked-byte 0x16))
+                                          (= (aget % 13) (unchecked-byte 0x01)))
+                                    packets-c)
+                  new-invalidated-hello (or invalidated-hello has-mutated)]
+
+              (.compact server-in)
+              (doseq [p mutated-packets-c]
+                (.put server-in (ByteBuffer/wrap p)))
+              (.flip server-in)
+
+              (let [res-s (dtls/handshake server-engine server-in server-out)
+                    packets-s (:packets res-s)]
+                (.compact client-in)
+                (doseq [p packets-s]
+                  (.put client-in (ByteBuffer/wrap p)))
+                (.flip client-in)
+
+                (let [c-status-after (.getHandshakeStatus client-engine)
+                      s-status-after (.getHandshakeStatus server-engine)
+                      timeout-c? (and (not (.hasRemaining client-in))
+                                      (not (.hasRemaining server-in))
+                                      (= c-status-after SSLEngineResult$HandshakeStatus/NEED_UNWRAP))
+                      timeout-s? (and (not (.hasRemaining client-in))
+                                      (not (.hasRemaining server-in))
+                                      (= s-status-after SSLEngineResult$HandshakeStatus/NEED_UNWRAP))]
+                  (when (or timeout-c? timeout-s?)
+                    (Thread/sleep 1000)
+                    (when timeout-c?
+                      (.clear client-out)
+                      (let [res (.wrap client-engine (ByteBuffer/allocate 0) client-out)]
+                        (.flip client-out)
+                        (when (> (.remaining client-out) 0)
+                          (let [arr (byte-array (.remaining client-out))]
+                            (.get client-out arr)
+                            (.compact server-in)
+                            (.put server-in (ByteBuffer/wrap arr))
+                            (.flip server-in)))))
+                    (when timeout-s?
+                      (.clear server-out)
+                      (let [res (.wrap server-engine (ByteBuffer/allocate 0) server-out)]
+                        (.flip server-out)
+                        (when (> (.remaining server-out) 0)
+                          (let [arr (byte-array (.remaining server-out))]
+                            (.get server-out arr)
+                            (.compact client-in)
+                            (.put client-in (ByteBuffer/wrap arr))
+                            (.flip client-in))))))
+                  (recur (inc i) new-invalidated-hello))))))))))
+
+(deftest test-no-mac-initial-client-hello
+  (testing "DTLS server discards invalid initial ClientHello silently"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop-invalid-initial-client-hello client-engine server-engine)))
+      (is (= "Hello after invalid initial" (exchange-data client-engine server-engine "Hello after invalid initial"))))))
 
 (deftest test-packet-loss-retransmission
   (testing "DTLS handshake recovers from packet loss via timeout and retransmission"
@@ -657,3 +760,60 @@
           (.beginHandshake server-engine)
           (is (= :success (run-handshake-loop client-engine server-engine)))
           (test-engines-closure server-engine client-engine "Server" "Client"))))))
+
+(defn- check-buffer-overflow-on-wrap [engine name]
+  (let [message "Hello peer!"
+        app-in (ByteBuffer/wrap (.getBytes message))
+        ;; Make net buffer size less than required by 1 byte
+        net-out (ByteBuffer/allocate (dec (.getPacketBufferSize (.getSession engine))))]
+    (let [^SSLEngineResult result (.wrap engine app-in net-out)]
+      (is (= SSLEngineResult$Status/BUFFER_OVERFLOW (.getStatus result))
+          (str name " wrap status should be BUFFER_OVERFLOW")))))
+
+(defn- check-buffer-overflow-on-unwrap [wrap-engine unwrap-engine w-name u-name]
+  (let [message "Hello peer!"
+        app-in (ByteBuffer/wrap (.getBytes message))
+        net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession wrap-engine)))]
+    (let [^SSLEngineResult w-res (.wrap wrap-engine app-in net-buf)]
+      (is (= SSLEngineResult$Status/OK (.getStatus w-res))
+          (str w-name " wrap status should be OK")))
+    (.flip net-buf)
+    ;; Make app buffer size less than required by 1 byte
+    (let [app-out (ByteBuffer/allocate (dec (.length message)))]
+      (let [^SSLEngineResult u-res (.unwrap unwrap-engine net-buf app-out)]
+        (is (= SSLEngineResult$Status/BUFFER_OVERFLOW (.getStatus u-res))
+            (str u-name " unwrap status should be BUFFER_OVERFLOW"))))))
+
+(defn- check-buffer-underflow-on-unwrap [wrap-engine unwrap-engine w-name u-name]
+  (let [message "Hello peer!"
+        app-in (ByteBuffer/wrap (.getBytes message))
+        net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession wrap-engine)))]
+    (let [^SSLEngineResult w-res (.wrap wrap-engine app-in net-buf)]
+      (is (= SSLEngineResult$Status/OK (.getStatus w-res))
+          (str w-name " wrap status should be OK")))
+    (.flip net-buf)
+    ;; Make net buffer size less than size of dtls message
+    (.limit net-buf (dec (.limit net-buf)))
+    (let [app-out (ByteBuffer/allocate (.getApplicationBufferSize (.getSession unwrap-engine)))]
+      (let [^SSLEngineResult u-res (.unwrap unwrap-engine net-buf app-out)]
+        (is (= SSLEngineResult$Status/BUFFER_UNDERFLOW (.getStatus u-res))
+            (str u-name " unwrap status should be BUFFER_UNDERFLOW"))))))
+
+(deftest test-buffer-overflow-underflow
+  (testing "DTLS buffer overflow and underflow status when dealing with application data"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)]
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop client-engine server-engine)))
+
+      (check-buffer-overflow-on-wrap client-engine "Client")
+      (check-buffer-overflow-on-wrap server-engine "Server")
+
+      (check-buffer-overflow-on-unwrap client-engine server-engine "Client" "Server")
+      (check-buffer-overflow-on-unwrap server-engine client-engine "Server" "Client")
+
+      (check-buffer-underflow-on-unwrap server-engine client-engine "Server" "Client")
+      (check-buffer-underflow-on-unwrap client-engine server-engine "Client" "Server"))))
