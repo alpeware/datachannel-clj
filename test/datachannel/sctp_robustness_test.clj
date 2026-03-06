@@ -151,6 +151,44 @@
           (is (= :sack (-> sack-packet :chunks first :type)))
           (is (= 100 (-> sack-packet :chunks first :cum-tsn-ack)) "SACK should ack TSN 100"))))))
 
+(deftest send-many-messages-test
+  (testing "Send Many Messages"
+    (let [client-state (atom {:remote-ver-tag 2222 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :remote-tsn 200})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-message (atom nil)
+                       :on-data (atom nil)}
+
+          server-state (atom {:remote-ver-tag 1111 :local-ver-tag 2222 :next-tsn 201 :ssn 0 :remote-tsn 99})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-received (atom 0)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-message (atom (fn [_] (swap! server-received inc)))
+                       :on-data (atom nil)}
+
+          handle-sctp-packet #'core/handle-sctp-packet
+          iterations 100]
+
+      (dotimes [i iterations]
+        (core/send-data client-conn (.getBytes (str "Message " i)) 0 :webrtc/string))
+
+      (dotimes [i iterations]
+        (let [data-packet (.poll client-out)]
+          (is data-packet (str "Client should produce DATA packet " i))
+          (is (= :data (-> data-packet :chunks first :type)))
+
+          ;; Deliver to server
+          (handle-sctp-packet (assoc data-packet :src-port 5000 :dst-port 5001) server-conn)
+
+          ;; Server should produce SACK
+          (let [sack-packet (.poll server-out)]
+            (is sack-packet "Server should produce SACK packet")
+            (is (= :sack (-> sack-packet :chunks first :type))))))
+
+      (is (= iterations @server-received) "Server should receive all messages"))))
+
 (deftest sending-heartbeat-answers-with-ack-test
   (testing "Sending Heartbeat Answers With Ack"
     (let [state (atom {:remote-ver-tag 12345})

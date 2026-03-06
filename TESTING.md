@@ -75,7 +75,7 @@
     - [ ] Receiving Unknown Chunk Responds With Error
     - [ ] Receiving Error Chunk Reports As Callback
     - [ ] Set Max Message Size
-    - [ ] Send Many Messages
+    - [x] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
     - [ ] Discards Messages With Low Lifetime If Must Buffer
     - [ ] Respects Per Stream Queue Limit
