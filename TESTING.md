@@ -1,6 +1,6 @@
 # DTLS
 
-- [ ] [CipherSuite](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/CipherSuite.java)
+- [x] [CipherSuite](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/CipherSuite.java)
 - [x] [ClientAuth](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/ClientAuth.java)
 - [ ] [DTLSBufferOverflowUnderflowTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSBufferOverflowUnderflowTest.java)
 - [ ] [DTLSEnginesClosureTest](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/DTLSEnginesClosureTest.java)
