@@ -175,3 +175,96 @@
           (is (= (seq (:heartbeat-info heartbeat-params))
                  (seq (:heartbeat-info (:params chunk))))
               "HEARTBEAT-ACK should echo the exact params from the HEARTBEAT chunk"))))))
+
+(deftest establish-simultaneous-connection-test
+  (testing "Establish Simultaneous Connection"
+    (let [client-a-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})
+          client-a-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-a-opened (atom false)
+          client-a-conn {:state client-a-state
+                         :sctp-out client-a-out
+                         :on-open (atom (fn [] (reset! client-a-opened true)))}
+
+          client-z-state (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0})
+          client-z-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-z-opened (atom false)
+          client-z-conn {:state client-z-state
+                         :sctp-out client-z-out
+                         :on-open (atom (fn [] (reset! client-z-opened true)))}
+
+          handle-sctp-packet #'core/handle-sctp-packet
+
+          ;; A initiates connection
+          init-packet-a {:src-port 5000 :dst-port 5001 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-a-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-a-state)
+                                   :params {}}]}
+          ;; Z also initiates connection
+          init-packet-z {:src-port 5001 :dst-port 5000 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-z-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-z-state)
+                                   :params {}}]}]
+
+      ;; In simultaneous connect, A sends INIT to Z, Z sends INIT to A.
+      ;; We simulate A's INIT reaching Z, and Z's INIT reaching A simultaneously.
+
+      ;; A receives Z's INIT
+      (handle-sctp-packet init-packet-z client-a-conn)
+      ;; Z receives A's INIT
+      (handle-sctp-packet init-packet-a client-z-conn)
+
+      ;; A should produce INIT-ACK for Z
+      (let [init-ack-from-a (.poll client-a-out)]
+        (is init-ack-from-a "A should produce INIT-ACK")
+        (is (= :init-ack (-> init-ack-from-a :chunks first :type)))
+        ;; Deliver to Z
+        (handle-sctp-packet init-ack-from-a client-z-conn))
+
+      ;; Z should produce INIT-ACK for A
+      (let [init-ack-from-z (.poll client-z-out)]
+        (is init-ack-from-z "Z should produce INIT-ACK")
+        (is (= :init-ack (-> init-ack-from-z :chunks first :type)))
+        ;; Deliver to A
+        (handle-sctp-packet init-ack-from-z client-a-conn))
+
+      ;; A receives Z's INIT-ACK, generates COOKIE-ECHO for Z
+      (let [cookie-echo-from-a (.poll client-a-out)]
+        (is cookie-echo-from-a "A should produce COOKIE-ECHO")
+        (is (= :cookie-echo (-> cookie-echo-from-a :chunks first :type)))
+        ;; Deliver to Z
+        (handle-sctp-packet cookie-echo-from-a client-z-conn))
+
+      ;; Z receives A's INIT-ACK, generates COOKIE-ECHO for A
+      (let [cookie-echo-from-z (.poll client-z-out)]
+        (is cookie-echo-from-z "Z should produce COOKIE-ECHO")
+        (is (= :cookie-echo (-> cookie-echo-from-z :chunks first :type)))
+        ;; Deliver to A
+        (handle-sctp-packet cookie-echo-from-z client-a-conn))
+
+      ;; A processes Z's COOKIE-ECHO, generates COOKIE-ACK, becomes established
+      (let [cookie-ack-from-a (.poll client-a-out)]
+        (is cookie-ack-from-a "A should produce COOKIE-ACK")
+        (is (= :cookie-ack (-> cookie-ack-from-a :chunks first :type)))
+        (is (true? @client-a-opened) "A should be in open state")
+        ;; Deliver to Z
+        (handle-sctp-packet cookie-ack-from-a client-z-conn))
+
+      ;; Z processes A's COOKIE-ECHO, generates COOKIE-ACK, becomes established
+      (let [cookie-ack-from-z (.poll client-z-out)]
+        (is cookie-ack-from-z "Z should produce COOKIE-ACK")
+        (is (= :cookie-ack (-> cookie-ack-from-z :chunks first :type)))
+        (is (true? @client-z-opened) "Z should be in open state")
+        ;; Deliver to A
+        (handle-sctp-packet cookie-ack-from-z client-a-conn))
+
+      ;; Verify state tags
+      (is (= 2222 (:remote-ver-tag @client-a-state)))
+      (is (= 1111 (:remote-ver-tag @client-z-state))))))
