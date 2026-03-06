@@ -22,7 +22,7 @@
 - [x] [PacketLossRetransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/PacketLossRetransmission.java)
 - [x] [Reordered](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Reordered.java)
 - [ ] [RespondToRetransmit](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/RespondToRetransmit.java)
-- [ ] [Retransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Retransmission.java)
+- [x] [Retransmission](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/Retransmission.java)
 - [ ] [WeakCipherSuite](https://github.com/twosigma/OpenJDK/blob/master/test/jdk/javax/net/ssl/DTLS/WeakCipherSuite.java)
 
 # SCTP
