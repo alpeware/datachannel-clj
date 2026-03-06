@@ -18,6 +18,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+          fetch-depth: 2 # Required to compare the last two commits
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -49,17 +51,4 @@ jobs:
       if: success() && github.event_name == 'pull_request'
       env:
         JULES_API_KEY: ${{ secrets.JULES_API_KEY }} 
-      run: |
-        curl -X POST "https://jules.googleapis.com/v1alpha/sessions" \
-            -H "x-goog-api-key: ${JULES_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "sourceContext": {
-                "source": "sources/github/alpeware/datachannel-clj",
-                "githubRepoContext": {
-                  "startingBranch": "main"
-                }
-              },
-              "automationMode": "AUTO_CREATE_PR",
-              "prompt": "Implement missing test cases from TESTING.md\n\n- Compare existing tests with the list of incomplete test cases\n- Pick one suitable new test\n- Implement it\n- Mark it as done"
-            }'
+      run: ./trigger.sh
