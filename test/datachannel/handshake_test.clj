@@ -584,3 +584,57 @@
           (.beginHandshake server-engine)
           (is (= :success (run-handshake-loop client-engine server-engine)))
           (test-engines-closure server-engine client-engine "Server" "Client"))))))
+
+(defn- check-buffer-overflow-on-wrap [^SSLEngine engine msg-bytes]
+  (let [app-buf (ByteBuffer/wrap msg-bytes)
+        net-buf (ByteBuffer/allocate (dec (.getPacketBufferSize (.getSession engine))))
+        ^SSLEngineResult result (.wrap engine app-buf net-buf)]
+    (is (= SSLEngineResult$Status/BUFFER_OVERFLOW (.getStatus result))
+        "Expected BUFFER_OVERFLOW when network buffer is too small for wrap")))
+
+(defn- check-buffer-overflow-on-unwrap [^SSLEngine wrapping-engine ^SSLEngine unwrapping-engine msg-bytes]
+  (let [app-buf (ByteBuffer/wrap msg-bytes)
+        net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession wrapping-engine)))
+        ^SSLEngineResult wrap-result (.wrap wrapping-engine app-buf net-buf)]
+    (is (= SSLEngineResult$Status/OK (.getStatus wrap-result)))
+    (.flip net-buf)
+    (let [small-app-buf (ByteBuffer/allocate (dec (alength msg-bytes)))
+          ^SSLEngineResult unwrap-result (.unwrap unwrapping-engine net-buf small-app-buf)]
+      (is (= SSLEngineResult$Status/BUFFER_OVERFLOW (.getStatus unwrap-result))
+          "Expected BUFFER_OVERFLOW when app buffer is too small for unwrap"))))
+
+(defn- check-buffer-underflow-on-unwrap [^SSLEngine wrapping-engine ^SSLEngine unwrapping-engine msg-bytes]
+  (let [app-buf (ByteBuffer/wrap msg-bytes)
+        net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession wrapping-engine)))
+        ^SSLEngineResult wrap-result (.wrap wrapping-engine app-buf net-buf)]
+    (is (= SSLEngineResult$Status/OK (.getStatus wrap-result)))
+    (.flip net-buf)
+    (.limit net-buf (dec (.limit net-buf)))
+    (let [app-out-buf (ByteBuffer/allocate (.getApplicationBufferSize (.getSession unwrapping-engine)))
+          ^SSLEngineResult unwrap-result (.unwrap unwrapping-engine net-buf app-out-buf)]
+      (is (= SSLEngineResult$Status/BUFFER_UNDERFLOW (.getStatus unwrap-result))
+          "Expected BUFFER_UNDERFLOW when network buffer is truncated for unwrap"))))
+
+(deftest test-buffer-overflow-underflow
+  (testing "Testing DTLS buffer overflow and underflow status when dealing with application data"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)
+          msg-bytes (.getBytes "Hello peer!")]
+
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop client-engine server-engine)))
+
+      (testing "Buffer overflow on wrap"
+        (check-buffer-overflow-on-wrap client-engine msg-bytes)
+        (check-buffer-overflow-on-wrap server-engine msg-bytes))
+
+      (testing "Buffer overflow on unwrap"
+        (check-buffer-overflow-on-unwrap client-engine server-engine msg-bytes)
+        (check-buffer-overflow-on-unwrap server-engine client-engine msg-bytes))
+
+      (testing "Buffer underflow on unwrap"
+        (check-buffer-underflow-on-unwrap client-engine server-engine msg-bytes)
+        (check-buffer-underflow-on-unwrap server-engine client-engine msg-bytes)))))
