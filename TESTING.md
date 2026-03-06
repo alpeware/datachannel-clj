@@ -39,9 +39,9 @@
     - [x] Establish Simultaneous Connection
     - [x] Attempt Connect Without Cookie
     - [x] Establish Connection Lost Cookie Ack
-    - [ ] Resend Init And Establish Connection
+    - [x] Resend Init And Establish Connection
     - [ ] Resending Init Too Many Times Aborts
-    - [ ] Resend Cookie Echo And Establish Connection
+    - [x] Resend Cookie Echo And Establish Connection
     - [ ] Resending Cookie Echo Too Many Times Aborts
     - [ ] Doesnt Send More Packets Until Cookie Ack Has Been Received
     - [ ] Shutdown Connection
