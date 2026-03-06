@@ -45,7 +45,7 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Optional: You can wrap this in an IF statement to only auto-merge if the PR author is Jules
-        gh pr merge ${{ github.event.pull_request.number }} --squash
+        gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch
 
     - name: Trigger next Jules task
       if: success() && github.event_name == 'pull_request'
