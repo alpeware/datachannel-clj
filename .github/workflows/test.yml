@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ "main", "master" ]
 
+# Grant the GITHUB_TOKEN permission to interact with PRs
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -29,3 +34,12 @@ jobs:
 
     - name: Run tests
       run: clojure -J--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED -J--add-exports=java.base/sun.security.x509=ALL-UNNAMED -M:test -m datachannel.test-runner
+
+    - name: Auto-merge PR on Success
+      # Only run this if tests pass AND it's a PR
+      if: success() && github.event_name == 'pull_request'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Optional: You can wrap this in an IF statement to only auto-merge if the PR author is Jules
+        gh pr merge ${{ github.event.pull_request.number }} --squash
