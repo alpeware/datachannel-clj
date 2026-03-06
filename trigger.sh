@@ -38,17 +38,23 @@ if [ -z "${JULES_API_KEY:-}" ]; then
   exit 1
 fi
 
+echo "Building JSON payload from prompt.txt..."
+PROMPT_CONTENT=$(cat prompt.txt)
+
+# Use jq to safely construct the JSON payload and escape all newlines/quotes in the prompt
+JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_CONTENT" '{
+  sourceContext: {
+    source: "sources/github/alpeware/datachannel-clj",
+    githubRepoContext: {
+      startingBranch: "main"
+    }
+  },
+  automationMode: "AUTO_CREATE_PR",
+  prompt: $prompt
+}')
+
 echo "Triggering next Jules session..."
 curl -X POST "https://jules.googleapis.com/v1alpha/sessions" \
   -H "x-goog-api-key: ${JULES_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{
-    "sourceContext": {
-      "source": "sources/github/alpeware/datachannel-clj",
-      "githubRepoContext": {
-        "startingBranch": "main"
-      }
-    },
-    "automationMode": "AUTO_CREATE_PR",
-    "prompt": "Implement missing test cases from TESTING.md\n\n- Compare existing tests with the list of incomplete test cases\n- Pick one suitable new test\n- Implement it\n- Mark it as done"
-  }'
+  -d "$JSON_PAYLOAD"
