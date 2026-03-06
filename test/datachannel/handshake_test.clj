@@ -564,6 +564,45 @@
     (is (.isOutboundDone to-engine)
         (str from-name " sent close request to " to-name " but " to-name " did not close outbound"))))
 
+(deftest test-buffer-overflow-underflow
+  (testing "DTLS Buffer overflow and underflow status on wrap and unwrap"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          client-engine (dtls/create-engine ctx true)
+          server-engine (dtls/create-engine ctx false)
+          message "Hello peer!"
+          app-buf (ByteBuffer/wrap (.getBytes message))]
+      (.beginHandshake client-engine)
+      (.beginHandshake server-engine)
+      (is (= :success (run-handshake-loop client-engine server-engine)))
+
+      (testing "Buffer overflow on wrap"
+        (let [net-buf (ByteBuffer/allocate (dec (.getPacketBufferSize (.getSession client-engine))))
+              app-buf-copy (.duplicate app-buf)
+              res (.wrap client-engine app-buf-copy net-buf)]
+          (is (= SSLEngineResult$Status/BUFFER_OVERFLOW (.getStatus res)))))
+
+      (testing "Buffer overflow on unwrap"
+        (let [net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession client-engine)))
+              app-buf-copy (.duplicate app-buf)
+              res-wrap (.wrap client-engine app-buf-copy net-buf)
+              _ (.flip net-buf)
+              ;; The unwrap needs enough space for the full application data length
+              app-buf-out (ByteBuffer/allocate (dec (alength (.getBytes message))))
+              res-unwrap (.unwrap server-engine net-buf app-buf-out)]
+          (is (= SSLEngineResult$Status/BUFFER_OVERFLOW (.getStatus res-unwrap)))))
+
+      (testing "Buffer underflow on unwrap"
+        (let [net-buf (ByteBuffer/allocate (.getPacketBufferSize (.getSession client-engine)))
+              app-buf-copy (.duplicate app-buf)
+              res-wrap (.wrap client-engine app-buf-copy net-buf)
+              _ (.flip net-buf)
+              ;; Set the limit to be one byte short of a complete record
+              _ (.limit net-buf (dec (.limit net-buf)))
+              app-buf-out (ByteBuffer/allocate (.getApplicationBufferSize (.getSession server-engine)))
+              res-unwrap (.unwrap server-engine net-buf app-buf-out)]
+          (is (= SSLEngineResult$Status/BUFFER_UNDERFLOW (.getStatus res-unwrap))))))))
+
 (deftest test-dtls-engines-closure
   (testing "DTLS engines closing using specific cipher suites"
     (let [cert-data (dtls/generate-cert)
