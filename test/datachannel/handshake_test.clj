@@ -1145,3 +1145,36 @@
                          (run-handshake-loop client-engine server-engine))))
           (catch IllegalArgumentException _
             (is true "Caught IllegalArgumentException during setNamedGroups")))))))
+
+(deftest test-weak-cipher-suite
+  (testing "DTLS configuration with weak cipher suites fails handshake or throws IllegalArgumentException"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          weak-ciphers ["SSL_RSA_WITH_DES_CBC_SHA"
+                        "SSL_DHE_RSA_WITH_DES_CBC_SHA"
+                        "SSL_DHE_DSS_WITH_DES_CBC_SHA"
+                        "TLS_DH_anon_WITH_AES_128_GCM_SHA256"
+                        "SSL_DH_anon_WITH_DES_CBC_SHA"]]
+      (doseq [cipher weak-ciphers]
+        (let [client-engine (dtls/create-engine ctx true)
+              server-engine (dtls/create-engine ctx false)]
+          (try
+            (.setEnabledCipherSuites client-engine (into-array String [cipher]))
+            (.setEnabledCipherSuites server-engine (into-array String [cipher]))
+
+            ;; If setting them didn't throw IllegalArgumentException, then handshake must fail
+            ;; because these weak ciphers are disabled by default security properties or are
+            ;; not supported with our certificate type.
+            ;; JSSE can throw either SSLHandshakeException or SSLException ("Cannot kickstart, the connection is broken or closed")
+            ;; during the start of the handshake loop when no common suites are available.
+            (try
+              (.beginHandshake client-engine)
+              (.beginHandshake server-engine)
+              (run-handshake-loop client-engine server-engine)
+              (is false "Expected exception during handshake")
+              (catch javax.net.ssl.SSLHandshakeException e
+                (is true "Caught SSLHandshakeException"))
+              (catch javax.net.ssl.SSLException e
+                (is true "Caught SSLException")))
+            (catch IllegalArgumentException _
+              (is true (str "Caught IllegalArgumentException during setEnabledCipherSuites for " cipher)))))))))
