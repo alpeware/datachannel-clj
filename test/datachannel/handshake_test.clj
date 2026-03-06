@@ -191,6 +191,40 @@
       (is (= "Hello Reordered" (exchange-data client-engine server-engine "Hello Reordered"))))))
 
 
+(deftest test-cipher-suite
+  (testing "DTLS connection with specific cipher suites"
+    (let [cert-data (dtls/generate-cert)
+          ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
+          ;; Get a list of supported cipher suites from a dummy engine
+          dummy-engine (dtls/create-engine ctx true)
+          supported-suites (.getSupportedCipherSuites dummy-engine)
+          ;; Filter for typical DTLS 1.2 suites and avoid those that might require
+          ;; specific certificate types we don't generate (like ECDSA or DSS) or are weak/disabled
+          test-suites (filter #(and (.startsWith ^String % "TLS_")
+                                    (not (.contains ^String % "_RC4_"))
+                                    (not (.contains ^String % "_NULL_"))
+                                    (not (.contains ^String % "_anon_"))
+                                    (not (.contains ^String % "_DES_"))
+                                    ;; Since we use a single self-signed cert (likely RSA),
+                                    ;; we restrict to suites that work with it.
+                                    (or (.contains ^String % "_RSA_")))
+                              supported-suites)]
+      (doseq [suite test-suites]
+        (let [client-engine (dtls/create-engine ctx true)
+              server-engine (dtls/create-engine ctx false)]
+          ;; Set the client to only support this specific suite
+          (.setEnabledCipherSuites client-engine (into-array String [suite]))
+
+          ;; Ensure server supports it
+          (let [server-suites (into #{} (.getEnabledCipherSuites server-engine))]
+            (when (server-suites suite)
+              (.beginHandshake client-engine)
+              (.beginHandshake server-engine)
+              (is (= :success (run-handshake-loop client-engine server-engine))
+                  (str "Handshake failed for cipher suite: " suite))
+              (is (= "Cipher OK" (exchange-data client-engine server-engine "Cipher OK"))
+                  (str "Data exchange failed for cipher suite: " suite)))))))))
+
 (deftest test-client-auth
   (testing "DTLS client authentication requirement"
     (let [cert-data (dtls/generate-cert)
