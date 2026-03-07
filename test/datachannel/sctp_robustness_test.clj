@@ -659,3 +659,51 @@
 
       ;; Client processes COOKIE-ACK and becomes established
       (is (true? @client-opened) "Client should be in open state"))))
+
+(deftest send-many-api-method-test
+  (testing "Send Many Api Method"
+    (let [client-state (atom {:remote-ver-tag 2222 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :remote-tsn 200})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-message (atom nil)
+                       :on-data (atom nil)}
+
+          server-state (atom {:remote-ver-tag 1111 :local-ver-tag 2222 :next-tsn 201 :ssn 0 :remote-tsn 99})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-received (atom [])
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-message (atom nil)
+                       :on-data (atom (fn [data]
+                                        (swap! server-received conj data)))}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; Simulate sending multiple messages using the API
+      (core/send-data client-conn (.getBytes "hello") 1 :webrtc/string)
+      (core/send-data client-conn (.getBytes "world") 2 :webrtc/string)
+
+      ;; Extract and deliver the first packet
+      (let [data-packet1 (.poll client-out)]
+        (is data-packet1 "Client should produce first DATA packet")
+        (is (= :data (-> data-packet1 :chunks first :type)))
+        (handle-sctp-packet (assoc data-packet1 :src-port 5000 :dst-port 5001) server-conn))
+
+      ;; Extract and deliver the second packet
+      (let [data-packet2 (.poll client-out)]
+        (is data-packet2 "Client should produce second DATA packet")
+        (is (= :data (-> data-packet2 :chunks first :type)))
+        (handle-sctp-packet (assoc data-packet2 :src-port 5000 :dst-port 5001) server-conn))
+
+      ;; Assert server received both messages correctly
+      (let [msgs @server-received]
+        (is (= 2 (count msgs)) "Server should have received exactly two messages")
+
+        (let [msg1 (first msgs)]
+          (is (= 1 (:stream-id msg1)) "First message stream ID should be 1")
+          (is (= "hello" (String. ^bytes (:payload msg1))) "First message payload should be 'hello'"))
+
+        (let [msg2 (second msgs)]
+          (is (= 2 (:stream-id msg2)) "Second message stream ID should be 2")
+          (is (= "world" (String. ^bytes (:payload msg2))) "Second message payload should be 'world'"))))))
