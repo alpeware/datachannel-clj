@@ -2,6 +2,68 @@
   (:require [clojure.test :refer :all]
             [datachannel.core :as core]))
 
+(deftest establish-connection-with-setup-collision-test
+  (testing "Establish Connection With Setup Collision"
+    (let [state-a (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed})
+          state-z (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed})
+          out-a (java.util.concurrent.LinkedBlockingQueue.)
+          out-z (java.util.concurrent.LinkedBlockingQueue.)
+          conn-a {:state state-a :sctp-out out-a :on-open (atom nil) :on-close (atom nil) :selector nil}
+          conn-z {:state state-z :sctp-out out-z :on-open (atom nil) :on-close (atom nil) :selector nil}
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; Both start connection simultaneously
+      (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111}))
+      (reset! state-z (merge @state-z {:state :cookie-wait :init-tag 2222}))
+
+      (let [init-packet-a {:src-port 5000 :dst-port 5001 :verification-tag 0
+                           :chunks [{:type :init :init-tag 1111 :a-rwnd 100000
+                                     :outbound-streams 1 :inbound-streams 1
+                                     :initial-tsn 1000 :params {}}]}
+            init-packet-z {:src-port 5001 :dst-port 5000 :verification-tag 0
+                           :chunks [{:type :init :init-tag 2222 :a-rwnd 100000
+                                     :outbound-streams 1 :inbound-streams 1
+                                     :initial-tsn 2000 :params {}}]}]
+        ;; A receives Z's INIT, sends INIT-ACK
+        (handle-sctp-packet init-packet-z conn-a)
+        ;; Z receives A's INIT, sends INIT-ACK
+        (handle-sctp-packet init-packet-a conn-z))
+
+      (let [init-ack-from-a (.poll out-a)
+            init-ack-from-z (.poll out-z)]
+        (is init-ack-from-a "A should send INIT-ACK in response to Z's INIT")
+        (is init-ack-from-z "Z should send INIT-ACK in response to A's INIT")
+
+        ;; Z receives A's INIT-ACK, sends COOKIE-ECHO
+        (handle-sctp-packet init-ack-from-a conn-z)
+        ;; A receives Z's INIT-ACK, sends COOKIE-ECHO
+        (handle-sctp-packet init-ack-from-z conn-a))
+
+      (let [cookie-echo-from-z (.poll out-z)
+            cookie-echo-from-a (.poll out-a)]
+        (is cookie-echo-from-z "Z should send COOKIE-ECHO")
+        (is cookie-echo-from-a "A should send COOKIE-ECHO")
+
+        ;; Z receives A's COOKIE-ECHO, sends COOKIE-ACK and establishes
+        (handle-sctp-packet cookie-echo-from-a conn-z)
+        ;; A receives Z's COOKIE-ECHO, sends COOKIE-ACK and establishes
+        (handle-sctp-packet cookie-echo-from-z conn-a))
+
+      (is (= :established (:state @state-a)) "A should be established")
+      (is (= :established (:state @state-z)) "Z should be established")
+
+      (let [cookie-ack-from-z (.poll out-z)
+            cookie-ack-from-a (.poll out-a)]
+        (is cookie-ack-from-z "Z should send COOKIE-ACK")
+        (is cookie-ack-from-a "A should send COOKIE-ACK")
+
+        ;; They can receive each other's COOKIE-ACK (silently ignored/processed)
+        (handle-sctp-packet cookie-ack-from-a conn-z)
+        (handle-sctp-packet cookie-ack-from-z conn-a))
+
+      (is (= :established (:state @state-a)) "A should remain established")
+      (is (= :established (:state @state-z)) "Z should remain established"))))
+
 (deftest shutting-down-while-establishing-connection-test
   (testing "Shutting Down While Establishing Connection"
     (let [state-a (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed})

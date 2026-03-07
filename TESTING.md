@@ -34,7 +34,7 @@
 - [ ] [Full Socket State Machine](https://github.com/webrtc/dcsctp/blob/main/src/socket/socket_tests.rs)
     - [x] Establish Connection
     - [x] Send Many Api Method
-    - [ ] Establish Connection With Setup Collision
+    - [x] Establish Connection With Setup Collision
     - [x] Shutting Down While Establishing Connection
     - [x] Establish Simultaneous Connection
     - [x] Attempt Connect Without Cookie
