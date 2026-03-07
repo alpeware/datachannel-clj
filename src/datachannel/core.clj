@@ -47,6 +47,31 @@
 
 (defn handle-timeout [state timer-id now]
   (case timer-id
+    :t2-shutdown
+    (let [timer (get-in state [:timers :t2-shutdown])]
+      (if-not timer
+        {:new-state state :effects []}
+        (let [retries (:retries timer)]
+          (if (>= retries 8)
+            {:new-state (-> state
+                            (assoc :state :closed)
+                            (update :timers dissoc :t2-shutdown))
+             :effects [{:type :send-packet
+                        :packet {:src-port (:src-port (:packet timer))
+                                 :dst-port (:dst-port (:packet timer))
+                                 :verification-tag (:remote-ver-tag state)
+                                 :chunks [{:type :abort}]}}
+                       {:type :on-error :cause :max-retransmissions}]}
+            (let [new-delay (* (:delay timer) 2)
+                  new-delay (min new-delay 60000)
+                  packet (:packet timer)]
+              {:new-state (assoc-in state [:timers :t2-shutdown]
+                                    {:expires-at (+ now new-delay)
+                                     :delay new-delay
+                                     :retries (inc retries)
+                                     :packet packet})
+               :effects [{:type :send-packet :packet packet}]})))))
+
     :t1-init
     (let [timer (get-in state [:timers :t1-init])
           retries (:retries timer)]
@@ -198,6 +223,11 @@
                            :dst-port (:src-port packet)
                            :verification-tag (:remote-ver-tag @state)
                            :chunks [{:type :shutdown}]}]
+                (swap! state assoc-in [:timers :t2-shutdown]
+                       {:expires-at (+ (System/currentTimeMillis) 3000)
+                        :delay 3000
+                        :retries 0
+                        :packet packet})
                 (.offer (:sctp-out connection) packet)))
            (when-not (= (:state @state) :shutdown-sent)
              (swap! state assoc :state :established))
@@ -238,9 +268,15 @@
                          :dst-port (:src-port packet)
                          :verification-tag (:remote-ver-tag @state)
                          :chunks [{:type :shutdown-ack}]}]
+              (swap! state assoc-in [:timers :t2-shutdown]
+                     {:expires-at (+ (System/currentTimeMillis) 3000)
+                      :delay 3000
+                      :retries 0
+                      :packet packet})
               (.offer (:sctp-out connection) packet)))
         :shutdown-ack
         (do
+           (swap! state update :timers dissoc :t2-shutdown)
            (swap! state assoc :state :closed)
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
@@ -249,6 +285,7 @@
               (.offer (:sctp-out connection) packet)))
         :shutdown-complete
         (do
+           (swap! state update :timers dissoc :t2-shutdown)
            (swap! state assoc :state :closed)
            nil)
         :error
