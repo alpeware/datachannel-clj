@@ -25,7 +25,8 @@
             [datachannel.sctp-cookie-echo-abort-test]
             [datachannel.sctp-timeout-resends-packet-test]
             [datachannel.sctp-shutdown-timer-test]
-            [datachannel.sctp-retransmission-test]))
+            [datachannel.sctp-retransmission-test]
+            [datachannel.sctp-heartbeat-test]))
 
 (defn -main [& args]
   (let [{:keys [fail error]}
@@ -56,5 +57,6 @@
          'datachannel.sctp-cookie-echo-abort-test
          'datachannel.sctp-timeout-resends-packet-test
          'datachannel.sctp-shutdown-timer-test
-         'datachannel.sctp-retransmission-test)]
+         'datachannel.sctp-retransmission-test
+         'datachannel.sctp-heartbeat-test)]
     (System/exit (+ fail error))))
