@@ -17,7 +17,8 @@
             [datachannel.sctp-message-test]
             [datachannel.sctp-establish-simultaneous-lost-data-test]
             [datachannel.sctp-unknown-chunk-test]
-            [datachannel.sctp-error-chunk-test]))
+            [datachannel.sctp-error-chunk-test]
+            [datachannel.sctp-max-message-size-test]))
 
 (defn -main []
   (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
@@ -37,7 +38,8 @@
                                              'datachannel.sctp-message-test
                                              'datachannel.sctp-establish-simultaneous-lost-data-test
                                              'datachannel.sctp-unknown-chunk-test
-                                             'datachannel.sctp-error-chunk-test)]
+                                             'datachannel.sctp-error-chunk-test
+                                             'datachannel.sctp-max-message-size-test)]
     (if (> (+ fail error) 0)
       (System/exit 1)
       (System/exit 0))))
