@@ -84,7 +84,9 @@
         :init
         (do
           (swap! state assoc :remote-ver-tag (:init-tag chunk)
-                             :remote-tsn (dec (:initial-tsn chunk)))
+                             :remote-tsn (dec (:initial-tsn chunk))
+                             :ssn 0
+                             :state :cookie-wait)
           (let [cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
                 init-ack {:type :init-ack
                           :init-tag (:local-ver-tag @state)
