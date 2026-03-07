@@ -65,6 +65,23 @@
                                  :packet packet})
            :effects [{:type :send-packet :packet packet}]})))
 
+    :t3-rtx
+    (let [timer (get-in state [:timers :t3-rtx])
+          q (:tx-queue state)]
+      (if (empty? q)
+        ;; If queue is empty, stop the timer
+        {:new-state (update state :timers dissoc :t3-rtx) :effects []}
+        (let [first-item (first q)
+              packet (:packet first-item)
+              new-delay (* (:delay timer) 2)
+              new-delay (min new-delay 60000)
+              updated-item (assoc first-item :retries (inc (:retries first-item)))
+              new-q (assoc q 0 updated-item)]
+          {:new-state (-> state
+                          (assoc :tx-queue new-q)
+                          (assoc-in [:timers :t3-rtx] {:expires-at (+ now new-delay) :delay new-delay}))
+           :effects [{:type :send-packet :packet packet}]})))
+
     {:new-state state :effects []}))
 
 (defn- handle-sctp-packet [packet connection]
@@ -195,7 +212,24 @@
                          :chunks [{:type :heartbeat-ack :params (:params chunk)}]}]
               (.offer (:sctp-out connection) packet)))
 
-        :sack nil
+        :sack
+        (do
+          (let [cum-tsn-ack (:cum-tsn-ack chunk)]
+            (swap! state (fn [s]
+                           (let [q (get s :tx-queue [])
+                                 ;; Remove all packets from the queue that have a TSN <= cum-tsn-ack
+                                 ;; (taking care of unsigned 32-bit math for TSN wrap-around)
+                                 new-q (vec (remove (fn [{:keys [tsn]}]
+                                                      (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack))))))
+                                                    q))]
+                             (if (empty? new-q)
+                               (-> s
+                                   (assoc :tx-queue new-q)
+                                   (update :timers dissoc :t3-rtx))
+                               ;; If there's still unacked data, we restart the timer or keep it running.
+                               ;; For simplicity now, just update the queue.
+                               (assoc s :tx-queue new-q)))))))
+
         :heartbeat-ack nil
         :shutdown
         (do
@@ -446,7 +480,15 @@
                           :stream-id stream-id
                           :seq-num ssn
                           :protocol protocol
-                          :payload payload}]}]
+                          :payload payload}]}
+        now (System/currentTimeMillis)]
+     (swap! state (fn [s]
+                    (let [q (get s :tx-queue [])
+                          new-q (conj q {:tsn tsn :packet packet :sent-at now :retries 0})
+                          new-s (assoc s :tx-queue new-q)]
+                      (if (nil? (get-in s [:timers :t3-rtx]))
+                        (assoc-in new-s [:timers :t3-rtx] {:expires-at (+ now 1000) :delay 1000})
+                        new-s))))
      (.offer (:sctp-out connection) packet)))
 
 (defn send-msg [connection msg]

@@ -22,11 +22,13 @@
             [datachannel.sctp-reconnect-test]
             [datachannel.sctp-checksum-test]
             [datachannel.sctp-init-abort-test]
-            [datachannel.sctp-cookie-echo-abort-test]))
+            [datachannel.sctp-cookie-echo-abort-test]
+            [datachannel.sctp-timeout-resends-packet-test]))
 
 (defn -main [& args]
   (let [{:keys [fail error]}
         (run-tests
+         'datachannel.sctp-timeout-resends-packet-test
          'datachannel.sctp-test
          'datachannel.dtls-test
          'datachannel.handshake-test

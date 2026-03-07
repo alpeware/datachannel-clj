@@ -48,7 +48,7 @@
     - [ ] Shutdown Timer Expires Too Many Time Closes Connection
     - [x] Establish Connection While Sending Data
     - [x] Send Message After Established
-    - [ ] Timeout Resends Packet
+    - [x] Timeout Resends Packet
     - [ ] Send A Lot Of Bytes Missed Second Packet
     - [x] Sending Heartbeat Answers With Ack
     - [ ] Expect Heartbeat To Be Sent
