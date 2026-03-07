@@ -147,15 +147,18 @@
         :init-ack
         (do
           (swap! state (fn [s]
-                         (-> s
-                             (assoc :remote-ver-tag (:init-tag chunk)
-                                    :remote-tsn (dec (:initial-tsn chunk)))
-                             (update :timers dissoc :t1-init))))
+                         (assoc s :remote-ver-tag (:init-tag chunk)
+                                  :remote-tsn (dec (:initial-tsn chunk)))))
           (when-let [cookie (get-in chunk [:params :cookie])]
             (let [packet {:src-port (:dst-port packet)
                           :dst-port (:src-port packet)
                           :verification-tag (:init-tag chunk)
                           :chunks [{:type :cookie-echo :cookie cookie}]}]
+               (swap! state (fn [s]
+                              (assoc-in s [:timers :t1-init] {:expires-at (+ (System/currentTimeMillis) 3000)
+                                                              :delay 3000
+                                                              :retries 0
+                                                              :packet packet})))
                (.offer (:sctp-out connection) packet))))
 
         :cookie-echo
@@ -171,6 +174,7 @@
 
         :cookie-ack
         (do
+           (swap! state update :timers dissoc :t1-init)
            (when (= (:state @state) :shutdown-pending)
              (swap! state assoc :state :shutdown-sent)
              (let [packet {:src-port (:dst-port packet)
