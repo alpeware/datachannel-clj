@@ -26,34 +26,34 @@
              current-time (+ now 30000)]
         (when (< i (dec max-rtx))
           ;; Expire t-heartbeat
-          (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
+          (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
             (reset! state-atom new-state)
-            (doseq [effect effects]
+            (doseq [effect network-out]
               (case (:type effect)
-                :send-packet (.offer out-queue (:packet effect))
+                :send-packet (.offer out-queue effect)
                 nil)))
           (.poll out-queue) ;; discard heartbeat request packet
 
           ;; Expire t-heartbeat-rtx (simulates lost heartbeat)
-          (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
+          (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
             (reset! state-atom new-state)
-            (doseq [effect effects]
+            (doseq [effect network-out]
               (case (:type effect)
-                :send-packet (.offer out-queue (:packet effect))
+                :send-packet (.offer out-queue effect)
                 nil))
             (is (= :established (:state @state-atom)) "State should remain established"))
           (recur (inc i) (+ current-time 30000))))
 
       ;; 10th time - last heartbeat before aborting
       (let [current-time (+ now (* 30000 max-rtx))]
-        (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
+        (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
           (reset! state-atom new-state)
-          (doseq [effect effects]
+          (doseq [effect network-out]
             (case (:type effect)
-              :send-packet (.offer out-queue (:packet effect))
+              :send-packet (.offer out-queue effect)
               nil))
 
-          (let [hb-effect (first (filter #(= (:type %) :send-packet) effects))]
+          (let [hb-effect (first network-out)]
             (is hb-effect "Should emit an effect to send heartbeat")
 
             (let [packet (.poll out-queue)
@@ -75,11 +75,11 @@
 
         ;; Fast forward to next heartbeat to ensure it works again
         (let [next-time (+ current-time 30000)
-              {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat next-time)]
+              {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat next-time)]
           (reset! state-atom new-state)
-          (doseq [effect effects]
+          (doseq [effect network-out]
             (case (:type effect)
-              :send-packet (.offer out-queue (:packet effect))
+              :send-packet (.offer out-queue effect)
               nil))
           (let [packet (.poll out-queue)]
             (is packet)

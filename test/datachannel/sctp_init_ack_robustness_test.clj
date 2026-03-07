@@ -18,7 +18,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (reset! client-state (assoc @client-state :state :cookie-wait))
@@ -53,7 +69,7 @@
                   "Second INIT-ACK should have a different cookie than the first"))
 
             ;; Client proceeds using the FIRST INIT-ACK
-            (handle-sctp-packet init-ack-packet1 client-conn)
+            (handle-sctp-packet client-conn init-ack-packet1)
 
             (let [cookie-echo-packet (.poll client-out)]
               (is cookie-echo-packet "Client should produce COOKIE-ECHO in response to INIT-ACK1")
@@ -89,7 +105,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (reset! client-state (assoc @client-state :state :cookie-wait))
@@ -124,7 +156,7 @@
                   "Second INIT-ACK should have a different cookie than the first"))
 
             ;; Client proceeds using the SECOND INIT-ACK
-            (handle-sctp-packet init-ack-packet2 client-conn)
+            (handle-sctp-packet client-conn init-ack-packet2)
 
             (let [cookie-echo-packet (.poll client-out)]
               (is cookie-echo-packet "Client should produce COOKIE-ECHO in response to INIT-ACK2")

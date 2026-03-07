@@ -10,7 +10,23 @@
           out-z (java.util.concurrent.LinkedBlockingQueue.)
           conn-a {:state state-a :sctp-out out-a :on-open (atom nil) :on-close (atom nil) :selector nil}
           conn-z {:state state-z :sctp-out out-z :on-open (atom nil) :on-close (atom nil) :selector nil}
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [p c]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; Both start connection simultaneously
       (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111}))
@@ -72,7 +88,23 @@
           out-z (java.util.concurrent.LinkedBlockingQueue.)
           conn-a {:state state-a :sctp-out out-a :on-open (atom nil) :on-close (atom nil) :selector nil}
           conn-z {:state state-z :sctp-out out-z :on-open (atom nil) :on-close (atom nil) :selector nil}
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [p c]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; A starts connection: sends INIT
       (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111}))

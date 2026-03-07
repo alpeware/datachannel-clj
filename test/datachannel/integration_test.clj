@@ -13,18 +13,18 @@
         ;; Start client
         client (dc/connect "127.0.0.1" port)]
 
-    (reset! (:on-message server)
+    (reset! (:on-message (:connection server))
             (fn [msg]
               (let [s (String. msg "UTF-8")]
                 (deliver server-received s)
-                (dc/send-msg server "World"))))
+                (dc/send-msg (:connection server) "World"))))
 
-    (reset! (:on-message client)
+    (reset! (:on-message (:connection client))
             (fn [msg]
               (let [s (String. msg "UTF-8")]
                 (deliver client-received s))))
 
-    (reset! (:on-open client)
+    (reset! (:on-open (:connection client))
             (fn []
               (deliver client-connected true)
               (dc/send-msg client "Hello")))

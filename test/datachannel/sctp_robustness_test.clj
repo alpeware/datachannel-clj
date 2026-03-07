@@ -35,7 +35,23 @@
                       :sctp-out (java.util.concurrent.LinkedBlockingQueue.)
                       :on-message (atom (fn [payload] (swap! received conj (String. ^bytes payload))))
                       :on-data (atom nil)}
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; In unordered delivery, if we receive TSN 2 before TSN 1, it should still be delivered immediately.
       ;; Note: Current implementation in core.clj delivers EVERY data chunk immediately
@@ -72,7 +88,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -130,7 +162,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] nil))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -180,7 +228,23 @@
                        :on-message (atom (fn [payload] (reset! server-received (String. ^bytes payload))))
                        :on-data (atom nil)}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -256,7 +320,23 @@
                        :on-message (atom (fn [payload] (reset! server-received (String. ^bytes payload))))
                        :on-data (atom nil)}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; Client sends DATA
       (core/send-data client-conn (.getBytes "Hello") 0 :webrtc/string)
@@ -447,7 +527,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -514,7 +610,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -565,7 +677,23 @@
           out-queue (java.util.concurrent.LinkedBlockingQueue.)
           connection {:state state
                       :sctp-out out-queue}
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; Simulate receiving a SHUTDOWN chunk
       (let [shutdown-packet {:src-port 5000 :dst-port 5001 :verification-tag 12345
@@ -613,7 +741,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -678,7 +822,23 @@
                        :on-data (atom (fn [data]
                                         (swap! server-received conj data)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; Simulate sending multiple messages using the API
       (core/send-data client-conn (.getBytes "hello") 1 :webrtc/string)
@@ -688,13 +848,13 @@
       (let [data-packet1 (.poll client-out)]
         (is data-packet1 "Client should produce first DATA packet")
         (is (= :data (-> data-packet1 :chunks first :type)))
-        (handle-sctp-packet (assoc data-packet1 :src-port 5000 :dst-port 5001) server-conn))
+        (handle-sctp-packet server-conn (assoc data-packet1 :src-port 5000 :dst-port 5001)))
 
       ;; Extract and deliver the second packet
       (let [data-packet2 (.poll client-out)]
         (is data-packet2 "Client should produce second DATA packet")
         (is (= :data (-> data-packet2 :chunks first :type)))
-        (handle-sctp-packet (assoc data-packet2 :src-port 5000 :dst-port 5001) server-conn))
+        (handle-sctp-packet server-conn (assoc data-packet2 :src-port 5000 :dst-port 5001)))
 
       ;; Assert server received both messages correctly
       (let [msgs @server-received]
@@ -724,7 +884,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0

@@ -12,7 +12,23 @@
           state-z (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0 :state :closed})
           conn-z {:sctp-out out-z :state state-z :on-open (atom nil) :selector nil :on-close (atom nil)}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [c p]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Establish connection between A and Z
       (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111}))
@@ -20,16 +36,16 @@
                          :chunks [{:type :init :init-tag 1111 :a-rwnd 100000
                                    :outbound-streams 10 :inbound-streams 10
                                    :initial-tsn 100 :params {}}]}]
-        (handle-sctp-packet init-packet conn-z))
+        (handle-sctp-packet conn-z init-packet))
 
       (let [init-ack (.poll out-z)]
-        (handle-sctp-packet init-ack conn-a))
+        (handle-sctp-packet conn-a init-ack))
 
       (let [cookie-echo (.poll out-a)]
-        (handle-sctp-packet cookie-echo conn-z))
+        (handle-sctp-packet conn-z cookie-echo))
 
       (let [cookie-ack (.poll out-z)]
-        (handle-sctp-packet cookie-ack conn-a))
+        (handle-sctp-packet conn-a cookie-ack))
 
       (is (= :established (:state @state-a)) "A should be established")
       (is (= :established (:state @state-z)) "Z should be established")
@@ -45,25 +61,25 @@
                             :chunks [{:type :init :init-tag 3333 :a-rwnd 100000
                                       :outbound-streams 10 :inbound-streams 10
                                       :initial-tsn 300 :params {}}]}]
-          (handle-sctp-packet init-packet2 conn-z))
+          (handle-sctp-packet conn-z init-packet2))
 
         ;; Z should reply with INIT-ACK, despite being established
         (let [init-ack2 (.poll out-z)]
           (is init-ack2 "Z should reply with INIT-ACK to the new INIT")
           (is (= :init-ack (-> init-ack2 :chunks first :type)))
-          (handle-sctp-packet (assoc init-ack2 :src-port 5001 :dst-port 5000) conn-a2))
+          (handle-sctp-packet conn-a2 (assoc init-ack2 :src-port 5001 :dst-port 5000)))
 
         ;; A2 sends COOKIE-ECHO
         (let [cookie-echo2 (.poll out-a2)]
           (is cookie-echo2 "A2 should send COOKIE-ECHO")
           (is (= :cookie-echo (-> cookie-echo2 :chunks first :type)))
-          (handle-sctp-packet (assoc cookie-echo2 :src-port 5000 :dst-port 5001) conn-z))
+          (handle-sctp-packet conn-z (assoc cookie-echo2 :src-port 5000 :dst-port 5001)))
 
         ;; Z should reply with COOKIE-ACK and reset its state
         (let [cookie-ack2 (.poll out-z)]
           (is cookie-ack2 "Z should reply with COOKIE-ACK to the new COOKIE-ECHO")
           (is (= :cookie-ack (-> cookie-ack2 :chunks first :type)))
-          (handle-sctp-packet (assoc cookie-ack2 :src-port 5001 :dst-port 5000) conn-a2))
+          (handle-sctp-packet conn-a2 (assoc cookie-ack2 :src-port 5001 :dst-port 5000)))
 
         (is (= :established (:state @state-a2)) "A2 should be established")
         (is (= :established (:state @state-z)) "Z should remain established")
