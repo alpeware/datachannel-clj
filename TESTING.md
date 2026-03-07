@@ -40,7 +40,7 @@
     - [x] Attempt Connect Without Cookie
     - [x] Establish Connection Lost Cookie Ack
     - [x] Resend Init And Establish Connection
-    - [ ] Resending Init Too Many Times Aborts
+    - [x] Resending Init Too Many Times Aborts
     - [x] Resend Cookie Echo And Establish Connection
     - [ ] Resending Cookie Echo Too Many Times Aborts
     - [ ] Doesnt Send More Packets Until Cookie Ack Has Been Received
