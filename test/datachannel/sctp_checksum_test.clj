@@ -26,3 +26,22 @@
       (.position buf 8)
       (let [checksum (.getInt buf)]
         (is (not= 0 checksum) "INIT packet checksum must not be zero")))))
+
+(deftest always-sends-cookie-echo-with-non-zero-checksum-test
+  (testing "Always Sends Cookie Echo With Non Zero Checksum"
+    (let [packet {:src-port 5000
+                  :dst-port 5001
+                  :verification-tag 12345
+                  :chunks [{:type :cookie-echo
+                            :cookie (byte-array 10)}]}
+          buf (ByteBuffer/allocate 1024)]
+      (sctp/encode-packet packet buf)
+
+      ;; Read the checksum
+      (.flip buf)
+
+      ;; Checksum is bytes 8-11 in little-endian order, but let's just
+      ;; ensure it is not exactly 0.
+      (.position buf 8)
+      (let [checksum (.getInt buf)]
+        (is (not= 0 checksum) "COOKIE ECHO packet checksum must not be zero")))))
