@@ -356,8 +356,11 @@
     connection))
 
 (defn send-data [connection ^bytes payload stream-id protocol]
-  (when (zero? (alength payload))
-    (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
+  (let [len (alength payload)]
+    (when (zero? len)
+      (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
+    (when (> len 65519)
+      (throw (ex-info "Cannot send too large message" {:type :too-large}))))
   (let [state (:state connection)
         ver-tag (:remote-ver-tag @state)
         tsn (let [t (:next-tsn @state)]
