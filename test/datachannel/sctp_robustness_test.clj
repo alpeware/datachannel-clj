@@ -707,3 +707,52 @@
         (let [msg2 (second msgs)]
           (is (= 2 (:stream-id msg2)) "Second message stream ID should be 2")
           (is (= "world" (String. ^bytes (:payload msg2))) "Second message payload should be 'world'"))))))
+
+(deftest resent-init-ack-has-different-parameters-test
+  (testing "Resent Init Ack Has Different Parameters"
+    (let [client-state (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0})
+          client-out (java.util.concurrent.LinkedBlockingQueue.)
+          client-opened (atom false)
+          client-conn {:state client-state
+                       :sctp-out client-out
+                       :on-open (atom (fn [] (reset! client-opened true)))}
+
+          server-state (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0})
+          server-out (java.util.concurrent.LinkedBlockingQueue.)
+          server-opened (atom false)
+          server-conn {:state server-state
+                       :sctp-out server-out
+                       :on-open (atom (fn [] (reset! server-opened true)))}
+
+          handle-sctp-packet #'core/handle-sctp-packet]
+
+      ;; 1. Client initiates connection with INIT
+      (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
+                         :chunks [{:type :init
+                                   :init-tag (:local-ver-tag @client-state)
+                                   :a-rwnd 100000
+                                   :outbound-streams 10
+                                   :inbound-streams 10
+                                   :initial-tsn (:next-tsn @client-state)
+                                   :params {}}]}]
+
+        ;; Server receives INIT
+        (handle-sctp-packet init-packet server-conn)
+
+        ;; Server generates INIT-ACK
+        (let [init-ack-packet1 (.poll server-out)]
+          (is init-ack-packet1 "Server should produce first INIT-ACK")
+
+          ;; Server receives the exact same INIT again (e.g. retransmission by client)
+          (handle-sctp-packet init-packet server-conn)
+
+          ;; Server generates another INIT-ACK
+          (let [init-ack-packet2 (.poll server-out)]
+            (is init-ack-packet2 "Server should produce second INIT-ACK")
+
+            ;; In our implementation, INIT-ACK contains a cookie.
+            ;; We should verify that the cookie parameter is different,
+            ;; because it includes a new cryptographically random nonce/timestamp.
+            (let [cookie1 (get-in init-ack-packet1 [:chunks 0 :params :cookie])
+                  cookie2 (get-in init-ack-packet2 [:chunks 0 :params :cookie])]
+              (is (not= (seq cookie1) (seq cookie2)) "Cookies should be different for re-sent INIT-ACKs"))))))))
