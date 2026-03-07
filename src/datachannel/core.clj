@@ -24,6 +24,49 @@
   (when sel
     (try (.close sel) (catch Exception _))))
 
+(defn handle-event [state event now]
+  (case (:type event)
+    :connect
+    (let [{:keys [local-ver-tag initial-tsn]} state
+          init-packet {:src-port 5000
+                       :dst-port 5000
+                       :verification-tag 0
+                       :chunks [{:type :init
+                                 :init-tag local-ver-tag
+                                 :a-rwnd 100000
+                                 :outbound-streams 10
+                                 :inbound-streams 10
+                                 :initial-tsn initial-tsn
+                                 :params {}}]}]
+      {:new-state (-> state
+                      (assoc :state :cookie-wait)
+                      (assoc-in [:timers :t1-init] {:expires-at (+ now 3000) :delay 3000 :retries 0 :packet init-packet}))
+       :effects [{:type :send-packet :packet init-packet}]})
+
+    {:new-state state :effects []}))
+
+(defn handle-timeout [state timer-id now]
+  (case timer-id
+    :t1-init
+    (let [timer (get-in state [:timers :t1-init])
+          retries (:retries timer)]
+      (if (>= retries 8)
+        {:new-state (-> state
+                        (assoc :state :closed)
+                        (update :timers dissoc :t1-init))
+         :effects [{:type :on-error :cause :max-retransmissions}]}
+        (let [new-delay (* (:delay timer) 2)
+              new-delay (min new-delay 60000) ;; Cap delay
+              packet (:packet timer)]
+          {:new-state (assoc-in state [:timers :t1-init]
+                                {:expires-at (+ now new-delay)
+                                 :delay new-delay
+                                 :retries (inc retries)
+                                 :packet packet})
+           :effects [{:type :send-packet :packet packet}]})))
+
+    {:new-state state :effects []}))
+
 (defn- handle-sctp-packet [packet connection]
   (let [chunks (:chunks packet)
         state (:state connection)]
@@ -103,8 +146,11 @@
 
         :init-ack
         (do
-          (swap! state assoc :remote-ver-tag (:init-tag chunk)
-                             :remote-tsn (dec (:initial-tsn chunk)))
+          (swap! state (fn [s]
+                         (-> s
+                             (assoc :remote-ver-tag (:init-tag chunk)
+                                    :remote-tsn (dec (:initial-tsn chunk)))
+                             (update :timers dissoc :t1-init))))
           (when-let [cookie (get-in chunk [:params :cookie])]
             (let [packet {:src-port (:dst-port packet)
                           :dst-port (:src-port packet)
@@ -205,6 +251,17 @@
     (loop [net-in-loop net-in]
       (if (.isOpen channel)
         (do
+          (let [now (System/currentTimeMillis)
+                timers (:timers @(:state connection))]
+            (doseq [[timer-id timer] timers]
+              (when (>= now (:expires-at timer))
+                (let [{:keys [new-state effects]} (handle-timeout @(:state connection) timer-id now)]
+                  (reset! (:state connection) new-state)
+                  (doseq [effect effects]
+                    (case (:type effect)
+                      :send-packet (.offer sctp-out (:packet effect))
+                      :on-error (when-let [cb @(:on-error connection)]
+                                  (cb [{:cause-code -1 :chunk-data (.getBytes (str "Internal Error: " (name (:cause effect))))}]))))))))
           (try
             (let [hs-status (.getHandshakeStatus ssl-engine)]
               (if (or (= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
@@ -287,7 +344,8 @@
                     :state (atom {:remote-ver-tag 0
                                   :local-ver-tag local-ver-tag
                                   :next-tsn 0
-                                  :ssn 0})
+                                  :ssn 0
+                                  :timers {}})
                     :zero-checksum? (:zero-checksum? options)
                     :on-message (atom nil)
                     :on-data (atom nil)
@@ -320,18 +378,12 @@
                       (println "Connection Loop Error:" e))))))]
       (.start t))
 
-    (let [init-chunk {:type :init
-                      :init-tag local-ver-tag
-                      :a-rwnd 100000
-                      :outbound-streams 10
-                      :inbound-streams 10
-                      :initial-tsn 0
-                      :params {}}
-          packet {:src-port 5000
-                  :dst-port 5000
-                  :verification-tag 0
-                  :chunks [init-chunk]}]
-       (.offer (:sctp-out connection) packet))
+    (swap! (:state connection) assoc :initial-tsn 0)
+    (let [{:keys [new-state effects]} (handle-event @(:state connection) {:type :connect} (System/currentTimeMillis))]
+      (reset! (:state connection) new-state)
+      (doseq [effect effects]
+        (case (:type effect)
+          :send-packet (.offer (:sctp-out connection) (:packet effect)))))
 
     connection))
 
