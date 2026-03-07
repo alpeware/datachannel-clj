@@ -121,7 +121,7 @@
     - [ ] Zero Checksum Metrics Are Set
     - [x] Always Sends Init With Non Zero Checksum
     - [ ] May Send Init Ack With Zero Checksum
-    - [ ] Always Sends Cookie Echo With Non Zero Checksum
+    - [x] Always Sends Cookie Echo With Non Zero Checksum
     - [ ] Sends Cookie Ack With Zero Checksum
     - [ ] Sends Data With Zero Checksum
     - [ ] All Packets After Connect Have Zero Checksum
