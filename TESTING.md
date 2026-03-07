@@ -80,7 +80,7 @@
     - [ ] Discards Messages With Low Lifetime If Must Buffer
     - [ ] Respects Per Stream Queue Limit
     - [x] Cannot Send Empty Messages
-    - [ ] Cannot Send Too Large Message
+    - [x] Cannot Send Too Large Message
     - [ ] Has Reasonable Buffered Amount Values
     - [ ] Has Default On Buffered Amount Low Value Zero
     - [ ] Triggers On Buffered Amount Low With Default Value Zero
