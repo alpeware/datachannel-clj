@@ -233,7 +233,7 @@
                   (while (let [packet (.poll sctp-out)]
                            (when packet
                              (.clear app-out)
-                             (sctp/encode-packet packet app-out)
+                             (sctp/encode-packet packet app-out {:zero-checksum? (:zero-checksum? connection)})
                              (.flip app-out)
                              (let [res (dtls/send-app-data ssl-engine app-out net-out)]
                                (when-let [bytes (:bytes res)]
@@ -288,6 +288,7 @@
                                   :local-ver-tag local-ver-tag
                                   :next-tsn 0
                                   :ssn 0})
+                    :zero-checksum? (:zero-checksum? options)
                     :on-message (atom nil)
                     :on-data (atom nil)
                     :on-open (atom nil)
