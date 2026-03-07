@@ -128,7 +128,7 @@
     - [ ] Handles Forward Tsn Out Of Order With Stream Resetting
     - [ ] Resent Init Has Same Parameters
     - [x] Resent Init Ack Has Different Parameters
-    - [ ] Connection Can Continue From First Init Ack
+    - [x] Connection Can Continue From First Init Ack
     - [ ] Connection Can Continue From Second Init Ack
     - [ ] Handover Preserves Stream Reset State
     - [ ] Establish Simultaneous Connection With Lost Data

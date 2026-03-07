@@ -12,6 +12,7 @@
             [datachannel.webrtc-extended-test]
             [datachannel.sctp-robustness-test]
             [datachannel.sctp-state-machine-test]
+            [datachannel.sctp-init-ack-robustness-test]
             [datachannel.rehandshake-test]))
 
 (defn -main []
@@ -27,7 +28,8 @@
                                              'datachannel.webrtc-integration-test
                                              'datachannel.webrtc-extended-test
                                              'datachannel.sctp-robustness-test
-                                             'datachannel.sctp-state-machine-test)]
+                                             'datachannel.sctp-state-machine-test
+                                             'datachannel.sctp-init-ack-robustness-test)]
     (if (> (+ fail error) 0)
       (System/exit 1)
       (System/exit 0))))
