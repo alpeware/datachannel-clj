@@ -1,7 +1,17 @@
-Implement missing test cases from TESTING.md
+Implement missing test cases from TESTING.md.
 
-- Compare existing tests with the list of incomplete test cases
-- Pick one suitable new test
-- Implement it
-- If the new test belongs in its own logical group or if the existing test file is getting too large, create a brand new test file instead of appending to an existing one then add it to the test runner
-- Mark it as done
+CRITICAL ARCHITECTURE NOTICE: Many remaining tests require systemic features (timers, retransmission queues, metrics) that do not exist in `datachannel.core` yet. You MUST use `DESIGN-SCTP.md` as your strict architectural blueprint for adding these features to the core. Maintain the Sans-IO, pure-functional paradigm.
+
+AUTONOMY DIRECTIVE: 
+- Do NOT pause to ask for human clarification, feedback, or permission. 
+- You are an autonomous Principal Engineer operating in a continuous loop.
+- If you face ambiguity in the design or the test requirements, make a reasonable, isolated engineering decision independently and proceed. 
+- Your sole focus is shipping working, tested code incrementally.
+
+Workflow:
+1. Pick ONE unchecked test from TESTING.md.
+2. Identify if the test requires new core features to pass.
+3. If yes, implement the required core state machine features strictly adhering to DESIGN-SCTP.md.
+4. Implement the test itself using our deterministic queue-based testing harness.
+5. If the new test belongs in its own logical group, create a brand new test file instead of appending to an existing one.
+6. Mark the test as done in TESTING.md.
