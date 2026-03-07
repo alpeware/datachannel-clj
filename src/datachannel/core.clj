@@ -119,6 +119,38 @@
                               (assoc-in [:timers :t3-rtx] {:expires-at (+ now new-delay) :delay new-delay}))
                :effects [{:type :send-packet :packet packet}]})))))
 
+    :t-heartbeat
+    (let [interval (get state :heartbeat-interval 30000)
+          rto (get state :rto-initial 1000)
+          packet {:src-port 5000
+                  :dst-port 5000
+                  :verification-tag (:remote-ver-tag state)
+                  :chunks [{:type :heartbeat
+                            :params [{:type :heartbeat-info :info (byte-array 8)}]}]}]
+      {:new-state (-> state
+                      (assoc-in [:timers :t-heartbeat] {:expires-at (+ now interval)})
+                      (assoc-in [:timers :t-heartbeat-rtx] {:expires-at (+ now rto)}))
+       :effects [{:type :send-packet :packet packet}]})
+
+    :t-heartbeat-rtx
+    (let [errors (get state :heartbeat-error-count 0)
+          max-retries (get state :max-retransmissions 10)
+          new-errors (inc errors)]
+      (if (> new-errors max-retries)
+        {:new-state (-> state
+                        (assoc :state :closed)
+                        (update :timers dissoc :t-heartbeat :t-heartbeat-rtx))
+         :effects [{:type :send-packet
+                    :packet {:src-port 5000
+                             :dst-port 5000
+                             :verification-tag (:remote-ver-tag state)
+                             :chunks [{:type :abort}]}}
+                   {:type :on-error :cause :max-retransmissions}]}
+        {:new-state (-> state
+                        (assoc :heartbeat-error-count new-errors)
+                        (update :timers dissoc :t-heartbeat-rtx))
+         :effects []}))
+
     {:new-state state :effects []}))
 
 (defn- handle-sctp-packet [packet connection]
@@ -217,7 +249,12 @@
 
         :cookie-echo
         (do
-           (swap! state assoc :state :established)
+           (swap! state (fn [s]
+                          (let [interval (get s :heartbeat-interval 30000)
+                                s (assoc s :state :established)]
+                            (if (pos? interval)
+                              (assoc-in s [:timers :t-heartbeat] {:expires-at (+ (System/currentTimeMillis) interval)})
+                              s))))
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
                          :verification-tag (:remote-ver-tag @state)
@@ -228,7 +265,12 @@
 
         :cookie-ack
         (do
-           (swap! state update :timers dissoc :t1-init)
+           (swap! state (fn [s]
+                          (let [interval (get s :heartbeat-interval 30000)
+                                s (update s :timers dissoc :t1-init)]
+                            (if (pos? interval)
+                              (assoc-in s [:timers :t-heartbeat] {:expires-at (+ (System/currentTimeMillis) interval)})
+                              s))))
            (when (= (:state @state) :shutdown-pending)
              (swap! state assoc :state :shutdown-sent)
              (let [packet {:src-port (:dst-port packet)
@@ -272,7 +314,12 @@
                                ;; For simplicity now, just update the queue.
                                (assoc s :tx-queue new-q)))))))
 
-        :heartbeat-ack nil
+        :heartbeat-ack
+        (do
+          (swap! state (fn [s]
+                         (-> s
+                             (assoc :heartbeat-error-count 0)
+                             (update :timers dissoc :t-heartbeat-rtx)))))
         :shutdown
         (do
            (swap! state assoc :state :shutdown-ack-sent)
@@ -432,7 +479,11 @@
                                   :local-ver-tag local-ver-tag
                                   :next-tsn 0
                                   :ssn 0
-                                  :timers {}})
+                                  :timers {}
+                                  :heartbeat-interval (get options :heartbeat-interval 30000)
+                                  :heartbeat-error-count 0
+                                  :rto-initial (get options :rto-initial 1000)
+                                  :max-retransmissions (get options :max-retransmissions 10)})
                     :zero-checksum? (:zero-checksum? options)
                     :on-message (atom nil)
                     :on-data (atom nil)
@@ -534,8 +585,13 @@
      (swap! state (fn [s]
                     (let [q (get s :tx-queue [])
                           new-q (conj q {:tsn tsn :packet packet :sent-at now :retries 0})
-                          new-s (assoc s :tx-queue new-q)]
-                      (if (nil? (get-in s [:timers :t3-rtx]))
+                          new-s (assoc s :tx-queue new-q)
+                          interval (get s :heartbeat-interval 30000)
+                          ;; Reset heartbeat timer when sending data
+                          new-s (if (and (pos? interval) (contains? (:timers new-s) :t-heartbeat))
+                                  (assoc-in new-s [:timers :t-heartbeat] {:expires-at (+ now interval)})
+                                  new-s)]
+                      (if (nil? (get-in new-s [:timers :t3-rtx]))
                         (assoc-in new-s [:timers :t3-rtx] {:expires-at (+ now 1000) :delay 1000})
                         new-s))))
      (.offer (:sctp-out connection) packet)))
