@@ -35,7 +35,7 @@
     - [x] Establish Connection
     - [x] Send Many Api Method
     - [ ] Establish Connection With Setup Collision
-    - [ ] Shutting Down While Establishing Connection
+    - [x] Shutting Down While Establishing Connection
     - [x] Establish Simultaneous Connection
     - [x] Attempt Connect Without Cookie
     - [x] Establish Connection Lost Cookie Ack
