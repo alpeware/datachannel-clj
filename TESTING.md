@@ -120,11 +120,11 @@
     - [ ] Reset Streams With Paused Sender Resumes When Performed
     - [ ] Zero Checksum Metrics Are Set
     - [x] Always Sends Init With Non Zero Checksum
-    - [ ] May Send Init Ack With Zero Checksum
+    - [x] May Send Init Ack With Zero Checksum
     - [x] Always Sends Cookie Echo With Non Zero Checksum
-    - [ ] Sends Cookie Ack With Zero Checksum
-    - [ ] Sends Data With Zero Checksum
-    - [ ] All Packets After Connect Have Zero Checksum
+    - [x] Sends Cookie Ack With Zero Checksum
+    - [x] Sends Data With Zero Checksum
+    - [x] All Packets After Connect Have Zero Checksum
     - [ ] Handles Forward Tsn Out Of Order With Stream Resetting
     - [ ] Resent Init Has Same Parameters
     - [x] Resent Init Ack Has Different Parameters

@@ -379,14 +379,19 @@
 
     (set-length-and-padding buf start-pos)))
 
-(defn encode-packet [packet ^ByteBuffer buf]
-  (let [orig-order (.order buf)]
-    (.order buf ByteOrder/BIG_ENDIAN)
-    (.putShort buf (unchecked-short (:src-port packet)))
-    (.putShort buf (unchecked-short (:dst-port packet)))
-    (.putInt buf (unchecked-int (:verification-tag packet)))
-    (.putInt buf 0)
-    (doseq [chunk (:chunks packet)]
-      (encode-chunk buf chunk))
-    (update-checksum buf)
-    (.order buf orig-order)))
+(defn encode-packet
+  ([packet buf] (encode-packet packet buf nil))
+  ([packet ^ByteBuffer buf {:keys [zero-checksum?]}]
+   (let [orig-order (.order buf)]
+     (.order buf ByteOrder/BIG_ENDIAN)
+     (.putShort buf (unchecked-short (:src-port packet)))
+     (.putShort buf (unchecked-short (:dst-port packet)))
+     (.putInt buf (unchecked-int (:verification-tag packet)))
+     (.putInt buf 0)
+     (doseq [chunk (:chunks packet)]
+       (encode-chunk buf chunk))
+     ;; Only skip checksum if zero-checksum? is true AND there is no INIT or COOKIE-ECHO chunks
+     (let [has-init-or-cookie-echo? (some #(#{:init :cookie-echo} (:type %)) (:chunks packet))]
+       (when-not (and zero-checksum? (not has-init-or-cookie-echo?))
+         (update-checksum buf)))
+     (.order buf orig-order))))
