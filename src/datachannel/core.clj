@@ -165,6 +165,9 @@
         (do
            (swap! state assoc :state :closed)
            nil)
+        :error
+        (when-let [cb @(:on-error connection)]
+          (cb (:causes chunk)))
         :abort (println "Received SCTP ABORT")
         (let [type-val (:type chunk)]
           (when (number? type-val)
@@ -286,6 +289,7 @@
                     :on-message (atom nil)
                     :on-data (atom nil)
                     :on-open (atom nil)
+                    :on-error (atom nil)
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
                     :ice-pwd (:ice-pwd options)

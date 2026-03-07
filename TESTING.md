@@ -73,7 +73,7 @@
     - [ ] Recover On Last Retransmission
     - [ ] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
-    - [ ] Receiving Error Chunk Reports As Callback
+    - [x] Receiving Error Chunk Reports As Callback
     - [ ] Set Max Message Size
     - [x] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
