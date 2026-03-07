@@ -74,7 +74,7 @@
     - [ ] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
     - [x] Receiving Error Chunk Reports As Callback
-    - [ ] Set Max Message Size
+    - [x] Set Max Message Size
     - [x] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
     - [ ] Discards Messages With Low Lifetime If Must Buffer

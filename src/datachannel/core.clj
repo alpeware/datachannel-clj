@@ -359,11 +359,16 @@
 
     connection))
 
+(defn set-max-message-size! [connection max-size]
+  (swap! (:state connection) assoc :max-message-size max-size))
+
 (defn send-data [connection ^bytes payload stream-id protocol]
-  (let [len (alength payload)]
+  (let [state (:state connection)
+        len (alength payload)
+        max-size (get @state :max-message-size 65519)]
     (when (zero? len)
       (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
-    (when (> len 65519)
+    (when (> len max-size)
       (throw (ex-info "Cannot send too large message" {:type :too-large}))))
   (let [state (:state connection)
         ver-tag (:remote-ver-tag @state)
