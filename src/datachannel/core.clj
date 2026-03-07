@@ -112,6 +112,7 @@
 
         :cookie-echo
         (do
+           (swap! state assoc :state :established)
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
                          :verification-tag (:remote-ver-tag @state)
@@ -122,6 +123,15 @@
 
         :cookie-ack
         (do
+           (when (= (:state @state) :shutdown-pending)
+             (swap! state assoc :state :shutdown-sent)
+             (let [packet {:src-port (:dst-port packet)
+                           :dst-port (:src-port packet)
+                           :verification-tag (:remote-ver-tag @state)
+                           :chunks [{:type :shutdown}]}]
+                (.offer (:sctp-out connection) packet)))
+           (when-not (= (:state @state) :shutdown-sent)
+             (swap! state assoc :state :established))
            (when-let [cb @(:on-open connection)]
              (cb)))
 
@@ -137,6 +147,7 @@
         :heartbeat-ack nil
         :shutdown
         (do
+           (swap! state assoc :state :shutdown-ack-sent)
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
                          :verification-tag (:remote-ver-tag @state)
@@ -144,12 +155,16 @@
               (.offer (:sctp-out connection) packet)))
         :shutdown-ack
         (do
+           (swap! state assoc :state :closed)
            (let [packet {:src-port (:dst-port packet)
                          :dst-port (:src-port packet)
                          :verification-tag (:remote-ver-tag @state)
                          :chunks [{:type :shutdown-complete}]}]
               (.offer (:sctp-out connection) packet)))
-        :shutdown-complete nil
+        :shutdown-complete
+        (do
+           (swap! state assoc :state :closed)
+           nil)
         :abort (println "Received SCTP ABORT")
         nil))))
 
