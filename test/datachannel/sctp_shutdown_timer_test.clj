@@ -33,9 +33,9 @@
         (if (< i 8)
           (let [timer (get-in @state-a [:timers :t2-shutdown])
                 next-now (:expires-at timer)
-                {:keys [new-state effects]} (core/handle-timeout @state-a :t2-shutdown next-now)]
+                {:keys [new-state network-out]} (core/handle-timeout @state-a :t2-shutdown next-now)]
             (reset! state-a new-state)
-            (doseq [eff effects]
+            (doseq [eff network-out]
               (if (= (:type eff) :send-packet)
                 (.offer out-a (:packet eff))))
             (is (.poll out-a)) ;; Consume retransmitted SHUTDOWN
@@ -43,9 +43,9 @@
           ;; 9th expiry should close
           (let [timer (get-in @state-a [:timers :t2-shutdown])
                 next-now (:expires-at timer)
-                {:keys [new-state effects]} (core/handle-timeout @state-a :t2-shutdown next-now)]
+                {:keys [new-state network-out]} (core/handle-timeout @state-a :t2-shutdown next-now)]
             (reset! state-a new-state)
-            (doseq [eff effects]
+            (doseq [eff network-out]
               (if (= (:type eff) :on-error)
                 (@(:on-error conn-a) (:cause eff))
                 (if (= (:type eff) :send-packet)

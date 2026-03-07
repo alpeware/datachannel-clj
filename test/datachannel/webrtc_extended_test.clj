@@ -25,7 +25,7 @@
         dc-open-promise (promise)
         binary-received (promise)]
 
-    (reset! (:on-data server)
+    (swap! (:state server) assoc :on-data
             (fn [{:keys [payload protocol]}]
               (when (= protocol :webrtc/binary)
                 (deliver binary-received payload))))
@@ -89,7 +89,7 @@
         messages-received (atom [])
         num-messages 20]
 
-    (reset! (:on-message server)
+    (swap! (:state server) assoc :on-message
             (fn [msg]
               (swap! messages-received conj (String. msg "UTF-8"))))
 
@@ -160,7 +160,7 @@
         large-data (byte-array 1000)]
     (.nextBytes (java.security.SecureRandom.) large-data)
 
-    (reset! (:on-data server)
+    (swap! (:state server) assoc :on-data
             (fn [{:keys [payload]}]
               (deliver large-msg-received payload)))
 
@@ -221,7 +221,7 @@
         dc2-open-promise (promise)
         messages (atom {})]
 
-    (reset! (:on-data server)
+    (swap! (:state server) assoc :on-data
             (fn [{:keys [payload stream-id]}]
               (swap! messages assoc stream-id (String. payload "UTF-8"))))
 

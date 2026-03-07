@@ -22,14 +22,14 @@
 
       ;; Expire t-heartbeat
       (let [timer-expire-time (+ now 30000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
         (reset! state-atom new-state)
         (is (= :established (:state @state-atom)) "State should remain established")
         (is (contains? (:timers @state-atom) :t-heartbeat-rtx) "Should start RTX timer")
 
-        (let [hb-effect (first (filter #(= (:type %) :send-packet) effects))]
+        (let [hb-effect (first network-out)]
           (is hb-effect "Should emit an effect to send heartbeat")
-          (let [packet (:packet hb-effect)
+          (let [packet hb-effect
                 chunk (first (:chunks packet))]
             (is (= :heartbeat (:type chunk)))
             ;; Simulate receiving HEARTBEAT-ACK
@@ -91,16 +91,16 @@
 
       ;; Expire t-heartbeat
       (let [timer-expire-time (+ now 30000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
         (reset! state-atom new-state))
 
       ;; Now we have a t-heartbeat-rtx timer. Expire it.
       (let [rtx-expire-time (+ now 30000 1000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time)]
         (reset! state-atom new-state)
         (is (= :closed (:state @state-atom)) "Should abort after 1 lost heartbeat since max-retransmissions is 0")
-        (let [abort-effect (first (filter #(= (:type %) :send-packet) effects))]
-          (is (= :abort (:type (first (:chunks (:packet abort-effect)))))))))))
+        (let [abort-effect (first network-out)]
+          (is (= :abort (:type (first (:chunks abort-effect))))))))))
 
 (deftest close-connection-after-second-lost-heartbeat-test
   (testing "Close Connection After Second Lost Heartbeat"
@@ -122,24 +122,24 @@
 
       ;; Expire t-heartbeat
       (let [timer-expire-time (+ now 30000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
         (reset! state-atom new-state))
 
       ;; Expire t-heartbeat-rtx for the first time
       (let [rtx-expire-time (+ now 30000 1000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time)]
         (reset! state-atom new-state)
         (is (= :established (:state @state-atom)) "Should not abort yet")
         (is (= 1 (:heartbeat-error-count @state-atom))))
 
       ;; Expire t-heartbeat again
       (let [timer-expire-time-2 (+ now 60000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time-2)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time-2)]
         (reset! state-atom new-state))
 
       ;; Expire t-heartbeat-rtx for the second time
       (let [rtx-expire-time-2 (+ now 60000 1000)
-            {:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time-2)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time-2)]
         (reset! state-atom new-state)
         (is (= :closed (:state @state-atom)) "Should abort after 2 lost heartbeats since max-retransmissions is 1")))))
 
@@ -166,18 +166,18 @@
         (if (< i 10)
           (do
             ;; Expire t-heartbeat
-            (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
+            (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
               (reset! state-atom new-state))
 
             ;; Expire t-heartbeat-rtx
-            (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
+            (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
               (reset! state-atom new-state))
             (recur (inc i) (+ current-time 30000)))
 
           ;; 11th time
           (do
-            (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
+            (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
               (reset! state-atom new-state))
-            (let [{:keys [new-state effects]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
+            (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
               (reset! state-atom new-state)
               (is (= :closed (:state @state-atom)) "Should abort after 11 lost heartbeats since max-retransmissions is 10"))))))))

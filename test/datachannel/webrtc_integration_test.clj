@@ -79,7 +79,7 @@
                                                     (println "Java received message:" s)
                                                     (deliver dc-message-promise s))))))]
 
-      (reset! (:on-message server)
+      (swap! (:state server) assoc :on-message
               (fn [msg]
                 (let [s (String. msg "UTF-8")]
                   (println "Clojure received message:" s)

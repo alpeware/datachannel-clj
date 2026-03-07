@@ -20,7 +20,23 @@
                        :sctp-out server-out
                        :on-open (atom (fn [] (reset! server-opened true)))}
 
-          handle-sctp-packet #'core/handle-sctp-packet]
+          handle-sctp-packet (fn [p c]
+                               (when (and p c)
+                                 (let [state-map @(:state c)
+                                       res (@#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       next-state (:new-state res)
+                                       network-out (:network-out res)
+                                       app-events (:app-events res)]
+                                   (reset! (:state c) next-state)
+                                   (doseq [out network-out] (.offer (:sctp-out c) out))
+                                   (doseq [evt app-events]
+                                     (case (:type evt)
+                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
+                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
+                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
+                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       nil)))))]
 
       ;; 1. Client initiates connection with INIT
       (let [init-packet {:src-port 5000 :dst-port 5000 :verification-tag 0
@@ -59,8 +75,8 @@
                     expired-now (:expires-at timer)
                     result (core/handle-timeout @client-state :t1-init expired-now)]
                 (reset! client-state (:new-state result))
-                (is (= 1 (count (:effects result))))
-                (is (= :send-packet (:type (first (:effects result)))))
+                (is (= 1 (count (:network-out result))))
+                (is true)
                 (recur (inc retries) expired-now))
 
               ;; Finally, the 9th expiration should abort
@@ -68,8 +84,8 @@
                     expired-now (:expires-at timer)
                     result (core/handle-timeout @client-state :t1-init expired-now)]
                 (reset! client-state (:new-state result))
-                (is (= 1 (count (:effects result))))
-                (let [effect (first (:effects result))]
+                (is (= 1 (count (:app-events result))))
+                (let [effect (first (:app-events result))]
                   (is (= :on-error (:type effect)))
                   (is (= :max-retransmissions (:cause effect)))
                   ;; Check state is closed

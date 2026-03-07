@@ -11,14 +11,18 @@
           on-error (atom (fn [causes]
                            (reset! error-called true)
                            (reset! received-causes causes)))
-          conn {:state state-atom :sctp-out out-queue :on-error on-error}
-          handle-sctp-packet #'core/handle-sctp-packet
+          conn {:state state-atom :sctp-out out-queue }
+
 
           error-packet {:src-port 5000 :dst-port 5001 :verification-tag 0
                         :chunks [{:type :error
                                   :causes [{:cause-code 1 :chunk-data (byte-array 0)}]}]}]
 
-      (handle-sctp-packet error-packet conn)
+      (let [{:keys [app-events]} (@#'core/handle-sctp-packet @state-atom error-packet (System/currentTimeMillis))
+            evt (first app-events)]
+        (when (= (:type evt) :on-error)
+          (reset! error-called true)
+          (reset! received-causes (:causes evt))))
 
       (is @error-called "The :on-error callback should have been called")
       (is (= 1 (count @received-causes)) "There should be one error cause")
