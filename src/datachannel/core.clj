@@ -97,15 +97,27 @@
         ;; If queue is empty, stop the timer
         {:new-state (update state :timers dissoc :t3-rtx) :effects []}
         (let [first-item (first q)
-              packet (:packet first-item)
-              new-delay (* (:delay timer) 2)
-              new-delay (min new-delay 60000)
-              updated-item (assoc first-item :retries (inc (:retries first-item)))
-              new-q (assoc q 0 updated-item)]
-          {:new-state (-> state
-                          (assoc :tx-queue new-q)
-                          (assoc-in [:timers :t3-rtx] {:expires-at (+ now new-delay) :delay new-delay}))
-           :effects [{:type :send-packet :packet packet}]})))
+              retries (:retries first-item)
+              max-retries (get state :max-retransmissions 10)]
+          (if (>= retries max-retries)
+            {:new-state (-> state
+                            (assoc :state :closed)
+                            (update :timers dissoc :t3-rtx))
+             :effects [{:type :send-packet
+                        :packet {:src-port (:src-port (:packet first-item))
+                                 :dst-port (:dst-port (:packet first-item))
+                                 :verification-tag (:remote-ver-tag state)
+                                 :chunks [{:type :abort}]}}
+                       {:type :on-error :cause :max-retransmissions}]}
+            (let [packet (:packet first-item)
+                  new-delay (* (:delay timer) 2)
+                  new-delay (min new-delay 60000)
+                  updated-item (assoc first-item :retries (inc retries))
+                  new-q (assoc q 0 updated-item)]
+              {:new-state (-> state
+                              (assoc :tx-queue new-q)
+                              (assoc-in [:timers :t3-rtx] {:expires-at (+ now new-delay) :delay new-delay}))
+               :effects [{:type :send-packet :packet packet}]})))))
 
     {:new-state state :effects []}))
 
