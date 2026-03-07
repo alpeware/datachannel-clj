@@ -13,7 +13,8 @@
             [datachannel.sctp-robustness-test]
             [datachannel.sctp-state-machine-test]
             [datachannel.sctp-init-ack-robustness-test]
-            [datachannel.rehandshake-test]))
+            [datachannel.rehandshake-test]
+            [datachannel.sctp-message-test]))
 
 (defn -main []
   (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
@@ -29,7 +30,8 @@
                                              'datachannel.webrtc-extended-test
                                              'datachannel.sctp-robustness-test
                                              'datachannel.sctp-state-machine-test
-                                             'datachannel.sctp-init-ack-robustness-test)]
+                                             'datachannel.sctp-init-ack-robustness-test
+                                             'datachannel.sctp-message-test)]
     (if (> (+ fail error) 0)
       (System/exit 1)
       (System/exit 0))))
