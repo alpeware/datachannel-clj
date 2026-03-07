@@ -21,7 +21,8 @@
             [datachannel.sctp-max-message-size-test]
             [datachannel.sctp-reconnect-test]
             [datachannel.sctp-checksum-test]
-            [datachannel.sctp-init-abort-test]))
+            [datachannel.sctp-init-abort-test]
+            [datachannel.sctp-cookie-echo-abort-test]))
 
 (defn -main [& args]
   (let [{:keys [fail error]}
@@ -47,5 +48,6 @@
          'datachannel.sctp-max-message-size-test
          'datachannel.sctp-reconnect-test
          'datachannel.sctp-checksum-test
-         'datachannel.sctp-init-abort-test)]
+         'datachannel.sctp-init-abort-test
+         'datachannel.sctp-cookie-echo-abort-test)]
     (System/exit (+ fail error))))
