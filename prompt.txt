@@ -1,14 +1,30 @@
-Act as a Principal Software Engineer. Your objective is to execute Phase 1 of the public API refactor defined in `DESIGN-API.md`. We are migrating the library to a strict Sans-IO architecture.
+Act as an autonomous Principal Software Engineer operating in a continuous, automated CI loop. We are currently in the middle of a major architectural refactor. Your goal is to build out the `datachannel-clj` library incrementally.
 
-PHASE 1 SCOPE (CORE & TESTS ONLY):
-1. Update `datachannel.core` to expose the pure `handle-receive` and `handle-timeout` function signatures exactly as defined in `DESIGN-API.md`.
-2. Ensure these core functions return the `{:new-state ..., :network-out [...], :app-events [...]}` map.
-3. Remove all usage of callback atoms (e.g., `:on-open`, `:on-message`, `:on-data`, `:on-error`) from the connection state map and internal core logic. Emit these as pure data in the `:app-events` vector instead.
-4. Refactor ALL existing test files (e.g., `handshake_test.clj`, `sctp_robustness_test.clj`, `sctp-init-abort-test.clj`) to use the new pure API. The tests must capture the returned map and assert against the `:app-events` vector, rather than relying on injected callback atoms.
+CRITICAL WORKFLOW DIRECTIVE: SMALL PRs & TEST MANAGEMENT
+- You must work in small, incremental Pull Requests. Do not attempt to refactor the entire codebase in a single pass.
+- If an architectural change breaks many tests, it is STRICTLY ALLOWED to temporarily remove the failing tests from the test runner (`test_runner.clj`) to achieve a green CI build and keep the PR manageable.
+- You will fix and re-add those disabled tests in subsequent iterations of this loop.
+- Actively clean up dead code, obsolete paradigms (like callback atoms), and unused functions as you touch files.
+
+PRIORITY 1: ARCHITECTURAL ALIGNMENT & CLEANUP
+Ensure the codebase strictly matches the specifications in `DESIGN-API.md` and `DESIGN-SCTP.md`.
+- If the API refactor (Sans-IO, pure data events, `datachannel.nio` wrapper) is incomplete, incrementally finish it.
+- Fix and re-add any tests that were previously removed from the test runner.
+- If core SCTP features (timers, retransmission queues) are missing, implement them.
+
+PRIORITY 2: TEST-DRIVEN DEVELOPMENT
+Once the architecture aligns with the design docs and all disabled tests are restored, resume `TESTING.md`.
+1. Pick ONE unchecked test.
+2. Implement any missing core functionality required for that test.
+3. Write the test, ensure it passes, and add it to the runner.
+4. Mark the test as done in `TESTING.md`.
+
+ARCHITECTURAL CONSTRAINTS:
+- Maintain strict functional purity in `datachannel.core`.
+- No threads, `core.async`, or background loops in the core. Follow the "Bring Your Own Loop" model.
+- All network side-effects and application events must be returned purely as data (`{:new-state ... :network-out [...] :app-events [...]}`).
 
 AUTONOMY DIRECTIVE: 
 - Do NOT pause to ask for human clarification, feedback, or permission. 
-- You are an autonomous Principal Engineer.
-- If you face ambiguity during the refactor, make a reasonable, isolated engineering decision independently and proceed.
-- Do NOT implement the `datachannel.nio` namespace yet. That is Phase 2. Focus entirely on migrating the core logic and making the existing test suite pass with
-the new API.
+- Make reasonable, isolated engineering decisions independently and proceed. Focus on shipping working
+, tested code incrementally.
