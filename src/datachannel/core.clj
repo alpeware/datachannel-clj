@@ -166,7 +166,20 @@
            (swap! state assoc :state :closed)
            nil)
         :abort (println "Received SCTP ABORT")
-        nil))))
+        (let [type-val (:type chunk)]
+          (when (number? type-val)
+            (let [upper-bits (bit-shift-right (bit-and type-val 0xC0) 6)]
+              (cond
+                (= upper-bits 1) ;; 01: discard packet and report
+                (let [packet {:src-port (:dst-port packet)
+                              :dst-port (:src-port packet)
+                              :verification-tag (:remote-ver-tag @state)
+                              :chunks [{:type :error
+                                        :causes [{:cause-code 6 ;; Unrecognized Chunk Type
+                                                  :chunk-data (:body chunk)}]}]}]
+                  (.offer (:sctp-out connection) packet))
+                ;; Other bits (00, 10, 11) will just skip or discard as required, no explicit response needed for now.
+                :else nil))))))))
 
 
 (defn- run-loop [^DatagramChannel channel ^Selector selector ^SSLEngine ssl-engine peer-addr connection & [initial-data]]

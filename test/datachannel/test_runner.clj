@@ -15,7 +15,8 @@
             [datachannel.sctp-init-ack-robustness-test]
             [datachannel.rehandshake-test]
             [datachannel.sctp-message-test]
-            [datachannel.sctp-establish-simultaneous-lost-data-test]))
+            [datachannel.sctp-establish-simultaneous-lost-data-test]
+            [datachannel.sctp-unknown-chunk-test]))
 
 (defn -main []
   (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
@@ -33,7 +34,8 @@
                                              'datachannel.sctp-state-machine-test
                                              'datachannel.sctp-init-ack-robustness-test
                                              'datachannel.sctp-message-test
-                                             'datachannel.sctp-establish-simultaneous-lost-data-test)]
+                                             'datachannel.sctp-establish-simultaneous-lost-data-test
+                                             'datachannel.sctp-unknown-chunk-test)]
     (if (> (+ fail error) 0)
       (System/exit 1)
       (System/exit 0))))
