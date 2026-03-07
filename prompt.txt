@@ -1,17 +1,14 @@
-Implement missing test cases from TESTING.md.
+Act as a Principal Software Engineer. Your objective is to execute Phase 1 of the public API refactor defined in `DESIGN-API.md`. We are migrating the library to a strict Sans-IO architecture.
 
-CRITICAL ARCHITECTURE NOTICE: Many remaining tests require systemic features (timers, retransmission queues, metrics) that do not exist in `datachannel.core` yet. You MUST use `DESIGN-SCTP.md` as your strict architectural blueprint for adding these features to the core. Maintain the Sans-IO, pure-functional paradigm.
+PHASE 1 SCOPE (CORE & TESTS ONLY):
+1. Update `datachannel.core` to expose the pure `handle-receive` and `handle-timeout` function signatures exactly as defined in `DESIGN-API.md`.
+2. Ensure these core functions return the `{:new-state ..., :network-out [...], :app-events [...]}` map.
+3. Remove all usage of callback atoms (e.g., `:on-open`, `:on-message`, `:on-data`, `:on-error`) from the connection state map and internal core logic. Emit these as pure data in the `:app-events` vector instead.
+4. Refactor ALL existing test files (e.g., `handshake_test.clj`, `sctp_robustness_test.clj`, `sctp-init-abort-test.clj`) to use the new pure API. The tests must capture the returned map and assert against the `:app-events` vector, rather than relying on injected callback atoms.
 
 AUTONOMY DIRECTIVE: 
 - Do NOT pause to ask for human clarification, feedback, or permission. 
-- You are an autonomous Principal Engineer operating in a continuous loop.
-- If you face ambiguity in the design or the test requirements, make a reasonable, isolated engineering decision independently and proceed. 
-- Your sole focus is shipping working, tested code incrementally.
-
-Workflow:
-1. Pick ONE unchecked test from TESTING.md.
-2. Identify if the test requires new core features to pass.
-3. If yes, implement the required core state machine features strictly adhering to DESIGN-SCTP.md.
-4. Implement the test itself using our deterministic queue-based testing harness.
-5. If the new test belongs in its own logical group, create a brand new test file instead of appending to an existing one.
-6. Mark the test as done in TESTING.md.
+- You are an autonomous Principal Engineer.
+- If you face ambiguity during the refactor, make a reasonable, isolated engineering decision independently and proceed.
+- Do NOT implement the `datachannel.nio` namespace yet. That is Phase 2. Focus entirely on migrating the core logic and making the existing test suite pass with
+the new API.
