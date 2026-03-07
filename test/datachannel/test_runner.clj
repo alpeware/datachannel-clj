@@ -1,8 +1,9 @@
 (ns datachannel.test-runner
-  (:require [clojure.test :as test]
+  (:require [clojure.test :refer [run-tests]]
             [datachannel.sctp-test]
             [datachannel.dtls-test]
             [datachannel.handshake-test]
+            [datachannel.rehandshake-test]
             [datachannel.integration-test]
             [datachannel.webrtc-java-test]
             [datachannel.stun-test]
@@ -13,35 +14,36 @@
             [datachannel.sctp-robustness-test]
             [datachannel.sctp-state-machine-test]
             [datachannel.sctp-init-ack-robustness-test]
-            [datachannel.rehandshake-test]
             [datachannel.sctp-message-test]
             [datachannel.sctp-establish-simultaneous-lost-data-test]
             [datachannel.sctp-unknown-chunk-test]
             [datachannel.sctp-error-chunk-test]
             [datachannel.sctp-max-message-size-test]
-            [datachannel.sctp-reconnect-test]))
+            [datachannel.sctp-reconnect-test]
+            [datachannel.sctp-checksum-test]))
 
-(defn -main []
-  (let [{:keys [fail error]} (test/run-tests 'datachannel.sctp-test
-                                             'datachannel.dtls-test
-                                             'datachannel.handshake-test
-                                             'datachannel.rehandshake-test
-                                             'datachannel.integration-test
-                                             'datachannel.webrtc-java-test
-                                             'datachannel.stun-test
-                                             'datachannel.stun-integration-test
-                                             'datachannel.stun-webrtc-integration-test
-                                             'datachannel.webrtc-integration-test
-                                             'datachannel.webrtc-extended-test
-                                             'datachannel.sctp-robustness-test
-                                             'datachannel.sctp-state-machine-test
-                                             'datachannel.sctp-init-ack-robustness-test
-                                             'datachannel.sctp-message-test
-                                             'datachannel.sctp-establish-simultaneous-lost-data-test
-                                             'datachannel.sctp-unknown-chunk-test
-                                             'datachannel.sctp-error-chunk-test
-                                             'datachannel.sctp-max-message-size-test
-                                             'datachannel.sctp-reconnect-test)]
-    (if (> (+ fail error) 0)
-      (System/exit 1)
-      (System/exit 0))))
+(defn -main [& args]
+  (let [{:keys [fail error]}
+        (run-tests
+         'datachannel.sctp-test
+         'datachannel.dtls-test
+         'datachannel.handshake-test
+         'datachannel.rehandshake-test
+         'datachannel.integration-test
+         'datachannel.webrtc-java-test
+         'datachannel.stun-test
+         'datachannel.stun-integration-test
+         'datachannel.stun-webrtc-integration-test
+         'datachannel.webrtc-integration-test
+         'datachannel.webrtc-extended-test
+         'datachannel.sctp-robustness-test
+         'datachannel.sctp-state-machine-test
+         'datachannel.sctp-init-ack-robustness-test
+         'datachannel.sctp-message-test
+         'datachannel.sctp-establish-simultaneous-lost-data-test
+         'datachannel.sctp-unknown-chunk-test
+         'datachannel.sctp-error-chunk-test
+         'datachannel.sctp-max-message-size-test
+         'datachannel.sctp-reconnect-test
+         'datachannel.sctp-checksum-test)]
+    (System/exit (+ fail error))))

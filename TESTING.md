@@ -119,7 +119,7 @@
     - [ ] Reset Streams Deferred
     - [ ] Reset Streams With Paused Sender Resumes When Performed
     - [ ] Zero Checksum Metrics Are Set
-    - [ ] Always Sends Init With Non Zero Checksum
+    - [x] Always Sends Init With Non Zero Checksum
     - [ ] May Send Init Ack With Zero Checksum
     - [ ] Always Sends Cookie Echo With Non Zero Checksum
     - [ ] Sends Cookie Ack With Zero Checksum
