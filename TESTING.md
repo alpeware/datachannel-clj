@@ -65,11 +65,11 @@
     - [x] One Peer Reconnects
     - [ ] One Peer Reconnects With Pending Data
     - [ ] Send Message With Limited Rtx
-    - [ ] Close Connection After First Failed Transmission
-    - [ ] Close Connection After One Failed Retransmission
+    - [x] Close Connection After First Failed Transmission
+    - [x] Close Connection After One Failed Retransmission
     - [ ] Error Counter Is Reset On Data Ack
     - [ ] Both Sides Send Heartbeats
-    - [ ] Close Connection After Too Many Retransmissions
+    - [x] Close Connection After Too Many Retransmissions
     - [ ] Recover On Last Retransmission
     - [ ] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
