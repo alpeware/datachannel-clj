@@ -6,13 +6,15 @@ A pure Clojure implementation of WebRTC Data Channels (SCTP over DTLS over UDP).
 
 `datachannel-clj` is built using a strict **"Sans-IO"** architecture. It embraces the **"Bring Your Own Loop" (BYOL)** philosophy.
 
-The core state machine is completely pure and deterministic:
+The core state machine (`datachannel.core`) is completely pure and deterministic:
 - It **spawns no threads** or background processes.
 - It **performs no network I/O**.
 - It **does not read the system clock**.
 - It is devoid of mutable callback atoms.
 
 Instead, the library provides pure functions that take the current connection state, an input event (network data or a timer expiration), and the current time as explicit arguments. It returns a map containing the fully updated pure-data state, any outgoing network bytes to transmit, and application events to process.
+
+While the core is pure, the library includes `datachannel.nio` to provide the boilerplate Java NIO OS-level primitives (such as `DatagramChannel` and `Selector`) needed to actually route packets to the network.
 
 This functional purity makes the library extremely resilient, entirely deterministic for testing, and adaptable to any environment (async I/O, blocking I/O, game loops, or simulated networks).
 
@@ -58,37 +60,59 @@ Every function returns a standardized map:
 
 ### Example: "Bring Your Own Loop"
 
-Here is a pseudo-code example of how you might wrap the pure core inside an imperative event loop:
+Here is a realistic example of how you might wrap the pure core inside a Java NIO polling loop using our `datachannel.nio` helpers:
 
 ```clojure
-(require '[datachannel.core :as dc])
+(require '[datachannel.core :as dc]
+         '[datachannel.nio :as nio])
+(import '[java.nio ByteBuffer])
 
-(defn run-event-loop [socket]
-  ;; 1. Initialize the pure data state
-  (let [initial-state (dc/create-connection {:heartbeat-interval 30000} false)
-        conn-state (atom @(:state (:connection initial-state)))]
+(defn run-event-loop [port remote-host remote-port]
+  ;; 1. Initialize NIO resources
+  (let [channel  (nio/create-non-blocking-channel port)
+        selector (nio/create-selector)]
+    (nio/connect-channel channel remote-host remote-port)
+    (nio/register-for-read channel selector)
 
-    (while true
-      (let [now-ms (System/currentTimeMillis)]
+    ;; 2. Initialize the pure data state
+    (let [initial-state (dc/create-connection {:heartbeat-interval 30000} false)
+          conn-state (atom (:connection initial-state))
+          buffer (ByteBuffer/allocate 2048)]
 
-        ;; 2. Handle pending timers
-        (let [timers (:timers @conn-state)]
-          (doseq [[timer-id timer] timers]
-            (when (>= now-ms (:expires-at timer))
-              (let [result (dc/handle-timeout @conn-state timer-id now-ms)]
-                (reset! conn-state (:new-state result))
-                (process-effects! socket result)))))
+      (while true
+        (let [now-ms (System/currentTimeMillis)]
 
-        ;; 3. Poll Network I/O
-        (when-let [inbound-packet (read-from-socket socket)]
-          (let [result (dc/handle-sctp-packet @conn-state inbound-packet now-ms)]
-            (reset! conn-state (:new-state result))
-            (process-effects! socket result)))))))
+          ;; 3. Handle pending timers
+          (let [timers (:timers @conn-state)]
+            (doseq [[timer-id timer] timers]
+              (when (>= now-ms (:expires-at timer))
+                (let [result (dc/handle-timeout @conn-state timer-id now-ms)]
+                  (reset! conn-state (:new-state result))
+                  (process-effects! channel result)))))
 
-(defn- process-effects! [socket {:keys [network-out app-events]}]
+          ;; 4. Poll Network I/O
+          (.select selector 10) ;; Wait up to 10ms
+          (let [keys (.selectedKeys selector)
+                key-iter (.iterator keys)]
+            (while (.hasNext key-iter)
+              (let [key (.next key-iter)]
+                (.remove key-iter)
+                (when (.isReadable key)
+                  (.clear buffer)
+                  (when-let [_ (.read channel buffer)]
+                    (.flip buffer)
+                    (let [bytes-read (.remaining buffer)
+                          payload (byte-array bytes-read)]
+                      (.get buffer payload)
+                      ;; Pass bytes to the pure core
+                      (let [result (dc/handle-receive @conn-state payload now-ms)]
+                        (reset! conn-state (:new-state result))
+                        (process-effects! channel result)))))))))))))
+
+(defn- process-effects! [channel {:keys [network-out app-events]}]
   ;; Transmit outgoing bytes
   (doseq [packet network-out]
-    (send-to-socket socket packet))
+    (.write channel (ByteBuffer/wrap packet)))
 
   ;; React to state changes
   (doseq [event app-events]
