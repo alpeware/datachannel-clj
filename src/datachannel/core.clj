@@ -108,10 +108,10 @@
                             :verification-tag (:remote-ver-tag state)
                             :chunks [{:type :abort}]}]
              :app-events [{:type :on-error :cause :max-retransmissions}]}
-            (let [packet (:packet first-item)
+            (let [packet (assoc (:packet first-item) :verification-tag (:remote-ver-tag state))
                   new-delay (* (:delay timer) 2)
                   new-delay (min new-delay 60000)
-                  updated-item (assoc first-item :retries (inc retries))
+                  updated-item (assoc first-item :retries (inc retries) :packet packet)
                   new-q (assoc q 0 updated-item)]
               {:new-state (-> state
                               (assoc :tx-queue new-q)
@@ -220,10 +220,12 @@
                     {:next-state s1 :next-out out :next-events [{:type :on-message :payload (:payload chunk) :stream-id (:stream-id chunk) :protocol proto}]}))
 
                 :init
-                (let [s1 (assoc current-state :remote-ver-tag (:init-tag chunk)
-                                              :remote-tsn (dec (:initial-tsn chunk))
-                                              :ssn 0
-                                              :state :cookie-wait)
+                (let [s1 (-> current-state
+                             (assoc :remote-ver-tag (:init-tag chunk)
+                                    :remote-tsn (dec (:initial-tsn chunk))
+                                    :ssn 0
+                                    :state :cookie-wait)
+                             (update :tx-queue (fn [q] (mapv (fn [item] (update item :packet assoc :verification-tag (:init-tag chunk))) q))))
                       cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
                       init-ack {:type :init-ack
                                 :init-tag (:local-ver-tag s1)

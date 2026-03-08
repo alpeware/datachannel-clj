@@ -63,7 +63,7 @@
     - [ ] Reset Stream Will Make Chunks Start At Zero Ssn
     - [ ] Reset Stream Will Only Reset The Requested Streams
     - [x] One Peer Reconnects
-    - [ ] One Peer Reconnects With Pending Data
+    - [x] One Peer Reconnects With Pending Data
     - [ ] Send Message With Limited Rtx
     - [x] Close Connection After First Failed Transmission
     - [x] Close Connection After One Failed Retransmission
