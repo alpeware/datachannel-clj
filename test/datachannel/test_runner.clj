@@ -38,6 +38,7 @@
             [datachannel.sctp-timeout-resends-packet-test]
             [datachannel.sctp-init-ack-robustness-test]
             [datachannel.sctp-reconnect-test]
+            [datachannel.sctp-unknown-chunk-test]
             ))
 
 (defn -main [& args]
@@ -81,5 +82,6 @@
          'datachannel.sctp-timeout-resends-packet-test
          'datachannel.sctp-init-ack-robustness-test
          'datachannel.sctp-reconnect-test
+         'datachannel.sctp-unknown-chunk-test
          )]
     (System/exit (+ fail error))))
