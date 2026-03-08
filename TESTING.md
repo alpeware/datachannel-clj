@@ -43,7 +43,7 @@
     - [x] Resending Init Too Many Times Aborts
     - [ ] Resend Cookie Echo And Establish Connection
     - [x] Resending Cookie Echo Too Many Times Aborts
-    - [ ] Doesnt Send More Packets Until Cookie Ack Has Been Received
+    - [x] Doesnt Send More Packets Until Cookie Ack Has Been Received
     - [ ] Shutdown Connection
     - [x] Shutdown Timer Expires Too Many Time Closes Connection
     - [ ] Establish Connection While Sending Data
