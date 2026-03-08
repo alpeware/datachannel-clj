@@ -126,7 +126,7 @@
     - [x] Sends Data With Zero Checksum
     - [x] All Packets After Connect Have Zero Checksum
     - [ ] Handles Forward Tsn Out Of Order With Stream Resetting
-    - [ ] Resent Init Has Same Parameters
+    - [x] Resent Init Has Same Parameters
     - [x] Resent Init Ack Has Different Parameters
     - [x] Connection Can Continue From First Init Ack
     - [x] Connection Can Continue From Second Init Ack

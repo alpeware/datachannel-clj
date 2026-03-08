@@ -24,6 +24,7 @@
             [datachannel.sctp-rx-tx-metrics-increase-test]
             [datachannel.sctp-heartbeat-test]
             [datachannel.sctp-one-peer-reconnects-with-pending-data-test]
+            [datachannel.sctp-resent-init-test]
             ))
 
 (defn -main [& args]
@@ -53,5 +54,6 @@
          'datachannel.sctp-rx-tx-metrics-increase-test
          'datachannel.sctp-heartbeat-test
          'datachannel.sctp-one-peer-reconnects-with-pending-data-test
+         'datachannel.sctp-resent-init-test
          )]
     (System/exit (+ fail error))))
