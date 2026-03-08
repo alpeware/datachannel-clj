@@ -8,8 +8,8 @@
           state-z (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed :initial-tsn 2000})
           out-a (java.util.concurrent.LinkedBlockingQueue.)
           out-z (java.util.concurrent.LinkedBlockingQueue.)
-          conn-a {:state state-a :sctp-out out-a :on-open (atom nil) :on-close (atom nil) :selector nil}
-          conn-z {:state state-z :sctp-out out-z :on-open (atom nil) :on-close (atom nil) :selector nil}
+          conn-a {:state state-a :sctp-out out-a   :selector nil}
+          conn-z {:state state-z :sctp-out out-z   :selector nil}
           handle-sctp-packet (fn [p c]
                                (when (and p c)
                                  (let [state-map @(:state c)

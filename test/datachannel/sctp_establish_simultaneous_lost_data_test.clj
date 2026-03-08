@@ -4,12 +4,13 @@
 
 (deftest establish-simultaneous-connection-with-lost-data-test
   (testing "Establish Simultaneous Connection With Lost Data"
-    (let [state-a (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed})
+    (let [z-messages (atom [])
+          state-a (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed})
           state-z (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed})
           out-a (java.util.concurrent.LinkedBlockingQueue.)
           out-z (java.util.concurrent.LinkedBlockingQueue.)
-          conn-a {:state state-a :sctp-out out-a :on-open (atom nil) :on-message (atom nil) :on-data (atom nil) :selector nil}
-          conn-z {:state state-z :sctp-out out-z :on-open (atom nil) :on-message (atom nil) :on-data (atom nil) :selector nil}
+          conn-a {:state state-a :sctp-out out-a    :selector nil}
+          conn-z {:state state-z :sctp-out out-z    :selector nil}
           handle-sctp-packet (fn [c p]
                                (when (and p c)
                                  (let [state-map @(:state c)
@@ -21,15 +22,15 @@
                                    (doseq [out network-out] (.offer (:sctp-out c) out))
                                    (doseq [evt app-events]
                                      (case (:type evt)
-                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-message (swap! z-messages conj (:payload evt))
                                        :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
                                        :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
                                        :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
                                        :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
                                        nil)))))
-          z-messages (atom [])]
+          ]
 
-      (reset! (:on-message conn-z) (fn [msg] (swap! z-messages conj msg)))
+
 
       ;; A starts connection: sends INIT
       (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111}))

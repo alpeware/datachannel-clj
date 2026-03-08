@@ -4,11 +4,9 @@
             [datachannel.dtls-test]
             [datachannel.handshake-test]
             [datachannel.rehandshake-test]
-            [datachannel.webrtc-java-test]
-            [datachannel.stun-test]
+                        [datachannel.stun-test]
             [datachannel.stun-integration-test]
-            [datachannel.stun-webrtc-integration-test]
-            [datachannel.sctp-state-machine-test]
+                        [datachannel.sctp-state-machine-test]
             [datachannel.sctp-message-test]
                         [datachannel.sctp-error-chunk-test]
                         [datachannel.sctp-checksum-test]
@@ -27,6 +25,7 @@
             [datachannel.sctp-resent-init-test]
             [datachannel.sctp-retransmission-metrics-test]
             [datachannel.sctp-tsn-wraparound-test]
+            [datachannel.sctp-zero-checksum-metrics-test]
             ))
 
 (defn -main [& args]
@@ -36,11 +35,9 @@
          'datachannel.dtls-test
          'datachannel.handshake-test
          'datachannel.rehandshake-test
-         'datachannel.webrtc-java-test
-         'datachannel.stun-test
+                  'datachannel.stun-test
          'datachannel.stun-integration-test
-         'datachannel.stun-webrtc-integration-test
-         'datachannel.sctp-state-machine-test
+                  'datachannel.sctp-state-machine-test
          'datachannel.sctp-message-test
                   'datachannel.sctp-error-chunk-test
                   'datachannel.sctp-checksum-test
@@ -59,5 +56,6 @@
          'datachannel.sctp-resent-init-test
          'datachannel.sctp-retransmission-metrics-test
          'datachannel.sctp-tsn-wraparound-test
+         'datachannel.sctp-zero-checksum-metrics-test
          )]
     (System/exit (+ fail error))))

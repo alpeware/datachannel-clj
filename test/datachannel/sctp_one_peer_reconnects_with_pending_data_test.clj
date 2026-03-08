@@ -4,13 +4,14 @@
 
 (deftest one-peer-reconnects-with-pending-data-test
   (testing "One Peer Reconnects With Pending Data"
-    (let [out-a (java.util.concurrent.LinkedBlockingQueue.)
+    (let [z2-messages (atom [])
+          out-a (java.util.concurrent.LinkedBlockingQueue.)
           state-a (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :state :closed})
-          conn-a {:sctp-out out-a :state state-a :on-open (atom nil) :selector nil :on-close (atom nil)}
+          conn-a {:sctp-out out-a :state state-a  :selector nil }
 
           out-z (java.util.concurrent.LinkedBlockingQueue.)
           state-z (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0 :state :closed})
-          conn-z {:sctp-out out-z :state state-z :on-open (atom nil) :selector nil :on-close (atom nil)}
+          conn-z {:sctp-out out-z :state state-z  :selector nil }
 
           handle-sctp-packet (fn [c p]
                                (when (and p c)
@@ -23,7 +24,7 @@
                                    (doseq [out network-out] (.offer (:sctp-out c) out))
                                    (doseq [evt app-events]
                                      (case (:type evt)
-                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
+                                       :on-message (when (= (:local-ver-tag @(:state c)) 3333) (swap! z2-messages conj (:payload evt)))
                                        :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
                                        :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
                                        :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
@@ -61,10 +62,10 @@
       ;; Now Z reconnects (Z2)
       (let [out-z2 (java.util.concurrent.LinkedBlockingQueue.)
             state-z2 (atom {:remote-ver-tag 0 :local-ver-tag 3333 :next-tsn 300 :ssn 0 :state :cookie-wait :init-tag 3333})
-            conn-z2 {:sctp-out out-z2 :state state-z2 :on-open (atom nil) :selector nil :on-close (atom nil) :on-message (atom nil)}
-            z2-messages (atom [])]
+            conn-z2 {:sctp-out out-z2 :state state-z2  :selector nil  }
+            ]
 
-        (reset! (:on-message conn-z2) (fn [msg] (swap! z2-messages conj msg)))
+
 
         ;; Z2 sends INIT
         (let [init-packet2 {:src-port 5001 :dst-port 5000 :verification-tag 0

@@ -7,7 +7,7 @@
   (testing "Receiving Unknown Chunk Responds With Error (upper bits 01)"
     (let [state (atom {:remote-ver-tag 1234 :next-tsn 1000 :ssn 0 :state :established})
           out (java.util.concurrent.LinkedBlockingQueue.)
-          conn {:state state :sctp-out out :on-open (atom nil) :on-close (atom nil) :selector nil}
+          conn {:state state :sctp-out out   :selector nil}
           handle-sctp-packet #'core/handle-sctp-packet]
 
       (let [unknown-chunk {:type 0x49 ;; 0x49 = 01001001 binary, upper bits are 01
