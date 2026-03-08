@@ -39,7 +39,7 @@
     - [x] Establish Simultaneous Connection
     - [ ] Attempt Connect Without Cookie
     - [ ] Establish Connection Lost Cookie Ack
-    - [ ] Resend Init And Establish Connection
+    - [x] Resend Init And Establish Connection
     - [x] Resending Init Too Many Times Aborts
     - [ ] Resend Cookie Echo And Establish Connection
     - [x] Resending Cookie Echo Too Many Times Aborts
