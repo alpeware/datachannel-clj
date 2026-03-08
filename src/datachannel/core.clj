@@ -153,18 +153,238 @@
 
 
 (defn handle-receive [state network-bytes now-ms]
-  ;; This is the pure top-level receive. For phase 1, we just return the bytes unparsed?
-  ;; Wait, DESIGN-API.md states: `(defn handle-receive [state network-bytes now-ms])`.
-  ;; However, Phase 1 only strictly specifies replacing legacy callback atoms and threading state cleanly
-  ;; for `handle-sctp-packet` tests. The actual DTLS wrapping/unwrapping will be kept in run-loop or
-  ;; moved in Phase 2. The prompt says "Do NOT implement the datachannel.nio namespace yet. That is Phase 2.
-  ;; Focus entirely on migrating the core logic and making the existing test suite pass with the new API."
-  ;; So let's provide a dummy handle-receive with the correct signature just in case it's checked by the user,
-  ;; but the actual tests test `handle-sctp-packet` manually or we rename `handle-sctp-packet` to `handle-receive`.
   {:new-state state :network-out [] :app-events []})
 
-(defn handle-receive [state network-bytes now-ms]
-  {:new-state state :network-out [] :app-events []})
+(defmulti process-chunk (fn [state chunk packet now-ms] (:type chunk)))
+
+(defmethod process-chunk :data [state chunk packet now-ms]
+  (let [proto (:protocol chunk)
+        tsn (:tsn chunk)
+        s1 (if (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int (get state :remote-tsn -1)))))
+             (assoc state :remote-tsn tsn)
+             state)
+        sack-packet {:src-port (:dst-port packet)
+                     :dst-port (:src-port packet)
+                     :verification-tag (:remote-ver-tag s1)
+                     :chunks [{:type :sack
+                               :cum-tsn-ack (:remote-tsn s1)
+                               :a-rwnd 100000
+                               :gap-blocks []
+                               :duplicate-tsns []}]}
+        out [sack-packet]]
+    (cond
+      (= proto :webrtc/dcep)
+      (let [payload (:payload chunk)
+            msg-type (bit-and (aget ^bytes payload 0) 0xff)]
+        (if (= msg-type 3) ;; OPEN
+          (let [ack-tsn (:next-tsn s1)
+                s2 (update s1 :next-tsn inc)
+                ack-ssn (:ssn s2)
+                s3 (update s2 :ssn inc)
+                ack-packet {:src-port (:dst-port packet)
+                            :dst-port (:src-port packet)
+                            :verification-tag (:remote-ver-tag s3)
+                            :chunks [{:type :data
+                                      :flags 3 ;; B and E bits
+                                      :tsn ack-tsn
+                                      :stream-id (:stream-id chunk)
+                                      :seq-num ack-ssn
+                                      :protocol :webrtc/dcep
+                                      :payload (byte-array [(byte 2)])}]}]
+            {:next-state s3 :next-out (conj out ack-packet) :next-events []})
+          {:next-state s1 :next-out out :next-events []}))
+      :else
+      {:next-state s1 :next-out out :next-events [{:type :on-message :payload (:payload chunk) :stream-id (:stream-id chunk) :protocol proto}]})))
+
+(defmethod process-chunk :init [state chunk packet now-ms]
+  (let [s1 (-> state
+               (assoc :remote-ver-tag (:init-tag chunk)
+                      :remote-tsn (dec (:initial-tsn chunk))
+                      :ssn 0
+                      :state :cookie-wait)
+               (update :tx-queue (fn [q] (mapv (fn [item] (update item :packet assoc :verification-tag (:init-tag chunk))) q))))
+        cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
+        init-ack {:type :init-ack
+                  :init-tag (:local-ver-tag s1)
+                  :a-rwnd 100000
+                  :outbound-streams (:inbound-streams chunk)
+                  :inbound-streams (:outbound-streams chunk)
+                  :initial-tsn (:next-tsn s1)
+                  :params {:cookie cookie-bytes}}
+        out-packet {:src-port (:dst-port packet)
+                    :dst-port (:src-port packet)
+                    :verification-tag (:init-tag chunk)
+                    :chunks [init-ack]}]
+    {:next-state s1 :next-out [out-packet] :next-events []}))
+
+(defmethod process-chunk :init-ack [state chunk packet now-ms]
+  (let [s1 (assoc state :remote-ver-tag (:init-tag chunk)
+                        :remote-tsn (dec (:initial-tsn chunk)))]
+    (if-let [cookie (get-in chunk [:params :cookie])]
+      (let [out-packet {:src-port (:dst-port packet)
+                        :dst-port (:src-port packet)
+                        :verification-tag (:init-tag chunk)
+                        :chunks [{:type :cookie-echo :cookie cookie}]}
+            s2 (-> s1
+                   (assoc :state :cookie-echoed)
+                   (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000)
+                                                 :delay 3000
+                                                 :retries 0
+                                                 :packet out-packet}))]
+        {:next-state s2 :next-out [out-packet] :next-events []})
+      {:next-state s1 :next-out [] :next-events []})))
+
+(defmethod process-chunk :cookie-echo [state chunk packet now-ms]
+  (let [interval (get state :heartbeat-interval 30000)
+        s1 (assoc state :state :established)
+        s2 (if (pos? interval)
+             (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+             s1)
+        out-packet {:src-port (:dst-port packet)
+                    :dst-port (:src-port packet)
+                    :verification-tag (:remote-ver-tag s2)
+                    :chunks [{:type :cookie-ack}]}
+        tx-queue (get s2 :tx-queue [])
+        new-out [out-packet]
+        [s3 final-out] (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s2) :established) (seq tx-queue))
+                         (let [pkts (map :packet tx-queue)]
+                           [(assoc-in s2 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                            (into new-out pkts)])
+                         [s2 new-out])
+        tx-pkts (count tx-queue)
+        tx-bytes (reduce + (map (fn [item]
+                                  (reduce + (map #(alength ^bytes (:payload %))
+                                                 (filter #(= (:type %) :data) (:chunks (:packet item))))))
+                                tx-queue))
+        s4 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s2) :established) (seq tx-queue))
+             (-> s3
+                 (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
+                 (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
+             s3)]
+    {:next-state s4 :next-out final-out :next-events [{:type :on-open}]}))
+
+(defmethod process-chunk :cookie-ack [state chunk packet now-ms]
+  (let [interval (get state :heartbeat-interval 30000)
+        s1 (update state :timers dissoc :t1-init)
+        s2 (if (pos? interval)
+             (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+             s1)
+        [s3 out-packet] (if (= (:state s2) :shutdown-pending)
+                          (let [s-shut (assoc s2 :state :shutdown-sent)
+                                p {:src-port (:dst-port packet)
+                                   :dst-port (:src-port packet)
+                                   :verification-tag (:remote-ver-tag s-shut)
+                                   :chunks [{:type :shutdown}]}
+                                s-shut-t (assoc-in s-shut [:timers :t2-shutdown]
+                                                   {:expires-at (+ now-ms 3000)
+                                                    :delay 3000
+                                                    :retries 0
+                                                    :packet p})]
+                            [s-shut-t p])
+                          [s2 nil])
+        s4 (if-not (= (:state s3) :shutdown-sent)
+             (assoc s3 :state :established)
+             s3)
+        tx-queue (get s4 :tx-queue [])
+        new-out (if out-packet [out-packet] [])
+        [s5 final-out] (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s4) :established) (seq tx-queue))
+                         (let [pkts (map :packet tx-queue)]
+                           [(assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                            (into new-out pkts)])
+                         [s4 new-out])
+        tx-pkts (count tx-queue)
+        tx-bytes (reduce + (map (fn [item]
+                                  (reduce + (map #(alength ^bytes (:payload %))
+                                                 (filter #(= (:type %) :data) (:chunks (:packet item))))))
+                                tx-queue))
+        s6 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s4) :established) (seq tx-queue))
+             (-> s5
+                 (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
+                 (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
+             s5)]
+    {:next-state s6 :next-out final-out :next-events [{:type :on-open}]}))
+
+(defmethod process-chunk :heartbeat [state chunk packet now-ms]
+  (let [out-packet {:src-port (:dst-port packet)
+                    :dst-port (:src-port packet)
+                    :verification-tag (:verification-tag packet)
+                    :chunks [{:type :heartbeat-ack :params (:params chunk)}]}]
+    {:next-state state :next-out [out-packet] :next-events []}))
+
+(defmethod process-chunk :sack [state chunk packet now-ms]
+  (let [cum-tsn-ack (:cum-tsn-ack chunk)
+        q (get state :tx-queue [])
+        new-q (vec (remove (fn [{:keys [tsn]}]
+                             (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack))))))
+                           q))
+        s1 (if (empty? new-q)
+             (-> state
+                 (assoc :tx-queue new-q)
+                 (assoc :heartbeat-error-count 0)
+                 (assoc-in [:metrics :unacked-data] (count new-q))
+                 (update :timers dissoc :t3-rtx))
+             (-> state
+                 (assoc :tx-queue new-q)
+                 (assoc-in [:metrics :unacked-data] (count new-q))
+                 (assoc :heartbeat-error-count 0)))]
+    {:next-state s1 :next-out [] :next-events []}))
+
+(defmethod process-chunk :heartbeat-ack [state chunk packet now-ms]
+  (let [s1 (-> state
+               (assoc :heartbeat-error-count 0)
+               (update :timers dissoc :t-heartbeat-rtx))]
+    {:next-state s1 :next-out [] :next-events []}))
+
+(defmethod process-chunk :shutdown [state chunk packet now-ms]
+  (let [s1 (assoc state :state :shutdown-ack-sent)
+        out-packet {:src-port (:dst-port packet)
+                    :dst-port (:src-port packet)
+                    :verification-tag (:remote-ver-tag s1)
+                    :chunks [{:type :shutdown-ack}]}
+        s2 (assoc-in s1 [:timers :t2-shutdown]
+                     {:expires-at (+ now-ms 3000)
+                      :delay 3000
+                      :retries 0
+                      :packet out-packet})]
+    {:next-state s2 :next-out [out-packet] :next-events []}))
+
+(defmethod process-chunk :shutdown-ack [state chunk packet now-ms]
+  (let [s1 (update state :timers dissoc :t2-shutdown)
+        s2 (assoc s1 :state :closed)
+        out-packet {:src-port (:dst-port packet)
+                    :dst-port (:src-port packet)
+                    :verification-tag (:remote-ver-tag s2)
+                    :chunks [{:type :shutdown-complete}]}]
+    {:next-state s2 :next-out [out-packet] :next-events []}))
+
+(defmethod process-chunk :shutdown-complete [state chunk packet now-ms]
+  (let [s1 (update state :timers dissoc :t2-shutdown)
+        s2 (assoc s1 :state :closed)]
+    {:next-state s2 :next-out [] :next-events [{:type :on-close}]}))
+
+(defmethod process-chunk :error [state chunk packet now-ms]
+  {:next-state state :next-out [] :next-events [{:type :on-error :causes (:causes chunk)}]})
+
+(defmethod process-chunk :abort [state chunk packet now-ms]
+  {:next-state state :next-out [] :next-events [{:type :on-close}]})
+
+(defmethod process-chunk :default [state chunk packet now-ms]
+  (let [type-val (:type chunk)]
+    (if (number? type-val)
+      (let [upper-bits (bit-shift-right (bit-and type-val 0xC0) 6)]
+        (cond
+          (= upper-bits 1)
+          (let [out-packet {:src-port (:dst-port packet)
+                            :dst-port (:src-port packet)
+                            :verification-tag (:remote-ver-tag state)
+                            :chunks [{:type :error
+                                      :causes [{:cause-code 6
+                                                :chunk-data (:body chunk)}]}]}]
+            {:next-state state :next-out [out-packet] :next-events []})
+          :else
+          {:next-state state :next-out [] :next-events []}))
+      {:next-state state :next-out [] :next-events []})))
+
 
 (defn handle-sctp-packet [state packet now-ms]
   (let [chunks (:chunks packet)
@@ -179,233 +399,7 @@
          :app-events app-events}
         (let [chunk (first remaining-chunks)
               {:keys [next-state next-out next-events]}
-              (case (:type chunk)
-                :data
-                (let [proto (:protocol chunk)
-                      tsn (:tsn chunk)
-                      s1 (if (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int (get current-state :remote-tsn -1)))))
-                           (assoc current-state :remote-tsn tsn)
-                           current-state)
-                      sack-packet {:src-port (:dst-port packet)
-                                   :dst-port (:src-port packet)
-                                   :verification-tag (:remote-ver-tag s1)
-                                   :chunks [{:type :sack
-                                             :cum-tsn-ack (:remote-tsn s1)
-                                             :a-rwnd 100000
-                                             :gap-blocks []
-                                             :duplicate-tsns []}]}
-                      out [sack-packet]]
-                  (cond
-                    (= proto :webrtc/dcep)
-                    (let [payload (:payload chunk)
-                          msg-type (bit-and (aget ^bytes payload 0) 0xff)]
-                      (if (= msg-type 3) ;; OPEN
-                        (let [ack-tsn (:next-tsn s1)
-                              s2 (update s1 :next-tsn inc)
-                              ack-ssn (:ssn s2)
-                              s3 (update s2 :ssn inc)
-                              ack-packet {:src-port (:dst-port packet)
-                                          :dst-port (:src-port packet)
-                                          :verification-tag (:remote-ver-tag s3)
-                                          :chunks [{:type :data
-                                                    :flags 3 ;; B and E bits
-                                                    :tsn ack-tsn
-                                                    :stream-id (:stream-id chunk)
-                                                    :seq-num ack-ssn
-                                                    :protocol :webrtc/dcep
-                                                    :payload (byte-array [(byte 2)])}]}]
-                          {:next-state s3 :next-out (conj out ack-packet) :next-events []})
-                        {:next-state s1 :next-out out :next-events []}))
-                    :else
-                    {:next-state s1 :next-out out :next-events [{:type :on-message :payload (:payload chunk) :stream-id (:stream-id chunk) :protocol proto}]}))
-
-                :init
-                (let [s1 (-> current-state
-                             (assoc :remote-ver-tag (:init-tag chunk)
-                                    :remote-tsn (dec (:initial-tsn chunk))
-                                    :ssn 0
-                                    :state :cookie-wait)
-                             (update :tx-queue (fn [q] (mapv (fn [item] (update item :packet assoc :verification-tag (:init-tag chunk))) q))))
-                      cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
-                      init-ack {:type :init-ack
-                                :init-tag (:local-ver-tag s1)
-                                :a-rwnd 100000
-                                :outbound-streams (:inbound-streams chunk)
-                                :inbound-streams (:outbound-streams chunk)
-                                :initial-tsn (:next-tsn s1)
-                                :params {:cookie cookie-bytes}}
-                      out-packet {:src-port (:dst-port packet)
-                                  :dst-port (:src-port packet)
-                                  :verification-tag (:init-tag chunk)
-                                  :chunks [init-ack]}]
-                  {:next-state s1 :next-out [out-packet] :next-events []})
-
-                :init-ack
-                (let [s1 (assoc current-state :remote-ver-tag (:init-tag chunk)
-                                              :remote-tsn (dec (:initial-tsn chunk)))]
-                  (if-let [cookie (get-in chunk [:params :cookie])]
-                    (let [out-packet {:src-port (:dst-port packet)
-                                      :dst-port (:src-port packet)
-                                      :verification-tag (:init-tag chunk)
-                                      :chunks [{:type :cookie-echo :cookie cookie}]}
-                          s2 (-> s1
-                                 (assoc :state :cookie-echoed)
-                                 (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000)
-                                                               :delay 3000
-                                                               :retries 0
-                                                               :packet out-packet}))]
-                      {:next-state s2 :next-out [out-packet] :next-events []})
-                    {:next-state s1 :next-out [] :next-events []}))
-
-                :cookie-echo
-                (let [interval (get current-state :heartbeat-interval 30000)
-                      s1 (assoc current-state :state :established)
-                      s2 (if (pos? interval)
-                           (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-                           s1)
-                      out-packet {:src-port (:dst-port packet)
-                                  :dst-port (:src-port packet)
-                                  :verification-tag (:remote-ver-tag s2)
-                                  :chunks [{:type :cookie-ack}]}
-                      tx-queue (get s2 :tx-queue [])
-                      new-out [out-packet]
-                      [s3 final-out] (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s2) :established) (seq tx-queue))
-                                       (let [pkts (map :packet tx-queue)]
-                                         [(assoc-in s2 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-                                          (into new-out pkts)])
-                                       [s2 new-out])
-                      tx-pkts (count tx-queue)
-                      tx-bytes (reduce + (map (fn [item]
-                                                (reduce + (map #(alength ^bytes (:payload %))
-                                                               (filter #(= (:type %) :data) (:chunks (:packet item))))))
-                                              tx-queue))
-                      s4 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s2) :established) (seq tx-queue))
-                           (-> s3
-                               (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
-                               (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
-                           s3)]
-                  {:next-state s4 :next-out final-out :next-events [{:type :on-open}]})
-
-                :cookie-ack
-                (let [interval (get current-state :heartbeat-interval 30000)
-                      s1 (update current-state :timers dissoc :t1-init)
-                      s2 (if (pos? interval)
-                           (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-                           s1)
-                      [s3 out-packet] (if (= (:state s2) :shutdown-pending)
-                                        (let [s-shut (assoc s2 :state :shutdown-sent)
-                                              p {:src-port (:dst-port packet)
-                                                 :dst-port (:src-port packet)
-                                                 :verification-tag (:remote-ver-tag s-shut)
-                                                 :chunks [{:type :shutdown}]}
-                                              s-shut-t (assoc-in s-shut [:timers :t2-shutdown]
-                                                                 {:expires-at (+ now-ms 3000)
-                                                                  :delay 3000
-                                                                  :retries 0
-                                                                  :packet p})]
-                                          [s-shut-t p])
-                                        [s2 nil])
-                      s4 (if-not (= (:state s3) :shutdown-sent)
-                           (assoc s3 :state :established)
-                           s3)
-                      tx-queue (get s4 :tx-queue [])
-                      new-out (if out-packet [out-packet] [])
-                      [s5 final-out] (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s4) :established) (seq tx-queue))
-                                       (let [pkts (map :packet tx-queue)]
-                                         [(assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-                                          (into new-out pkts)])
-                                       [s4 new-out])
-                      tx-pkts (count tx-queue)
-                      tx-bytes (reduce + (map (fn [item]
-                                                (reduce + (map #(alength ^bytes (:payload %))
-                                                               (filter #(= (:type %) :data) (:chunks (:packet item))))))
-                                              tx-queue))
-                      s6 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s4) :established) (seq tx-queue))
-                           (-> s5
-                               (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
-                               (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
-                           s5)]
-                  {:next-state s6 :next-out final-out :next-events [{:type :on-open}]})
-
-                :heartbeat
-                (let [out-packet {:src-port (:dst-port packet)
-                                  :dst-port (:src-port packet)
-                                  :verification-tag (:verification-tag packet)
-                                  :chunks [{:type :heartbeat-ack :params (:params chunk)}]}]
-                  {:next-state current-state :next-out [out-packet] :next-events []})
-
-                :sack
-                (let [cum-tsn-ack (:cum-tsn-ack chunk)
-                      q (get current-state :tx-queue [])
-                      new-q (vec (remove (fn [{:keys [tsn]}]
-                                           (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack))))))
-                                         q))
-                      s1 (if (empty? new-q)
-                           (-> current-state
-                               (assoc :tx-queue new-q)
-                               (assoc :heartbeat-error-count 0)
-                               (assoc-in [:metrics :unacked-data] (count new-q))
-                               (update :timers dissoc :t3-rtx))
-                           (-> current-state
-                               (assoc :tx-queue new-q)
-                               (assoc-in [:metrics :unacked-data] (count new-q))
-                               (assoc :heartbeat-error-count 0)))]
-                  {:next-state s1 :next-out [] :next-events []})
-
-                :heartbeat-ack
-                (let [s1 (-> current-state
-                             (assoc :heartbeat-error-count 0)
-                             (update :timers dissoc :t-heartbeat-rtx))]
-                  {:next-state s1 :next-out [] :next-events []})
-
-                :shutdown
-                (let [s1 (assoc current-state :state :shutdown-ack-sent)
-                      out-packet {:src-port (:dst-port packet)
-                                  :dst-port (:src-port packet)
-                                  :verification-tag (:remote-ver-tag s1)
-                                  :chunks [{:type :shutdown-ack}]}
-                      s2 (assoc-in s1 [:timers :t2-shutdown]
-                                   {:expires-at (+ now-ms 3000)
-                                    :delay 3000
-                                    :retries 0
-                                    :packet out-packet})]
-                  {:next-state s2 :next-out [out-packet] :next-events []})
-
-                :shutdown-ack
-                (let [s1 (update current-state :timers dissoc :t2-shutdown)
-                      s2 (assoc s1 :state :closed)
-                      out-packet {:src-port (:dst-port packet)
-                                  :dst-port (:src-port packet)
-                                  :verification-tag (:remote-ver-tag s2)
-                                  :chunks [{:type :shutdown-complete}]}]
-                  {:next-state s2 :next-out [out-packet] :next-events []})
-
-                :shutdown-complete
-                (let [s1 (update current-state :timers dissoc :t2-shutdown)
-                      s2 (assoc s1 :state :closed)]
-                  {:next-state s2 :next-out [] :next-events [{:type :on-close}]})
-
-                :error
-                {:next-state current-state :next-out [] :next-events [{:type :on-error :causes (:causes chunk)}]}
-
-                :abort
-                {:next-state current-state :next-out [] :next-events [{:type :on-close}]}
-
-                (let [type-val (:type chunk)]
-                  (if (number? type-val)
-                    (let [upper-bits (bit-shift-right (bit-and type-val 0xC0) 6)]
-                      (cond
-                        (= upper-bits 1)
-                        (let [out-packet {:src-port (:dst-port packet)
-                                          :dst-port (:src-port packet)
-                                          :verification-tag (:remote-ver-tag current-state)
-                                          :chunks [{:type :error
-                                                    :causes [{:cause-code 6
-                                                              :chunk-data (:body chunk)}]}]}]
-                          {:next-state current-state :next-out [out-packet] :next-events []})
-                        :else
-                        {:next-state current-state :next-out [] :next-events []}))
-                    {:next-state current-state :next-out [] :next-events []})))]
+              (process-chunk current-state chunk packet now-ms)]
           (recur next-state
                  (rest remaining-chunks)
                  (into network-out next-out)
