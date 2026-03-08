@@ -251,7 +251,12 @@
                                                    :retries 0
                                                    :packet out-packet}))]
         {:next-state s2 :next-out [out-packet] :next-events []})
-      {:next-state s1 :next-out [] :next-events []})))
+      (let [s2 (assoc state :state :closed)
+            out-packet {:src-port (:dst-port packet)
+                        :dst-port (:src-port packet)
+                        :verification-tag (:init-tag chunk)
+                        :chunks [{:type :abort}]}]
+        {:next-state s2 :next-out [out-packet] :next-events [{:type :on-error :cause :protocol-violation}]}))))
 
 (defmethod process-chunk :cookie-echo [state chunk packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
