@@ -144,3 +144,25 @@ The Shell is responsible for the bridge between the pure core and the OS.
 - Instead of sending SACK immediately on DATA receipt, set the `:delayed-sack` timer.
 - If another DATA chunk arrives before the timer expires, send SACK immediately and cancel timer.
 - If timer expires, send SACK.
+
+## 7. Next Phase: MTU, Bundling, and Reliability
+
+### 7.1 MTU & Packetization (Chunk Bundling)
+To support efficient network usage and respect path constraints, a new pure pipeline phase called `packetize` will be introduced.
+- The core will NOT perform Path MTU Discovery (PMTUD) on the socket. The Usable MTU is passed into the state map externally as `:mtu` (defaulting to 1200).
+- State transitions (like `handle-event` or `handle-sctp-packet`) should push pending chunks into internal vectors (e.g., `:pending-control-chunks` and `:tx-queue`), rather than outputting raw packets immediately.
+- A `packetize` function will run at the end of the state machine tick. It greedily builds packets up to the `:mtu` byte limit.
+- Control chunks (`COOKIE-ECHO`, `SACK`, `HEARTBEAT`) always have strict priority and are bundled first. Data chunks are added until the MTU is reached. Large data chunks exceeding the MTU are fragmented with `B` and `E` flags.
+
+### 7.2 Stream Multiplexing & Priority
+To support WebRTC Data Channel multiplexing, SCTP streams must be managed individually in the pure state map.
+- Replace the single flat `:tx-queue` with a map of per-stream queues (e.g., `{:streams {0 {:queue [...] :priority 256}, 1 {:queue [...] :priority 128}}}`).
+- The `packetize` phase must implement a scheduler (e.g., Weighted Round Robin or Strict Priority) to pull chunks from these stream queues when filling a packet.
+
+### 7.3 Data Channel Reliability (PR-SCTP) & Ordering
+To fully support WebRTC Data Channel parameters (RFC 3758 / RFC 6525), the core must handle partial reliability and ordering semantics.
+- **Ordering:** The `U` (Unordered) bit is set on `DATA` chunks for unordered channels, bypassing Stream Sequence Number (SSN) incrementing and strict reassembly.
+- **Reliability (Partial Reliability):** Properties like `:max-retransmits` and `:max-packet-life` are attached to outbound messages.
+- The state machine will drop expired chunks from the transmit queues and emit `FORWARD-TSN` control chunks to instruct the remote peer to advance its cumulative TSN, preventing head-of-line blocking for unreliable channels.
+
+Throughout this phase, the design maintains our strict functional purity (no threads, no `core.async`, no I/O). The pipeline continues to simply map inputs to `{:new-state ... :network-out [...] :app-events [...]}`.
