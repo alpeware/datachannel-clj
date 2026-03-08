@@ -69,7 +69,7 @@
          'datachannel.sctp-resend-cookie-echo-and-establish-connection-test
          'datachannel.sctp-shutdown-timer-test
          'datachannel.sctp-establish-connection-lost-cookie-ack-test
-         ;; 'datachannel.sctp-attempt-connect-without-cookie-test
+         'datachannel.sctp-attempt-connect-without-cookie-test
          ;; 'datachannel.sctp-shutdown-connection-test
          ;; 'datachannel.sctp-send-message-after-established-test
          'datachannel.sctp-cannot-send-empty-messages-test
