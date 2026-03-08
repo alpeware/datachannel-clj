@@ -165,6 +165,9 @@
   ;; but the actual tests test `handle-sctp-packet` manually or we rename `handle-sctp-packet` to `handle-receive`.
   {:new-state state :network-out [] :app-events []})
 
+(defn handle-receive [state network-bytes now-ms]
+  {:new-state state :network-out [] :app-events []})
+
 (defn handle-sctp-packet [state packet now-ms]
   (let [chunks (:chunks packet)]
     (loop [current-state state
