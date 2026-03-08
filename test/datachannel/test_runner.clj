@@ -26,6 +26,7 @@
             [datachannel.sctp-retransmission-metrics-test]
             [datachannel.sctp-tsn-wraparound-test]
             [datachannel.sctp-zero-checksum-metrics-test]
+            [datachannel.sans-io-integration-test]
             ))
 
 (defn -main [& args]
@@ -57,5 +58,6 @@
          'datachannel.sctp-retransmission-metrics-test
          'datachannel.sctp-tsn-wraparound-test
          'datachannel.sctp-zero-checksum-metrics-test
+         'datachannel.sans-io-integration-test
          )]
     (System/exit (+ fail error))))
