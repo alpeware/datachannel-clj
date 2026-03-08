@@ -7,7 +7,7 @@
     (let [state-a (atom {:remote-tsn 0 :remote-ver-tag 2222 :next-tsn 1000 :ssn 0 :state :established :timers {}})
           out-a (java.util.concurrent.LinkedBlockingQueue.)
           on-error-called (atom false)
-          conn-a {:state state-a :sctp-out out-a :on-open (atom nil) :on-error (atom (fn [err] (reset! on-error-called true))) :selector nil}
+          conn-a {:state state-a :sctp-out out-a  :on-error (atom (fn [err] (reset! on-error-called true))) :selector nil}
           now 1000000]
 
       ;; Simulate sending SHUTDOWN

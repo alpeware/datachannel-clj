@@ -118,7 +118,7 @@
     - [ ] Exposes The Number Of Negotiated Streams
     - [ ] Reset Streams Deferred
     - [ ] Reset Streams With Paused Sender Resumes When Performed
-    - [ ] Zero Checksum Metrics Are Set
+    - [x] Zero Checksum Metrics Are Set
     - [x] Always Sends Init With Non Zero Checksum
     - [x] May Send Init Ack With Zero Checksum
     - [x] Always Sends Cookie Echo With Non Zero Checksum

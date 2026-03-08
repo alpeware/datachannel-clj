@@ -6,11 +6,11 @@
   (testing "One Peer Reconnects"
     (let [out-a (java.util.concurrent.LinkedBlockingQueue.)
           state-a (atom {:remote-ver-tag 0 :local-ver-tag 1111 :next-tsn 100 :ssn 0 :state :closed})
-          conn-a {:sctp-out out-a :state state-a :on-open (atom nil) :selector nil :on-close (atom nil)}
+          conn-a {:sctp-out out-a :state state-a  :selector nil }
 
           out-z (java.util.concurrent.LinkedBlockingQueue.)
           state-z (atom {:remote-ver-tag 0 :local-ver-tag 2222 :next-tsn 200 :ssn 0 :state :closed})
-          conn-z {:sctp-out out-z :state state-z :on-open (atom nil) :selector nil :on-close (atom nil)}
+          conn-z {:sctp-out out-z :state state-z  :selector nil }
 
           handle-sctp-packet (fn [c p]
                                (when (and p c)
@@ -54,7 +54,7 @@
       ;; This simulates A crashing or restarting and trying to connect to Z again.
       (let [out-a2 (java.util.concurrent.LinkedBlockingQueue.)
             state-a2 (atom {:remote-ver-tag 0 :local-ver-tag 3333 :next-tsn 300 :ssn 0 :state :cookie-wait :init-tag 3333})
-            conn-a2 {:sctp-out out-a2 :state state-a2 :on-open (atom nil) :selector nil :on-close (atom nil)}]
+            conn-a2 {:sctp-out out-a2 :state state-a2  :selector nil }]
 
         ;; A2 sends a new INIT to Z
         (let [init-packet2 {:src-port 5000 :dst-port 5001 :verification-tag 0

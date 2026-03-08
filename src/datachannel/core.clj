@@ -4,8 +4,7 @@
             [datachannel.stun :as stun])
   (:import [java.nio ByteBuffer]
            [java.net InetSocketAddress StandardSocketOptions]
-           [java.nio.channels DatagramChannel Selector SelectionKey]
-           [javax.net.ssl SSLEngine SSLEngineResult SSLEngineResult$Status SSLEngineResult$HandshakeStatus]
+                      [javax.net.ssl SSLEngine SSLEngineResult SSLEngineResult$Status SSLEngineResult$HandshakeStatus]
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            [java.security SecureRandom]))
 
@@ -407,136 +406,12 @@
                  (into app-events next-events)))))))
 
 
-(defn- run-loop [^DatagramChannel channel ^Selector selector ^SSLEngine ssl-engine peer-addr connection & [initial-data]]
-  (let [net-in (make-buffer)
-        _ (when (and initial-data (.hasRemaining initial-data))
-            (.put net-in initial-data)
-            (.flip net-in))
-        net-out (make-buffer)
-        app-in (make-buffer)
-        app-out (make-buffer)
-        sctp-out (:sctp-out connection)]
-
-    (.register channel selector SelectionKey/OP_READ)
-
-    (if (.getUseClientMode ssl-engine)
-      (.beginHandshake ssl-engine))
-
-    (loop [net-in-loop net-in]
-      (if (.isOpen channel)
-        (do
-          (let [now-ms (System/currentTimeMillis)
-                timers (:timers @(:state connection))]
-            (doseq [[timer-id timer] timers]
-              (when (>= now-ms (:expires-at timer))
-                (let [{:keys [new-state network-out app-events]} (handle-timeout @(:state connection) timer-id now-ms)]
-                  (reset! (:state connection) new-state)
-                  (doseq [packet network-out]
-                      (.offer sctp-out packet))
-                  (doseq [effect app-events]
-                    (case (:type effect)
-                      :on-error (when-let [cb @(:on-error connection)]
-                                  (cb [{:cause-code -1 :chunk-data (.getBytes (str "Internal Error: " (name (:cause effect))))}]))))))))
-          (try
-            (let [hs-status (.getHandshakeStatus ssl-engine)]
-              (if (or (= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
-                      (= hs-status SSLEngineResult$HandshakeStatus/FINISHED))
-                ;; ESTABLISHED
-                (do
-                  ;; Incoming
-                  (while (.hasRemaining net-in-loop)
-                    (let [b (bit-and (.get net-in-loop (.position net-in-loop)) 0xff)]
-                      (cond
-                        (or (= b 0) (= b 1))
-                        (if-let [resp (stun/handle-packet net-in-loop peer-addr connection)]
-                          (.send channel resp peer-addr))
-
-                        (and (>= b 20) (<= b 63))
-                        (let [res (dtls/receive-app-data ssl-engine net-in-loop app-in)]
-                          (when-let [bytes (:bytes res)]
-                            (when (> (count bytes) 0)
-                              (try (let [packet (sctp/decode-packet (ByteBuffer/wrap bytes))
-                                         {:keys [new-state network-out app-events]} (handle-sctp-packet @(:state connection) packet (System/currentTimeMillis))]
-                                     (reset! (:state connection) new-state)
-                                     (doseq [p network-out] (.offer (:sctp-out connection) p))
-                                     (doseq [evt app-events]
-                                       (case (:type evt)
-                                         :on-message (when-let [cb @(:on-message connection)] (cb (:payload evt)))
-                                         :on-data (when-let [cb @(:on-data connection)] (cb evt))
-                                         :on-open (when-let [cb @(:on-open connection)] (cb))
-                                         :on-error (when-let [cb @(:on-error connection)] (cb (:causes evt)))
-                                         nil)))
-                                   (catch Exception e (println "SCTP Decode Error:" e))))))
-
-                        :else
-                        (.position net-in-loop (.limit net-in-loop)))))
-
-                  ;; Outgoing
-                  (while (let [packet (.poll sctp-out)]
-                           (when packet
-                             (.clear app-out)
-                             (sctp/encode-packet packet app-out {:zero-checksum? (:zero-checksum? connection)})
-                             (.flip app-out)
-                             (let [res (dtls/send-app-data ssl-engine app-out net-out)]
-                               (when-let [bytes (:bytes res)]
-                                 (when (> (count bytes) 0)
-                                   (.send channel (ByteBuffer/wrap bytes) peer-addr))))
-                             packet))))
-
-                ;; HANDSHAKING
-                (do
-                  (if (and (.hasRemaining net-in-loop)
-                           (let [b (bit-and (.get net-in-loop (.position net-in-loop)) 0xff)]
-                             (or (= b 0) (= b 1))))
-                    (when-let [resp (stun/handle-packet net-in-loop peer-addr connection)]
-                      (.send channel resp peer-addr))
-
-                    (when (or (.hasRemaining net-in-loop)
-                              (not= hs-status SSLEngineResult$HandshakeStatus/NEED_UNWRAP))
-                      (let [res (dtls/handshake ssl-engine net-in-loop net-out)]
-                        (doseq [packet (:packets res)]
-                          (.send channel (ByteBuffer/wrap packet) peer-addr))
-                        (when-let [app-data (:app-data res)]
-                          (when (> (count app-data) 0)
-                            (try (let [packet (sctp/decode-packet (ByteBuffer/wrap app-data))
-                                         {:keys [new-state network-out app-events]} (handle-sctp-packet @(:state connection) packet (System/currentTimeMillis))]
-                                     (reset! (:state connection) new-state)
-                                     (doseq [p network-out] (.offer (:sctp-out connection) p))
-                                     (doseq [evt app-events]
-                                       (case (:type evt)
-                                         :on-message (when-let [cb @(:on-message connection)] (cb (:payload evt)))
-                                         :on-data (when-let [cb @(:on-data connection)] (cb evt))
-                                         :on-open (when-let [cb @(:on-open connection)] (cb))
-                                         :on-error (when-let [cb @(:on-error connection)] (cb (:causes evt)))
-                                         nil)))
-                                 (catch Exception e (println "SCTP Decode Error (Handshake):" e)))))))))))
-            (catch Exception e
-              (if-not (or (instance? java.nio.channels.ClosedChannelException e)
-                          (instance? java.nio.channels.ClosedSelectorException e))
-                (println "Error in run-loop processing:" e))))
-
-          (.clear net-in-loop)
-          (let [count (.select selector 10)]
-            (if (> count 0)
-              (let [keys (.selectedKeys selector)]
-                (doseq [key keys]
-                  (when (.isReadable key)
-                    (.receive channel net-in-loop)))
-                (.clear keys))))
-          (.flip net-in-loop)
-          (recur net-in-loop))
-        (println "Channel closed.")))))
-
-(defn- create-connection [options client-mode?]
+(defn create-connection [options client-mode?]
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
         engine (dtls/create-engine ctx client-mode?)
-        channel (DatagramChannel/open)
-        selector (Selector/open)
-        sctp-out (LinkedBlockingQueue.)
         local-ver-tag (.nextInt secure-rand 2147483647)
-        connection {:sctp-out sctp-out
-                    :state (atom {:remote-ver-tag 0
+        connection {:state (atom {:remote-ver-tag 0
                                   :local-ver-tag local-ver-tag
                                   :next-tsn 0
                                   :ssn 0
@@ -550,73 +425,16 @@
                                             :tx-bytes   0
                                             :rx-bytes   0
                                             :retransmissions 0
-                                            :unacked-data 0}})
+                                            :unacked-data 0
+                                            :uses-zero-checksum (boolean (:zero-checksum? options))}})
                     :zero-checksum? (:zero-checksum? options)
-                    :on-message (atom nil)
-                    :on-data (atom nil)
-                    :on-open (atom nil)
-                    :on-error (atom nil)
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
                     :ice-pwd (:ice-pwd options)
-                    :channel channel
-                    :selector selector}]
+                    }]
     {:engine engine
-     :channel channel
-     :selector selector
      :connection connection
      :local-ver-tag local-ver-tag}))
-
-(defn connect [host port & {:as options}]
-  (let [{:keys [engine channel selector connection local-ver-tag]} (create-connection options true)
-        peer-addr (InetSocketAddress. host port)]
-    (.configureBlocking channel false)
-    (.connect channel peer-addr)
-
-    (let [t (Thread.
-              (fn []
-                (try
-                  (run-loop channel selector engine peer-addr connection)
-                  (catch Exception e
-                    (if-not (or (instance? java.nio.channels.ClosedChannelException e)
-                                (instance? java.nio.channels.ClosedSelectorException e))
-                      (println "Connection Loop Error:" e))))))]
-      (.start t))
-
-    (swap! (:state connection) assoc :initial-tsn 0)
-    (let [{:keys [new-state network-out app-events]} (handle-event @(:state connection) {:type :connect} (System/currentTimeMillis))]
-      (reset! (:state connection) new-state)
-      (doseq [packet network-out]
-        (.offer (:sctp-out connection) packet)))
-
-    connection))
-
-(defn listen [port & {:as options}]
-  (let [{:keys [engine channel selector connection]} (create-connection options (boolean (:dtls-client options)))]
-    (.configureBlocking channel false)
-    (if-let [host (:host options)]
-      (.bind channel (InetSocketAddress. ^String host (int port)))
-      (.bind channel (InetSocketAddress. (int port))))
-
-    (let [t (Thread.
-              (fn []
-                (try
-                  (let [temp-buf (make-buffer)
-                        peer-addr (do
-                                    (.configureBlocking channel true)
-                                    (let [addr (.receive channel temp-buf)]
-                                      (.configureBlocking channel false)
-                                      addr))]
-                    (println "Accepted connection from" peer-addr)
-                    (.flip temp-buf)
-                    (run-loop channel selector engine peer-addr connection temp-buf))
-                  (catch Exception e
-                    (if-not (or (instance? java.nio.channels.ClosedChannelException e)
-                                (instance? java.nio.channels.ClosedSelectorException e))
-                      (println "Server Loop Error:" e))))))]
-      (.start t))
-
-    connection))
 
 (defn set-max-message-size! [connection max-size]
   (swap! (:state connection) assoc :max-message-size max-size))

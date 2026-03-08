@@ -7,7 +7,7 @@
   [port]
   (let [channel (DatagramChannel/open)]
     (.configureBlocking channel false)
-    (.bind channel (InetSocketAddress. (int port)))
+    (.bind (.socket channel) (InetSocketAddress. port))
     channel))
 
 (defn create-selector
@@ -21,6 +21,6 @@
   (.register channel selector SelectionKey/OP_READ))
 
 (defn connect-channel
-  "Connects a DatagramChannel to the specified host and port."
+  "Connects a DatagramChannel to a specified host and port."
   [^DatagramChannel channel host port]
-  (.connect channel (InetSocketAddress. ^String host (int port))))
+  (.connect channel (InetSocketAddress. host port)))
