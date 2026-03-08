@@ -115,7 +115,8 @@
                   new-q (assoc q 0 updated-item)]
               {:new-state (-> state
                               (assoc :tx-queue new-q)
-                              (assoc-in [:timers :t3-rtx] {:expires-at (+ now-ms new-delay) :delay new-delay}))
+                              (assoc-in [:timers :t3-rtx] {:expires-at (+ now-ms new-delay) :delay new-delay})
+                              (update-in [:metrics :retransmissions] (fnil inc 0)))
                :network-out [packet] :app-events []})))))
 
     :t-heartbeat

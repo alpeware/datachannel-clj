@@ -93,7 +93,7 @@
     - [ ] Message Interleaving Metrics Are Set
     - [x] Rx And Tx Packet Metrics Increase
     - [ ] Retransmission Metrics Are Set For Fast Retransmit
-    - [ ] Retransmission Metrics Are Set For Normal Retransmit
+    - [x] Retransmission Metrics Are Set For Normal Retransmit
     - [ ] Unack Data Also Includes Send Queue
     - [ ] Doesnt Send More Than Max Burst Packets
     - [ ] Is Ready For Handover When Established
