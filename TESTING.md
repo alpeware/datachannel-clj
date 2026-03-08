@@ -54,7 +54,7 @@
     - [ ] Expect Heartbeat To Be Sent
     - [ ] Expect Heartbeats Not Sent When Sending Data
     - [x] Close Connection After First Lost Heartbeat
-    - [ ] Close Connection After Second Lost Heartbeat
+    - [x] Close Connection After Second Lost Heartbeat
     - [ ] Close Connection After Too Many Lost Heartbeats
     - [ ] Recovers After A Successful Ack
     - [x] Error Counter Is Reset On Heartbeat Ack
