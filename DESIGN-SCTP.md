@@ -166,3 +166,34 @@ To fully support WebRTC Data Channel parameters (RFC 3758 / RFC 6525), the core 
 - The state machine will drop expired chunks from the transmit queues and emit `FORWARD-TSN` control chunks to instruct the remote peer to advance its cumulative TSN, preventing head-of-line blocking for unreliable channels.
 
 Throughout this phase, the design maintains our strict functional purity (no threads, no `core.async`, no I/O). The pipeline continues to simply map inputs to `{:new-state ... :network-out [...] :app-events [...]}`.
+
+## 8. Inbound Reassembly & Delivery
+
+To mirror the outbound `packetize` pipeline, inbound `DATA` chunks must be processed through a strict `reassemble` phase to handle IP fragmentation and Stream Sequence Number (SSN) ordering.
+
+### 8.1 The Reassembly Queue (`:recv-queue`)
+When `handle-sctp-packet` processes a `DATA` chunk, it does NOT immediately emit an `:on-message` event. Instead, it places the chunk into the specific stream's `:recv-queue`.
+
+### 8.2 The `reassemble` Pipeline
+After processing all chunks in an inbound packet, the core will execute a `reassemble` pass over the updated streams.
+- **Fragment Matching:** It scans the `:recv-queue` for a contiguous sequence of TSNs starting with a chunk marked with the `B` (Begin) flag and ending with the `E` (End) flag.
+- **Ordering (Ordered vs Unordered):** - If the `U` (Unordered) bit is set, the assembled message is immediately emitted as an `:on-message` effect and removed from the queue.
+  - If the `U` bit is NOT set, the message is only emitted if its SSN exactly matches the stream's expected `:next-ssn`. If it is a future SSN, it remains buffered in the `:recv-queue` until the missing SSN arrives (Head-of-Line blocking).
+
+## 9. Congestion Control (CC)
+
+To prevent network flooding, `datachannel-clj` must implement standard SCTP Congestion Control, throttling the `packetize` pipeline.
+
+### 9.1 CC State Variables
+The state map tracks:
+- `:cwnd`: Congestion Window (starts at `min(4 * MTU, max(2 * MTU, 4380))`).
+- `:ssthresh`: Slow Start Threshold (starts at `:peer-rwnd`).
+- `:flight-size`: Total bytes of unacknowledged `DATA` chunks currently on the wire.
+
+### 9.2 Throttling `packetize`
+The `packetize` function must respect the `cwnd`. It may only bundle and transmit new `DATA` chunks if `(+ :flight-size chunk-size) <= :cwnd`. If the window is full, chunks remain buffered in the `:streams` queues.
+
+### 9.3 Window Management
+- **Slow Start:** When a `SACK` acknowledges new data and `:cwnd <= :ssthresh`, increase `:cwnd` by the number of newly acknowledged bytes (capped at MTU).
+- **Congestion Avoidance:** When `:cwnd > :ssthresh`, increase `:cwnd` by `1 * MTU` per RTT.
+- **Packet Loss (T3-rtx expiration or Fast Retransmit):** Drop `:ssthresh` to `max(:cwnd / 2, 4 * MTU)`, and reset `:cwnd` to `1 * MTU` (if timeout) or `:ssthresh` (if Fast Retransmit).
