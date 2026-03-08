@@ -59,7 +59,10 @@
           ;; Pull from streams
           ;; Basic round robin or just pulling from first available stream
           ;; We only pull items that haven't been sent yet
-          (let [active-stream-entry (first (filter #(some (fn [item] (not (:sent? item))) (:send-queue (val %))) current-streams))]
+          (let [can-send-data? (contains? #{:established :shutdown-pending :shutdown-sent} (:state state))
+                active-stream-entry (if can-send-data?
+                                      (first (filter #(some (fn [item] (not (:sent? item))) (:send-queue (val %))) current-streams))
+                                      nil)]
             (if active-stream-entry
               (let [[stream-id stream-data] active-stream-entry
                     q (:send-queue stream-data)

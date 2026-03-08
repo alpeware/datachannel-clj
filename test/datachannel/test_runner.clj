@@ -64,7 +64,7 @@
          'datachannel.sctp-tsn-wraparound-test
          'datachannel.sctp-zero-checksum-metrics-test
          'datachannel.sans-io-integration-test
-         ;; 'datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
+         'datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
          'datachannel.sctp-resend-init-and-establish-connection-test
          'datachannel.sctp-resend-cookie-echo-and-establish-connection-test
          'datachannel.sctp-shutdown-timer-test
