@@ -26,6 +26,7 @@
             [datachannel.sctp-one-peer-reconnects-with-pending-data-test]
             [datachannel.sctp-resent-init-test]
             [datachannel.sctp-retransmission-metrics-test]
+            [datachannel.sctp-tsn-wraparound-test]
             ))
 
 (defn -main [& args]
@@ -57,5 +58,6 @@
          'datachannel.sctp-one-peer-reconnects-with-pending-data-test
          'datachannel.sctp-resent-init-test
          'datachannel.sctp-retransmission-metrics-test
+         'datachannel.sctp-tsn-wraparound-test
          )]
     (System/exit (+ fail error))))

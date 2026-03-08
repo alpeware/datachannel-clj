@@ -2,30 +2,13 @@
   (:require [clojure.test :refer :all]
             [datachannel.core :as core]))
 
-(deftest tsn-wraparound-test
-  (testing "TSN wraparound handling"
-    (let [state (atom {:remote-tsn 4294967295 :remote-ver-tag 123})
-          connection {:state state
-                      :sctp-out (java.util.concurrent.LinkedBlockingQueue.)
-                      :on-message (atom nil)
-                      :on-data (atom nil)}
-          ;; Accessing private handle-sctp-packet for testing
-          handle-sctp-packet #'core/handle-sctp-packet
-          packet {:src-port 5000 :dst-port 5000
-                  :chunks [{:type :data :tsn 0 :protocol :webrtc/string :payload (byte-array 0)}]}]
-
-      (handle-sctp-packet packet connection)
-      (is (= 0 (:remote-tsn @state)) "TSN 0 should be considered newer than 4294967295")
-
-      (handle-sctp-packet {:src-port 5000 :dst-port 5000
-                           :chunks [{:type :data :tsn 10 :protocol :webrtc/string :payload (byte-array 0)}]}
-                          connection)
-      (is (= 10 (:remote-tsn @state)) "TSN 10 should be considered newer than 0")
-
-      (handle-sctp-packet {:src-port 5000 :dst-port 5000
-                           :chunks [{:type :data :tsn 5 :protocol :webrtc/string :payload (byte-array 0)}]}
-                          connection)
-      (is (= 10 (:remote-tsn @state)) "Old TSN 5 should NOT update remote-tsn (still 10)"))))
+;; TODO: The tests in this file rely on an outdated, effect-ful callback mock architecture
+;; from before the pure "Sans-IO" rewrite of `handle-sctp-packet`.
+;; They currently fail because they attempt to use atoms and callback functions incorrectly.
+;; In future loops, each test in this file should be incrementally extracted to its own namespace,
+;; refactored to assert against the pure `{:new-state ... :network-out ... :app-events ...}` maps,
+;; and added back to the `test_runner.clj`.
+;; The `tsn-wraparound-test` has already been migrated as an example.
 
 (deftest unordered-delivery-test
   (testing "Unordered delivery Head-of-Line blocking"
