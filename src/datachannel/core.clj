@@ -43,6 +43,20 @@
                       (update-in [:metrics :tx-packets] (fnil inc 0)))
        :network-out [init-packet] :app-events []})
 
+    :shutdown
+    (if (= (:state state) :established)
+      (if (empty? (:tx-queue state))
+        (let [shutdown-packet {:src-port (get state :src-port 5000)
+                               :dst-port (get state :dst-port 5000)
+                               :verification-tag (:remote-ver-tag state)
+                               :chunks [{:type :shutdown}]}
+              new-state (-> state
+                            (assoc :state :shutdown-sent)
+                            (assoc-in [:timers :t2-shutdown] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet shutdown-packet}))]
+          {:new-state new-state :network-out [shutdown-packet] :app-events []})
+        {:new-state (assoc state :state :shutdown-pending) :network-out [] :app-events []})
+      {:new-state state :network-out [] :app-events []})
+
     {:new-state state :network-out [] :app-events []}))
 
 (defn handle-timeout [state timer-id now-ms]

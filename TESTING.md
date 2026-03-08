@@ -44,7 +44,7 @@
     - [x] Resend Cookie Echo And Establish Connection
     - [x] Resending Cookie Echo Too Many Times Aborts
     - [x] Doesnt Send More Packets Until Cookie Ack Has Been Received
-    - [ ] Shutdown Connection
+    - [x] Shutdown Connection
     - [x] Shutdown Timer Expires Too Many Time Closes Connection
     - [ ] Establish Connection While Sending Data
     - [ ] Send Message After Established
