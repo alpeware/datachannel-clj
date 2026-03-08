@@ -225,13 +225,21 @@
                                     :remote-tsn (dec (:initial-tsn chunk))
                                     :ssn 0
                                     :state :cookie-wait)
+                             (assoc-in [:metrics :negotiated-maximum-incoming-streams]
+                                       (min (get-in current-state [:options :announced-maximum-incoming-streams] 10)
+                                            (:outbound-streams chunk)))
+                             (assoc-in [:metrics :negotiated-maximum-outgoing-streams]
+                                       (min (get-in current-state [:options :announced-maximum-outgoing-streams] 10)
+                                            (:inbound-streams chunk)))
                              (update :tx-queue (fn [q] (mapv (fn [item] (update item :packet assoc :verification-tag (:init-tag chunk))) q))))
                       cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
                       init-ack {:type :init-ack
                                 :init-tag (:local-ver-tag s1)
                                 :a-rwnd 100000
-                                :outbound-streams (:inbound-streams chunk)
-                                :inbound-streams (:outbound-streams chunk)
+                                :outbound-streams (min (get-in current-state [:options :announced-maximum-outgoing-streams] 10)
+                                                       (:inbound-streams chunk))
+                                :inbound-streams (min (get-in current-state [:options :announced-maximum-incoming-streams] 10)
+                                                      (:outbound-streams chunk))
                                 :initial-tsn (:next-tsn s1)
                                 :params {:cookie cookie-bytes}}
                       out-packet {:src-port (:dst-port packet)
@@ -241,8 +249,15 @@
                   {:next-state s1 :next-out [out-packet] :next-events []})
 
                 :init-ack
-                (let [s1 (assoc current-state :remote-ver-tag (:init-tag chunk)
-                                              :remote-tsn (dec (:initial-tsn chunk)))]
+                (let [s1 (-> current-state
+                             (assoc :remote-ver-tag (:init-tag chunk)
+                                    :remote-tsn (dec (:initial-tsn chunk)))
+                             (assoc-in [:metrics :negotiated-maximum-incoming-streams]
+                                       (min (get-in current-state [:options :announced-maximum-incoming-streams] 10)
+                                            (:outbound-streams chunk)))
+                             (assoc-in [:metrics :negotiated-maximum-outgoing-streams]
+                                       (min (get-in current-state [:options :announced-maximum-outgoing-streams] 10)
+                                            (:inbound-streams chunk))))]
                   (if-let [cookie (get-in chunk [:params :cookie])]
                     (let [out-packet {:src-port (:dst-port packet)
                                       :dst-port (:src-port packet)
@@ -550,6 +565,7 @@
                                   :heartbeat-error-count 0
                                   :rto-initial (get options :rto-initial 1000)
                                   :max-retransmissions (get options :max-retransmissions 10)
+                                  :options options
                                   :metrics {:tx-packets 0
                                             :rx-packets 0
                                             :tx-bytes   0

@@ -115,7 +115,7 @@
     - [ ] Lifecycle Events For Fail Max Retransmissions
     - [ ] Lifecycle Events For Expired Message With Retransmit Limit
     - [ ] Lifecycle Events For Expired Message With Lifetime Limit
-    - [ ] Exposes The Number Of Negotiated Streams
+    - [x] Exposes The Number Of Negotiated Streams
     - [ ] Reset Streams Deferred
     - [ ] Reset Streams With Paused Sender Resumes When Performed
     - [ ] Zero Checksum Metrics Are Set
