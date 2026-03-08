@@ -71,7 +71,7 @@
          'datachannel.sctp-establish-connection-lost-cookie-ack-test
          'datachannel.sctp-attempt-connect-without-cookie-test
          ;; 'datachannel.sctp-shutdown-connection-test
-         ;; 'datachannel.sctp-send-message-after-established-test
+         'datachannel.sctp-send-message-after-established-test
          'datachannel.sctp-cannot-send-empty-messages-test
          ;; 'datachannel.sctp-establish-connection-while-sending-data-test
          'datachannel.sctp-close-after-too-many-lost-heartbeats-test

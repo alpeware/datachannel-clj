@@ -20,7 +20,7 @@
           client-state-cw1 (:new-state res-sd1)]
 
       (is (empty? (:network-out res-sd1)) "Client should not send the data packet yet")
-      (is (= 1 (count (:tx-queue client-state-cw1))) "Data should be buffered in tx-queue")
+      (is (= 1 (count (:send-queue (get-in client-state-cw1 [:streams 0])))) "Data should be buffered in stream send-queue")
 
       ;; Server receives INIT, sends INIT-ACK
       (let [res-s1 (@#'core/handle-sctp-packet server-state init-packet now)
@@ -39,7 +39,7 @@
                 client-state-ce2 (:new-state res-sd2)]
 
             (is (empty? (:network-out res-sd2)) "Client should not send data until COOKIE-ACK")
-            (is (= 2 (count (:tx-queue client-state-ce2))) "Data should be buffered in tx-queue")
+            (is (= 2 (count (:send-queue (get-in client-state-ce2 [:streams 0])))) "Data should be buffered in stream send-queue")
 
             ;; Server receives COOKIE-ECHO, sends COOKIE-ACK
             (let [res-s2 (@#'core/handle-sctp-packet server-state-ia cookie-echo-packet now)
@@ -53,12 +53,13 @@
                     out-pkts (:network-out res-c2)]
 
                 (is (= :established (:state client-state-est)) "Client should be established")
-                (is (= 2 (count out-pkts)) "Client should have sent 2 data packets upon receiving COOKIE-ACK")
+                (is (= 1 (count out-pkts)) "Client should have bundled 2 data chunks in 1 packet upon receiving COOKIE-ACK")
 
                 (let [p1 (first out-pkts)
-                      p2 (second out-pkts)]
-                  (is (= :data (:type (first (:chunks p1)))) "First packet should be DATA")
-                  (is (= :data (:type (first (:chunks p2)))) "Second packet should be DATA")
+                      c1 (first (:chunks p1))
+                      c2 (second (:chunks p1))]
+                  (is (= :data (:type c1)) "First chunk should be DATA")
+                  (is (= :data (:type c2)) "Second chunk should be DATA")
 
-                  (is (= "Early Data 1" (String. ^bytes (:payload (first (:chunks p1))) "UTF-8")))
-                  (is (= "Early Data 2" (String. ^bytes (:payload (first (:chunks p2))) "UTF-8"))))))))))))
+                  (is (= "Early Data 1" (String. ^bytes (:payload c1) "UTF-8")))
+                  (is (= "Early Data 2" (String. ^bytes (:payload c2) "UTF-8"))))))))))))

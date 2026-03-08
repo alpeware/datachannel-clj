@@ -19,7 +19,7 @@
       (let [res-c2 (core/send-data client-cw (.getBytes "Test Data" "UTF-8") 1 :webrtc/string now)
             client-cw2 (:new-state res-c2)]
         (is (empty? (:network-out res-c2)) "Client does not send data immediately")
-        (is (= 1 (count (:tx-queue client-cw2))) "Data buffered in tx-queue")
+        (is (= 1 (count (:send-queue (get-in client-cw2 [:streams 1])))) "Data buffered in stream send-queue")
 
         ;; 3. Server handles INIT, replies with INIT-ACK
         (let [res-s1 (@#'core/handle-sctp-packet server-state init-packet now)
