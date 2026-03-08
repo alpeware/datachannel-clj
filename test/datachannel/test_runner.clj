@@ -7,6 +7,7 @@
                         [datachannel.stun-test]
             [datachannel.stun-integration-test]
                         [datachannel.sctp-state-machine-test]
+            [datachannel.sctp-establish-simultaneous-connection-test]
                         [datachannel.sctp-error-chunk-test]
                         [datachannel.sctp-checksum-test]
             [datachannel.sctp-cookie-echo-abort-test]
@@ -33,6 +34,7 @@
                   'datachannel.stun-test
          'datachannel.stun-integration-test
                   'datachannel.sctp-state-machine-test
+                  'datachannel.sctp-establish-simultaneous-connection-test
                   'datachannel.sctp-error-chunk-test
                   'datachannel.sctp-checksum-test
          'datachannel.sctp-cookie-echo-abort-test
