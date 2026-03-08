@@ -11,11 +11,10 @@
           now 1000000]
 
       ;; 1. Initiate connection
-      (let [{:keys [new-state effects]} (core/handle-event initial-state {:type :connect} now)]
+      (let [{:keys [new-state network-out]} (core/handle-event initial-state {:type :connect} now)]
         (is (= :cookie-wait (:state new-state)) "State should transition to cookie-wait")
-        (is (= 1 (count effects)) "Should generate one effect")
-        (is (= :send-packet (:type (first effects))) "Effect should be send-packet")
-        (is (= :init (-> effects first :packet :chunks first :type)) "Should send INIT chunk")
+        (is (= 1 (count network-out)) "Should generate one outgoing packet")
+        (is (= :init (-> network-out first :chunks first :type)) "Should send INIT chunk")
 
         (let [timer (get-in new-state [:timers :t1-init])]
           (is timer "Should setup t1-init timer")
@@ -30,17 +29,17 @@
             (if (< retries 8)
               ;; Retransmit
               (let [expired-time (:expires-at (get-in state [:timers :t1-init]))
-                    {:keys [new-state effects]} (core/handle-timeout state :t1-init expired-time)]
-                (is (= 1 (count effects)) "Should generate one effect for retry")
-                (is (= :send-packet (:type (first effects))) "Effect should be send-packet")
+                    {:keys [new-state network-out]} (core/handle-timeout state :t1-init expired-time)]
+                (is (= 1 (count network-out)) "Should generate one packet for retry")
+                (is (= :init (-> network-out first :chunks first :type)) "Should send INIT chunk again")
                 (is (= (inc retries) (:retries (get-in new-state [:timers :t1-init]))) "Should increment retries")
                 (recur new-state expired-time (inc retries)))
 
               ;; Final timeout (Abort)
               (let [expired-time (:expires-at (get-in state [:timers :t1-init]))
-                    {:keys [new-state effects]} (core/handle-timeout state :t1-init expired-time)]
+                    {:keys [new-state app-events network-out]} (core/handle-timeout state :t1-init expired-time)]
                 (is (= :closed (:state new-state)) "State should transition to closed")
                 (is (nil? (get-in new-state [:timers :t1-init])) "Timer should be removed")
-                (is (= 1 (count effects)) "Should generate one effect for abort")
-                (is (= :on-error (:type (first effects))) "Effect should be on-error")
-                (is (= :max-retransmissions (:cause (first effects))) "Error cause should be max-retransmissions")))))))))
+                (is (= 1 (count app-events)) "Should generate one event for abort")
+                (is (= :on-error (:type (first app-events))) "Event should be on-error")
+                (is (= :max-retransmissions (:cause (first app-events))) "Error cause should be max-retransmissions")))))))))
