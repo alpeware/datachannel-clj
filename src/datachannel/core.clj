@@ -89,6 +89,24 @@
                                  :packet packet})
            :network-out [packet] :app-events []})))
 
+    :t1-cookie
+    (let [timer (get-in state [:timers :t1-cookie])
+          retries (:retries timer)]
+      (if (>= retries 8)
+        {:new-state (-> state
+                        (assoc :state :closed)
+                        (update :timers dissoc :t1-cookie))
+         :network-out [] :app-events [{:type :on-error :cause :max-retransmissions}]}
+        (let [new-delay (* (:delay timer) 2)
+              new-delay (min new-delay 60000) ;; Cap delay
+              packet (:packet timer)]
+          {:new-state (assoc-in state [:timers :t1-cookie]
+                                {:expires-at (+ now-ms new-delay)
+                                 :delay new-delay
+                                 :retries (inc retries)
+                                 :packet packet})
+           :network-out [packet] :app-events []})))
+
     :t3-rtx
     (let [timer (get-in state [:timers :t3-rtx])
           q (:tx-queue state)]
@@ -227,16 +245,20 @@
                         :chunks [{:type :cookie-echo :cookie cookie}]}
             s2 (-> s1
                    (assoc :state :cookie-echoed)
-                   (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000)
-                                                 :delay 3000
-                                                 :retries 0
-                                                 :packet out-packet}))]
+                   (update :timers dissoc :t1-init)
+                   (assoc-in [:timers :t1-cookie] {:expires-at (+ now-ms 3000)
+                                                   :delay 3000
+                                                   :retries 0
+                                                   :packet out-packet}))]
         {:next-state s2 :next-out [out-packet] :next-events []})
       {:next-state s1 :next-out [] :next-events []})))
 
 (defmethod process-chunk :cookie-echo [state chunk packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
-        s1 (assoc state :state :established)
+        s1 (-> state
+               (assoc :state :established)
+               (update :timers dissoc :t1-init)
+               (update :timers dissoc :t1-cookie))
         s2 (if (pos? interval)
              (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
              s1)
@@ -265,7 +287,9 @@
 
 (defmethod process-chunk :cookie-ack [state chunk packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
-        s1 (update state :timers dissoc :t1-init)
+        s1 (-> state
+               (update :timers dissoc :t1-init)
+               (update :timers dissoc :t1-cookie))
         s2 (if (pos? interval)
              (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
              s1)

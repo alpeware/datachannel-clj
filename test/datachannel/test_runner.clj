@@ -23,6 +23,7 @@
             [datachannel.sans-io-integration-test]
             [datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test]
             [datachannel.sctp-resend-init-and-establish-connection-test]
+            [datachannel.sctp-resend-cookie-echo-and-establish-connection-test]
             ))
 
 (defn -main [& args]
@@ -51,5 +52,6 @@
          'datachannel.sans-io-integration-test
          'datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
          'datachannel.sctp-resend-init-and-establish-connection-test
+         'datachannel.sctp-resend-cookie-echo-and-establish-connection-test
          )]
     (System/exit (+ fail error))))
