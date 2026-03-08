@@ -29,6 +29,7 @@
             [datachannel.sctp-establish-connection-lost-cookie-ack-test]
             [datachannel.sctp-attempt-connect-without-cookie-test]
             [datachannel.sctp-shutdown-connection-test]
+            [datachannel.sctp-send-message-after-established-test]
             ))
 
 (defn -main [& args]
@@ -63,5 +64,6 @@
          'datachannel.sctp-establish-connection-lost-cookie-ack-test
          'datachannel.sctp-attempt-connect-without-cookie-test
          'datachannel.sctp-shutdown-connection-test
+         'datachannel.sctp-send-message-after-established-test
          )]
     (System/exit (+ fail error))))
