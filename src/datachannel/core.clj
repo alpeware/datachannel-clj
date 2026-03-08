@@ -773,7 +773,7 @@
       (throw (ex-info "Cannot send too large message" {:type :too-large})))
     (let [ver-tag (:remote-ver-tag state)
           tsn (or (:next-tsn state) 0)
-          ssn (or (:ssn state) 0)
+          ssn (get-in state [:streams stream-id :next-ssn] 0)
           data-chunk {:type :data
                       :flags 3 ;; B and E bits
                       :tsn tsn
@@ -783,7 +783,8 @@
                       :payload payload}
           is-established? (= (:state state) :established)
           s1 (-> state
-                 (assoc :next-tsn (inc tsn) :ssn (inc ssn)))
+                 (assoc :next-tsn (inc tsn))
+                 (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
           queue-item {:tsn tsn :chunk data-chunk :sent-at now-ms :retries 0 :sent? false}
           s2 (assoc-in s1 [:streams stream-id :send-queue] (conj (get-in s1 [:streams stream-id :send-queue] []) queue-item))
           interval (get s2 :heartbeat-interval 30000)
