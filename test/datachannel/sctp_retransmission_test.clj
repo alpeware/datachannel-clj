@@ -28,17 +28,17 @@
       ;; Let the T3-rtx expire once. Since max-retransmissions is 0,
       ;; it should immediately abort instead of retransmitting.
       (let [timer-expire-time (+ now 1000)
-            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t3-rtx timer-expire-time)]
+            {:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t3-rtx timer-expire-time)]
         (reset! state-atom new-state)
         (is (= :closed (:state @state-atom)) "State should transition to closed")
 
-        ;; Verify network-out
-        (let [abort-effect (first network-out)
-              error-effect (first (filter #(= (:type %) :on-error) network-out))]
-          (is abort-effect "Should emit an effect to send abort packet")
-          (is (= :abort (:type (first (:chunks abort-effect)))) "Should be an abort packet")
-          (is error-effect "Should emit an on-error effect")
-          (is (= :max-retransmissions (:cause error-effect)) "Error cause should be max-retransmissions"))))))
+        ;; Verify network-out and app-events
+        (let [abort-packet (first network-out)
+              error-event (first (filter #(= (:type %) :on-error) app-events))]
+          (is abort-packet "Should emit an effect to send abort packet")
+          (is (= :abort (:type (first (:chunks abort-packet)))) "Should be an abort packet")
+          (is error-event "Should emit an on-error event")
+          (is (= :max-retransmissions (:cause error-event)) "Error cause should be max-retransmissions"))))))
 
 (deftest close-connection-after-one-failed-retransmission-test
   (testing "Close connection after one failed retransmission"
@@ -79,9 +79,9 @@
         (reset! state-atom new-state)
         (is (= :closed (:state @state-atom)) "State should transition to closed")
 
-        (let [abort-effect (first network-out)]
-          (is abort-effect "Should emit an effect to send abort packet")
-          (is (= :abort (:type (first (:chunks abort-effect)))) "Should be an abort packet"))))))
+        (let [abort-packet (first network-out)]
+          (is abort-packet "Should emit an effect to send abort packet")
+          (is (= :abort (:type (first (:chunks abort-packet)))) "Should be an abort packet"))))))
 
 (deftest close-connection-after-too-many-retransmissions-test
   (testing "Close connection after too many retransmissions"
@@ -119,6 +119,6 @@
           (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t3-rtx current-time)]
             (reset! state-atom new-state)
             (is (= :closed (:state @state-atom)) "State should transition to closed")
-            (let [abort-effect (first network-out)]
-              (is abort-effect "Should emit an effect to send abort packet")
-              (is (= :abort (:type (first (:chunks abort-effect)))) "Should be an abort packet"))))))))
+            (let [abort-packet (first network-out)]
+              (is abort-packet "Should emit an effect to send abort packet")
+              (is (= :abort (:type (first (:chunks abort-packet)))) "Should be an abort packet"))))))))

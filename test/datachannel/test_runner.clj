@@ -17,6 +17,9 @@
             [datachannel.sctp-wait-for-cookie-ack-test]
             [datachannel.sctp-both-sides-send-heartbeats-test]
             [datachannel.sctp-establish-simultaneous-lost-data-test]
+            [datachannel.sctp-init-abort-test]
+            [datachannel.sctp-retransmission-test]
+            [datachannel.sctp-recovers-on-last-retransmission-test]
             ))
 
 (defn -main [& args]
@@ -39,5 +42,8 @@
          'datachannel.sctp-wait-for-cookie-ack-test
          'datachannel.sctp-both-sides-send-heartbeats-test
          'datachannel.sctp-establish-simultaneous-lost-data-test
+         'datachannel.sctp-init-abort-test
+         'datachannel.sctp-retransmission-test
+         'datachannel.sctp-recovers-on-last-retransmission-test
          )]
     (System/exit (+ fail error))))

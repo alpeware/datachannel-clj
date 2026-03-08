@@ -56,12 +56,11 @@
             {:new-state (-> state
                             (assoc :state :closed)
                             (update :timers dissoc :t2-shutdown))
-             :effects [{:type :send-packet
-                        :packet {:src-port (:src-port (:packet timer))
-                                 :dst-port (:dst-port (:packet timer))
-                                 :verification-tag (:remote-ver-tag state)
-                                 :chunks [{:type :abort}]}}
-                       {:type :on-error :cause :max-retransmissions}]}
+             :network-out [{:src-port (:src-port (:packet timer))
+                            :dst-port (:dst-port (:packet timer))
+                            :verification-tag (:remote-ver-tag state)
+                            :chunks [{:type :abort}]}]
+             :app-events [{:type :on-error :cause :max-retransmissions}]}
             (let [new-delay (* (:delay timer) 2)
                   new-delay (min new-delay 60000)
                   packet (:packet timer)]
@@ -103,12 +102,11 @@
             {:new-state (-> state
                             (assoc :state :closed)
                             (update :timers dissoc :t3-rtx))
-             :effects [{:type :send-packet
-                        :packet {:src-port (:src-port (:packet first-item))
-                                 :dst-port (:dst-port (:packet first-item))
-                                 :verification-tag (:remote-ver-tag state)
-                                 :chunks [{:type :abort}]}}
-                       {:type :on-error :cause :max-retransmissions}]}
+             :network-out [{:src-port (:src-port (:packet first-item))
+                            :dst-port (:dst-port (:packet first-item))
+                            :verification-tag (:remote-ver-tag state)
+                            :chunks [{:type :abort}]}]
+             :app-events [{:type :on-error :cause :max-retransmissions}]}
             (let [packet (:packet first-item)
                   new-delay (* (:delay timer) 2)
                   new-delay (min new-delay 60000)
@@ -140,12 +138,11 @@
         {:new-state (-> state
                         (assoc :state :closed)
                         (update :timers dissoc :t-heartbeat :t-heartbeat-rtx))
-         :effects [{:type :send-packet
-                    :packet {:src-port 5000
-                             :dst-port 5000
-                             :verification-tag (:remote-ver-tag state)
-                             :chunks [{:type :abort}]}}
-                   {:type :on-error :cause :max-retransmissions}]}
+         :network-out [{:src-port 5000
+                        :dst-port 5000
+                        :verification-tag (:remote-ver-tag state)
+                        :chunks [{:type :abort}]}]
+         :app-events [{:type :on-error :cause :max-retransmissions}]}
         {:new-state (-> state
                         (assoc :heartbeat-error-count new-errors)
                         (update :timers dissoc :t-heartbeat-rtx))

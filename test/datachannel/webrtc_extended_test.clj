@@ -65,7 +65,8 @@
                 (.send dc dc-buf)
                 (let [received (deref binary-received 10000 :timeout)]
                   (is (not= :timeout received) "Binary data timeout")
-                  (is (Arrays/equals ^bytes data ^bytes received) "Binary data mismatch")))
+                    (when (not= :timeout received)
+                      (is (Arrays/equals ^bytes data ^bytes received) "Binary data mismatch"))))
               (is false "DataChannel timeout"))))
         (finally
           (dc/close server)
@@ -197,7 +198,8 @@
                 (.send dc dc-buf)
                 (let [received (deref large-msg-received 10000 :timeout)]
                   (is (not= :timeout received) "Large message timeout")
-                  (is (Arrays/equals ^bytes large-data ^bytes received) "Large data mismatch")))
+                    (when (not= :timeout received)
+                      (is (Arrays/equals ^bytes large-data ^bytes received) "Large data mismatch"))))
               (is false "DataChannel timeout"))))
         (finally
           (dc/close server)
