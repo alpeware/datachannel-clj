@@ -57,7 +57,7 @@
     - [x] Close Connection After Second Lost Heartbeat
     - [x] Close Connection After Too Many Lost Heartbeats
     - [x] Recovers After A Successful Ack
-    - [ ] Error Counter Is Reset On Heartbeat Ack
+    - [x] Error Counter Is Reset On Heartbeat Ack
     - [ ] Reset Stream
     - [ ] Send Reset Stream When Streams Ready
     - [ ] Reset Stream Will Make Chunks Start At Zero Ssn
@@ -67,7 +67,7 @@
     - [ ] Send Message With Limited Rtx
     - [x] Close Connection After First Failed Transmission
     - [x] Close Connection After One Failed Retransmission
-    - [ ] Error Counter Is Reset On Data Ack
+    - [x] Error Counter Is Reset On Data Ack
     - [ ] Both Sides Send Heartbeats
     - [x] Close Connection After Too Many Retransmissions
     - [ ] Recover On Last Retransmission

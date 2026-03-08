@@ -13,6 +13,7 @@
                         [datachannel.sctp-error-chunk-test]
                         [datachannel.sctp-checksum-test]
             [datachannel.sctp-cookie-echo-abort-test]
+            [datachannel.sctp-error-counter-reset-test]
             ))
 
 (defn -main [& args]
@@ -31,5 +32,6 @@
                   'datachannel.sctp-error-chunk-test
                   'datachannel.sctp-checksum-test
          'datachannel.sctp-cookie-echo-abort-test
+         'datachannel.sctp-error-counter-reset-test
          )]
     (System/exit (+ fail error))))

@@ -306,8 +306,11 @@
                       s1 (if (empty? new-q)
                            (-> current-state
                                (assoc :tx-queue new-q)
+                               (assoc :heartbeat-error-count 0)
                                (update :timers dissoc :t3-rtx))
-                           (assoc current-state :tx-queue new-q))]
+                           (-> current-state
+                               (assoc :tx-queue new-q)
+                               (assoc :heartbeat-error-count 0)))]
                   {:next-state s1 :next-out [] :next-events []})
 
                 :heartbeat-ack
