@@ -35,6 +35,7 @@
             [datachannel.sctp-establish-connection-while-sending-data-test]
             [datachannel.sctp-close-after-too-many-lost-heartbeats-test]
             [datachannel.sctp-recovers-after-successful-ack-test]
+            [datachannel.sctp-timeout-resends-packet-test]
             ))
 
 (defn -main [& args]
@@ -75,5 +76,6 @@
          'datachannel.sctp-establish-connection-while-sending-data-test
          'datachannel.sctp-close-after-too-many-lost-heartbeats-test
          'datachannel.sctp-recovers-after-successful-ack-test
+         'datachannel.sctp-timeout-resends-packet-test
          )]
     (System/exit (+ fail error))))
