@@ -265,8 +265,15 @@
                       out-packet {:src-port (:dst-port packet)
                                   :dst-port (:src-port packet)
                                   :verification-tag (:remote-ver-tag s2)
-                                  :chunks [{:type :cookie-ack}]}]
-                  {:next-state s2 :next-out [out-packet] :next-events [{:type :on-open}]})
+                                  :chunks [{:type :cookie-ack}]}
+                      tx-queue (get s2 :tx-queue [])
+                      new-out [out-packet]
+                      [s3 final-out] (if (and (= (:state current-state) :cookie-echoed) (= (:state s2) :established) (seq tx-queue))
+                                       (let [pkts (map :packet tx-queue)]
+                                         [(assoc-in s2 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                                          (into new-out pkts)])
+                                       [s2 new-out])]
+                  {:next-state s3 :next-out final-out :next-events [{:type :on-open}]})
 
                 :cookie-ack
                 (let [interval (get current-state :heartbeat-interval 30000)

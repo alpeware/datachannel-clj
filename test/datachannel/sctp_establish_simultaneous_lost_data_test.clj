@@ -47,10 +47,11 @@
 
           ;; Queue data on A BEFORE it receives Z's INIT-ACK
           (core/send-data conn-a (.getBytes "hello" "UTF-8") 1 :webrtc/string)
-          (let [data-packet-a (.poll out-a)]
-            (is data-packet-a "A should queue DATA packet")
-            (is (= :data (-> data-packet-a :chunks first :type)))
 
+          ;; Note: In Sans-IO, `send-data` buffers the packet in `tx-queue` because the connection is not yet established.
+          ;; It will NOT be emitted to `out-a` right now.
+
+          (let []
             ;; Setup collision:
             ;; A receives Z's INIT
             (handle-sctp-packet conn-a init-packet-z)
@@ -72,16 +73,24 @@
                 (is cookie-echo-from-z "Z should send COOKIE-ECHO")
                 (is cookie-echo-from-a "A should send COOKIE-ECHO")
 
-                ;; We drop the DATA packet that A previously queued (data-packet-a)
                 ;; Z receives A's COOKIE-ECHO
                 (handle-sctp-packet conn-z cookie-echo-from-a)
                 ;; A receives Z's COOKIE-ECHO
                 (handle-sctp-packet conn-a cookie-echo-from-z)
 
-                (let [cookie-ack-from-z (.poll out-z)
-                      cookie-ack-from-a (.poll out-a)]
+                ;; When A receives Z's COOKIE-ECHO, it transitions to :established.
+                ;; It should output COOKIE-ACK, and also flush its tx-queue (the DATA packet).
+                (let [pkts-a (loop [acc []]
+                               (if-let [p (.poll out-a)]
+                                 (recur (conj acc p))
+                                 acc))
+                      cookie-ack-from-z (.poll out-z)
+                      cookie-ack-from-a (first (filter #(= :cookie-ack (-> % :chunks first :type)) pkts-a))
+                      data-packet-a     (first (filter #(= :data (-> % :chunks first :type)) pkts-a))]
+
                   (is cookie-ack-from-z "Z should send COOKIE-ACK")
                   (is cookie-ack-from-a "A should send COOKIE-ACK")
+                  (is data-packet-a "A should queue DATA packet and send it after transition to :established")
 
                   ;; Both receive COOKIE-ACK
                   (handle-sctp-packet conn-z cookie-ack-from-a)
@@ -92,7 +101,19 @@
                   (is (empty? @z-messages) "Z should not have received the message yet (packet lost)")
 
                   ;; Simulate timeout by A retransmitting the lost DATA packet
-                  (handle-sctp-packet conn-z data-packet-a)
+                  ;; Wait, instead of just feeding the extracted data-packet-a,
+                  ;; let's trigger the T3-rtx timeout to retransmit it automatically!
+                  (let [now-ms (+ (System/currentTimeMillis) 1500)
+                        res (@#'core/handle-timeout @state-a :t3-rtx now-ms)]
+                    (reset! state-a (:new-state res))
+                    (doseq [out (:network-out res)] (.offer (:sctp-out conn-a) out))
 
-                  (is (= 1 (count @z-messages)) "Z should have received the message")
-                  (is (= "hello" (String. ^bytes (first @z-messages) "UTF-8")) "Message should be 'hello'"))))))))))
+                    (let [retransmitted-data-a (.poll out-a)]
+                      (is retransmitted-data-a "A should retransmit DATA packet on T3 timeout")
+                      (is (= :data (-> retransmitted-data-a :chunks first :type)))
+
+                      ;; Z receives retransmitted DATA packet
+                      (handle-sctp-packet conn-z retransmitted-data-a)
+
+                      (is (= 1 (count @z-messages)) "Z should have received the message")
+                      (is (= "hello" (if-let [msg (first @z-messages)] (String. ^bytes msg "UTF-8") nil)) "Message should be 'hello'"))))))))))))
