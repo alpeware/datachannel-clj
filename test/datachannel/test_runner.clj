@@ -37,6 +37,7 @@
             [datachannel.sctp-recovers-after-successful-ack-test]
             [datachannel.sctp-timeout-resends-packet-test]
             [datachannel.sctp-init-ack-robustness-test]
+            [datachannel.sctp-reconnect-test]
             ))
 
 (defn -main [& args]
@@ -79,5 +80,6 @@
          'datachannel.sctp-recovers-after-successful-ack-test
          'datachannel.sctp-timeout-resends-packet-test
          'datachannel.sctp-init-ack-robustness-test
+         'datachannel.sctp-reconnect-test
          )]
     (System/exit (+ fail error))))
