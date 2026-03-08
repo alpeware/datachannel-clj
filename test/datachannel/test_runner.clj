@@ -21,6 +21,7 @@
             [datachannel.sctp-retransmission-test]
             [datachannel.sctp-recovers-on-last-retransmission-test]
             [datachannel.sctp-metrics-test]
+            [datachannel.sctp-rx-tx-metrics-increase-test]
             [datachannel.sctp-heartbeat-test]
             ))
 
@@ -48,6 +49,7 @@
          'datachannel.sctp-retransmission-test
          'datachannel.sctp-recovers-on-last-retransmission-test
          'datachannel.sctp-metrics-test
+         'datachannel.sctp-rx-tx-metrics-increase-test
          'datachannel.sctp-heartbeat-test
          )]
     (System/exit (+ fail error))))

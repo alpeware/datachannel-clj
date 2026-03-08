@@ -40,7 +40,8 @@
                                  :params {}}]}]
       {:new-state (-> state
                       (assoc :state :cookie-wait)
-                      (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet init-packet}))
+                      (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet init-packet})
+                      (update-in [:metrics :tx-packets] (fnil inc 0)))
        :network-out [init-packet] :app-events []})
 
     {:new-state state :network-out [] :app-events []}))
@@ -166,13 +167,14 @@
   {:new-state state :network-out [] :app-events []})
 
 (defn handle-sctp-packet [state packet now-ms]
-  (let [chunks (:chunks packet)]
-    (loop [current-state state
+  (let [chunks (:chunks packet)
+        state-with-rx (update-in state [:metrics :rx-packets] (fnil inc 0))]
+    (loop [current-state state-with-rx
            remaining-chunks chunks
            network-out []
            app-events []]
       (if (empty? remaining-chunks)
-        {:new-state current-state
+        {:new-state (update-in current-state [:metrics :tx-packets] (fnil + 0) (count network-out))
          :network-out network-out
          :app-events app-events}
         (let [chunk (first remaining-chunks)
@@ -265,12 +267,22 @@
                                   :chunks [{:type :cookie-ack}]}
                       tx-queue (get s2 :tx-queue [])
                       new-out [out-packet]
-                      [s3 final-out] (if (and (= (:state current-state) :cookie-echoed) (= (:state s2) :established) (seq tx-queue))
+                      [s3 final-out] (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s2) :established) (seq tx-queue))
                                        (let [pkts (map :packet tx-queue)]
                                          [(assoc-in s2 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                                           (into new-out pkts)])
-                                       [s2 new-out])]
-                  {:next-state s3 :next-out final-out :next-events [{:type :on-open}]})
+                                       [s2 new-out])
+                      tx-pkts (count tx-queue)
+                      tx-bytes (reduce + (map (fn [item]
+                                                (reduce + (map #(alength ^bytes (:payload %))
+                                                               (filter #(= (:type %) :data) (:chunks (:packet item))))))
+                                              tx-queue))
+                      s4 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s2) :established) (seq tx-queue))
+                           (-> s3
+                               (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
+                               (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
+                           s3)]
+                  {:next-state s4 :next-out final-out :next-events [{:type :on-open}]})
 
                 :cookie-ack
                 (let [interval (get current-state :heartbeat-interval 30000)
@@ -296,12 +308,22 @@
                            s3)
                       tx-queue (get s4 :tx-queue [])
                       new-out (if out-packet [out-packet] [])
-                      [s5 final-out] (if (and (= (:state current-state) :cookie-echoed) (= (:state s4) :established) (seq tx-queue))
+                      [s5 final-out] (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s4) :established) (seq tx-queue))
                                        (let [pkts (map :packet tx-queue)]
                                          [(assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                                           (into new-out pkts)])
-                                       [s4 new-out])]
-                  {:next-state s5 :next-out final-out :next-events [{:type :on-open}]})
+                                       [s4 new-out])
+                      tx-pkts (count tx-queue)
+                      tx-bytes (reduce + (map (fn [item]
+                                                (reduce + (map #(alength ^bytes (:payload %))
+                                                               (filter #(= (:type %) :data) (:chunks (:packet item))))))
+                                              tx-queue))
+                      s6 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state current-state)) (= (:state s4) :established) (seq tx-queue))
+                           (-> s5
+                               (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
+                               (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
+                           s5)]
+                  {:next-state s6 :next-out final-out :next-events [{:type :on-open}]})
 
                 :heartbeat
                 (let [out-packet {:src-port (:dst-port packet)
@@ -320,9 +342,11 @@
                            (-> current-state
                                (assoc :tx-queue new-q)
                                (assoc :heartbeat-error-count 0)
+                               (assoc-in [:metrics :unacked-data] (count new-q))
                                (update :timers dissoc :t3-rtx))
                            (-> current-state
                                (assoc :tx-queue new-q)
+                               (assoc-in [:metrics :unacked-data] (count new-q))
                                (assoc :heartbeat-error-count 0)))]
                   {:next-state s1 :next-out [] :next-events []})
 
@@ -607,9 +631,8 @@
     (when (zero? len)
       (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
     (when (> len max-size)
-      (throw (ex-info "Cannot send too large message" {:type :too-large}))))
-  (let [state (:state connection)
-        ver-tag (:remote-ver-tag @state)
+      (throw (ex-info "Cannot send too large message" {:type :too-large})))
+    (let [ver-tag (:remote-ver-tag @state)
         tsn (let [t (or (:next-tsn @state) 0)]
               (swap! state update :next-tsn inc)
               t)
@@ -636,12 +659,17 @@
                             ;; Reset heartbeat timer when sending data
                             new-s (if (and (pos? interval) (contains? (:timers new-s) :t-heartbeat))
                                     (assoc-in new-s [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-                                    new-s)]
+                                    new-s)
+                            new-s (-> new-s
+                                      (update-in [:metrics :unacked-data] (fnil inc 0))
+                                      (cond-> is-established?
+                                        (-> (update-in [:metrics :tx-packets] (fnil inc 0))
+                                            (update-in [:metrics :tx-bytes] (fnil + 0) len))))]
                         (if (and is-established? (nil? (get-in new-s [:timers :t3-rtx])))
                           (assoc-in new-s [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                           new-s))))
        (when is-established?
-         (.offer (:sctp-out connection) packet)))))
+         (.offer (:sctp-out connection) packet))))))
 
 (defn send-msg [connection msg]
   (send-data connection (.getBytes msg "UTF-8") 0 :webrtc/string))
