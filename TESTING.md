@@ -32,7 +32,7 @@
 - [x] [TSN Wraparound](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_queue.rs)
 - [ ] [Delayed SACKs](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_timeout.rs)
 - [ ] [Full Socket State Machine](https://github.com/webrtc/dcsctp/blob/main/src/socket/socket_tests.rs)
-    - [ ] Establish Connection
+    - [x] Establish Connection
     - [ ] Send Many Api Method
     - [x] Establish Connection With Setup Collision
     - [x] Shutting Down While Establishing Connection
