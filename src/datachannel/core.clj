@@ -36,7 +36,8 @@
       (loop [remaining-ctrl pending-ctrl
              current-streams streams
              bundled-chunks []
-             current-size 0]
+             current-size 0
+             current-flight-size (get state :flight-size 0)]
         (if (seq remaining-ctrl)
           (let [chunk (first remaining-ctrl)
                 ;; Approximate size, could be more precise but assuming small for control chunks
@@ -45,9 +46,10 @@
               (recur (rest remaining-ctrl)
                      current-streams
                      (conj bundled-chunks chunk)
-                     (+ current-size chunk-size))
+                     (+ current-size chunk-size)
+                     current-flight-size)
               ;; Stop if it exceeds MTU (unlikely for control chunks but adhering to strict boundary)
-              {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams)
+              {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
                :network-out [{:src-port (get state :local-port 5000)
                               :dst-port (get state :remote-port 5000)
                               :verification-tag (get state :remote-ver-tag 0)
@@ -65,26 +67,43 @@
                     data-item (nth q data-idx)
                     data-chunk (:chunk data-item)
                     ;; Approximate size, +16 for chunk header overhead
-                    chunk-size (+ 16 (if (:payload data-chunk) (alength ^bytes (:payload data-chunk)) 0))]
+                    chunk-size (+ 16 (if (:payload data-chunk) (alength ^bytes (:payload data-chunk)) 0))
+                    cwnd (get state :cwnd 1000000)]
+                (if (> (+ current-flight-size chunk-size) cwnd)
+                  ;; Congestion window full, halt pulling new data
+                  {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
+                   :network-out (if (seq bundled-chunks)
+                                  [{:src-port (get state :local-port 5000)
+                                    :dst-port (get state :remote-port 5000)
+                                    :verification-tag (get state :remote-ver-tag 0)
+                                    :chunks bundled-chunks}]
+                                  [])
+                   :app-events app-events}
 
-                (if (or (empty? bundled-chunks) (<= (+ current-size chunk-size) max-payload-size))
-                  (let [new-q (assoc q data-idx (assoc data-item :sent? true))
-                        new-streams (assoc-in current-streams [stream-id :send-queue] new-q)]
-                    (recur remaining-ctrl
-                           new-streams
-                           (conj bundled-chunks data-chunk)
-                           (+ current-size chunk-size)))
+                  (if (or (empty? bundled-chunks) (<= (+ current-size chunk-size) max-payload-size))
+                    (let [new-q (assoc q data-idx (assoc data-item :sent? true))
+                          new-streams (assoc-in current-streams [stream-id :send-queue] new-q)
+                          ;; Only increase flight-size for *new* transmissions (retries = 0)
+                          ;; Retransmissions don't increase flight-size
+                          new-flight-size (if (= (:retries data-item) 0)
+                                            (+ current-flight-size chunk-size)
+                                            current-flight-size)]
+                      (recur remaining-ctrl
+                             new-streams
+                             (conj bundled-chunks data-chunk)
+                             (+ current-size chunk-size)
+                             new-flight-size))
 
                   ;; Halting when MTU is reached
-                  {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams)
+                  {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
                    :network-out [{:src-port (get state :local-port 5000)
                                   :dst-port (get state :remote-port 5000)
                                   :verification-tag (get state :remote-ver-tag 0)
                                   :chunks bundled-chunks}]
-                   :app-events app-events}))
+                   :app-events app-events})))
 
               ;; No more data in streams
-              {:new-state (assoc state :pending-control-chunks [] :streams current-streams)
+              {:new-state (assoc state :pending-control-chunks [] :streams current-streams :flight-size current-flight-size)
                :network-out (if (seq bundled-chunks)
                               [{:src-port (get state :local-port 5000)
                                 :dst-port (get state :remote-port 5000)
@@ -222,11 +241,24 @@
                             new-delay (min new-delay 60000)
                             ;; Mark sent? false so packetize will re-transmit it
                             updated-item (assoc first-item :retries (inc retries) :sent? false)
-                            new-q (assoc q 0 updated-item)]
+                            new-q (assoc q 0 updated-item)
+
+                            ;; CC backoff
+                            cwnd (get state :cwnd 1000000)
+                            mtu (get state :mtu 1200)
+                            new-ssthresh (max (quot cwnd 2) (* 4 mtu))
+                            new-cwnd (* 1 mtu)
+
+                            ;; flight-size logic: decrease flight-size because we mark it sent?=false
+                            chunk-size (+ 16 (if (:payload (:chunk first-item)) (alength ^bytes (:payload (:chunk first-item))) 0))
+                            flight-size (max 0 (- (get state :flight-size 0) chunk-size))]
                         {:new-state (-> state
                                         (assoc-in [:timers :t3-rtx] {:expires-at (+ now-ms new-delay) :delay new-delay})
                                         (update-in [:metrics :retransmissions] (fnil inc 0))
-                                        (assoc-in [:streams stream-id :send-queue] new-q))
+                                        (assoc-in [:streams stream-id :send-queue] new-q)
+                                        (assoc :ssthresh new-ssthresh)
+                                        (assoc :cwnd new-cwnd)
+                                        (assoc :flight-size flight-size))
                          :app-events []})))))
 
               :t-heartbeat
@@ -276,31 +308,12 @@
                     :a-rwnd 100000
                     :gap-blocks []
                     :duplicate-tsns []}
-        s1 (update s1 :pending-control-chunks conj sack-chunk)]
-    (cond
-      (= proto :webrtc/dcep)
-      (let [payload (:payload chunk)
-            msg-type (bit-and (aget ^bytes payload 0) 0xff)]
-        (if (= msg-type 3) ;; OPEN
-          (let [ack-tsn (:next-tsn s1)
-                s2 (update s1 :next-tsn inc)
-                ack-ssn (:ssn s2)
-                s3 (update s2 :ssn inc)
-                ack-chunk {:type :data
-                           :flags 3 ;; B and E bits
-                           :tsn ack-tsn
-                           :stream-id (:stream-id chunk)
-                           :seq-num ack-ssn
-                           :protocol :webrtc/dcep
-                           :payload (byte-array [(byte 2)])}]
-            ;; For now, putting ack chunk directly into streams
-            {:next-state (assoc-in s3 [:streams (:stream-id chunk) :send-queue]
-                                   (conj (get-in s3 [:streams (:stream-id chunk) :send-queue] [])
-                                         {:tsn ack-tsn :chunk ack-chunk :sent-at now-ms :retries 0 :sent? false}))
-             :next-events []})
-          {:next-state s1 :next-events []}))
-      :else
-      {:next-state s1 :next-events [{:type :on-message :payload (:payload chunk) :stream-id (:stream-id chunk) :protocol proto}]})))
+        s1 (update s1 :pending-control-chunks conj sack-chunk)
+        stream-id (:stream-id chunk)
+        recv-q (get-in s1 [:streams stream-id :recv-queue] [])
+        new-recv-q (conj recv-q chunk)
+        s2 (assoc-in s1 [:streams stream-id :recv-queue] new-recv-q)]
+    {:next-state s2 :next-events []}))
 
 (defmethod process-chunk :init [state chunk packet now-ms]
   (let [s1 (-> state
@@ -423,30 +436,68 @@
 (defmethod process-chunk :sack [state chunk packet now-ms]
   (let [cum-tsn-ack (:cum-tsn-ack chunk)
         streams (:streams state)
-        new-streams (reduce-kv
-                     (fn [m k v]
-                       (let [q (:send-queue v)
-                             new-q (vec (remove (fn [{:keys [tsn]}]
-                                                  (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack))))))
-                                                q))]
-                         (if (empty? new-q)
-                           (assoc m k (dissoc v :send-queue))
-                           (assoc m k (assoc v :send-queue new-q)))))
-                     {}
-                     streams)
+        mtu (get state :mtu 1200)
+        ;; Calculate newly acked bytes and reduce flight size
+        ;; Also collect the new queues
+        res (reduce-kv
+             (fn [acc k v]
+               (let [q (:send-queue v)
+                     acked-items (filter (fn [{:keys [tsn sent?]}]
+                                           (and sent? (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack)))))))
+                                         q)
+                     acked-bytes (reduce + (map #(let [payload (:payload (:chunk %))]
+                                                   (+ 16 (if payload (alength ^bytes payload) 0))) acked-items))
+                     new-q (vec (remove (fn [{:keys [tsn]}]
+                                          (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack))))))
+                                        q))]
+                 (-> acc
+                     (update :acked-bytes + acked-bytes)
+                     (update :new-streams (fn [m]
+                                            (if (empty? new-q)
+                                              (assoc m k (dissoc v :send-queue))
+                                              (assoc m k (assoc v :send-queue new-q))))))))
+             {:acked-bytes 0 :new-streams {}}
+             streams)
+        acked-bytes (:acked-bytes res)
+        new-streams (:new-streams res)
+        flight-size (max 0 (- (get state :flight-size 0) acked-bytes))
+        cwnd (get state :cwnd 0)
+        ssthresh (get state :ssthresh 65535)
+
+        ;; Congestion Control algorithm
+        new-cwnd (if (> acked-bytes 0)
+                   (if (<= cwnd ssthresh)
+                     ;; Slow Start
+                     (+ cwnd (min acked-bytes mtu))
+                     ;; Congestion Avoidance
+                     (let [partial (+ (get state :partial-bytes-acked 0) acked-bytes)]
+                       (if (>= partial cwnd)
+                         (+ cwnd mtu)
+                         cwnd)))
+                   cwnd)
+        new-partial (if (> acked-bytes 0)
+                      (if (<= cwnd ssthresh)
+                        0
+                        (let [partial (+ (get state :partial-bytes-acked 0) acked-bytes)]
+                          (if (>= partial cwnd)
+                            (- partial cwnd)
+                            partial)))
+                      (get state :partial-bytes-acked 0))
+
         all-empty? (every? #(empty? (:send-queue (val %))) new-streams)
         total-unacked (reduce + (map #(count (:send-queue (val %))) new-streams))
-        s1 (if all-empty?
-             (-> state
-                 (assoc :streams new-streams)
-                 (assoc :heartbeat-error-count 0)
-                 (assoc-in [:metrics :unacked-data] total-unacked)
-                 (update :timers dissoc :t3-rtx))
-             (-> state
-                 (assoc :streams new-streams)
-                 (assoc-in [:metrics :unacked-data] total-unacked)
-                 (assoc :heartbeat-error-count 0)))]
-    {:next-state s1 :next-events []}))
+
+        s1 (-> state
+               (assoc :streams new-streams)
+               (assoc :flight-size flight-size)
+               (assoc :cwnd new-cwnd)
+               (assoc :partial-bytes-acked new-partial)
+               (assoc :heartbeat-error-count 0)
+               (assoc-in [:metrics :unacked-data] total-unacked))
+        s2 (if all-empty?
+             (update s1 :timers dissoc :t3-rtx)
+             s1)]
+    {:next-state s2 :next-events []}))
 
 (defmethod process-chunk :heartbeat-ack [state chunk packet now-ms]
   (let [s1 (-> state
@@ -504,6 +555,149 @@
       {:next-state state :next-events []})))
 
 
+
+(defn assemble-payload [chunks]
+  (let [total-len (reduce + (map #(alength ^bytes (:payload %)) chunks))
+        result (byte-array total-len)]
+    (loop [cs chunks
+           offset 0]
+      (if (empty? cs)
+        result
+        (let [c (first cs)
+              p (:payload c)
+              len (alength ^bytes p)]
+          (System/arraycopy p 0 result offset len)
+          (recur (rest cs) (+ offset len)))))))
+
+(defn reassemble-stream [stream-data]
+  (let [q (:recv-queue stream-data [])
+        sorted-q (sort-by :tsn q)]
+    (loop [remaining sorted-q
+           current-msg []
+           new-q []
+           app-events []
+           next-ssn (get stream-data :next-ssn 0)]
+      (if (empty? remaining)
+        (let [final-q (if (seq current-msg) (into new-q current-msg) new-q)]
+          {:new-stream (assoc stream-data :recv-queue final-q :next-ssn next-ssn) :app-events app-events})
+        (let [chunk (first remaining)
+              flags (or (:flags chunk) 0)
+              u-bit? (pos? (bit-and flags 4))
+              b-bit? (pos? (bit-and flags 2))
+              e-bit? (pos? (bit-and flags 1))]
+          (if u-bit?
+            ;; Unordered
+            (if (and b-bit? e-bit?)
+              ;; Single chunk Unordered
+              (recur (rest remaining)
+                     []
+                     new-q
+                     (conj app-events {:type :on-message :payload (:payload chunk) :stream-id (:stream-id chunk) :protocol (:protocol chunk)})
+                     next-ssn)
+              (if b-bit?
+                ;; Start of fragmented Unordered
+                (recur (rest remaining)
+                       [chunk]
+                       new-q
+                       app-events
+                       next-ssn)
+                (if e-bit?
+                  ;; End of fragmented Unordered
+                  (let [full-msg (conj current-msg chunk)]
+                    (recur (rest remaining)
+                           []
+                           new-q
+                           (conj app-events {:type :on-message :payload (assemble-payload full-msg) :stream-id (:stream-id chunk) :protocol (:protocol chunk)})
+                           next-ssn))
+                  ;; Middle of fragmented Unordered
+                  (recur (rest remaining)
+                         (conj current-msg chunk)
+                         new-q
+                         app-events
+                         next-ssn))))
+            ;; Ordered
+            (if (= (:seq-num chunk) next-ssn)
+              (if (and b-bit? e-bit?)
+                ;; Single chunk Ordered
+                (recur (rest remaining)
+                       []
+                       new-q
+                       (conj app-events {:type :on-message :payload (:payload chunk) :stream-id (:stream-id chunk) :protocol (:protocol chunk)})
+                       (inc next-ssn))
+                (if b-bit?
+                  ;; Start of fragmented Ordered
+                  (recur (rest remaining)
+                         [chunk]
+                         new-q
+                         app-events
+                         next-ssn)
+                  (if e-bit?
+                    ;; End of fragmented Ordered
+                    (let [full-msg (conj current-msg chunk)]
+                      (recur (rest remaining)
+                             []
+                             new-q
+                             (conj app-events {:type :on-message :payload (assemble-payload full-msg) :stream-id (:stream-id chunk) :protocol (:protocol chunk)})
+                             (inc next-ssn)))
+                    ;; Middle of fragmented Ordered
+                    (recur (rest remaining)
+                           (conj current-msg chunk)
+                           new-q
+                           app-events
+                           next-ssn))))
+              ;; Not expected SSN, hold in queue
+              (recur (rest remaining)
+                     current-msg
+                     (conj new-q chunk)
+                     app-events
+                     next-ssn))))))))
+
+(defn reassemble [state app-events]
+  (let [streams (:streams state)]
+    (loop [stream-ids (keys streams)
+           current-state state
+           current-events app-events]
+      (if (empty? stream-ids)
+        {:new-state current-state :app-events current-events}
+        (let [stream-id (first stream-ids)
+              stream-data (get-in current-state [:streams stream-id])
+              {:keys [new-stream app-events] :as res} (reassemble-stream stream-data)
+              app-events-stream app-events
+              events-with-dcep (reduce (fn [acc event]
+                                         (if (= (:protocol event) :webrtc/dcep)
+                                           ;; DCEP handling should ideally happen earlier or generate next-state
+                                           ;; but to keep it simple we emit :dcep-message and handle it in wrapper
+                                           ;; Let's inline DCEP ack response here to state
+                                           acc
+                                           (conj acc event)))
+                                       []
+                                       app-events-stream)
+              dcep-events (filter #(= (:protocol %) :webrtc/dcep) app-events-stream)
+              state-with-dcep-acks (reduce (fn [st evt]
+                                             (let [payload (:payload evt)
+                                                   msg-type (bit-and (aget ^bytes payload 0) 0xff)]
+                                               (if (= msg-type 3) ;; OPEN
+                                                 (let [ack-tsn (:next-tsn st)
+                                                       s2 (update st :next-tsn inc)
+                                                       ack-ssn (:ssn s2)
+                                                       s3 (update s2 :ssn inc)
+                                                       ack-chunk {:type :data
+                                                                  :flags 3 ;; B and E bits
+                                                                  :tsn ack-tsn
+                                                                  :stream-id (:stream-id evt)
+                                                                  :seq-num ack-ssn
+                                                                  :protocol :webrtc/dcep
+                                                                  :payload (byte-array [(byte 2)])}]
+                                                   (assoc-in s3 [:streams (:stream-id evt) :send-queue]
+                                                             (conj (get-in s3 [:streams (:stream-id evt) :send-queue] [])
+                                                                   {:tsn ack-tsn :chunk ack-chunk :sent-at 0 :retries 0 :sent? false})))
+                                                 st)))
+                                           (assoc-in current-state [:streams stream-id] new-stream)
+                                           dcep-events)]
+          (recur (rest stream-ids)
+                 state-with-dcep-acks
+                 (into current-events events-with-dcep)))))))
+
 (defn handle-sctp-packet [state packet now-ms]
   (let [chunks (:chunks packet)
         state-with-rx (-> state
@@ -522,7 +716,8 @@
                     (recur next-state
                            (rest remaining-chunks)
                            (into app-events next-events)))))]
-      (packetize (:new-state res) (:app-events res)))))
+      (let [reassembled (reassemble (:new-state res) (:app-events res))]
+        (packetize (:new-state reassembled) (:app-events reassembled))))))
 
 
 (defn create-connection [options client-mode?]
@@ -548,7 +743,12 @@
                                             :rx-bytes   0
                                             :retransmissions 0
                                             :unacked-data 0
-                                            :uses-zero-checksum (boolean (:zero-checksum? options))}})
+                                            :uses-zero-checksum (boolean (:zero-checksum? options))}
+                                  :cwnd (let [mtu (get options :mtu 1200)]
+                                          (min (* 4 mtu) (max (* 2 mtu) 4380)))
+                                  :ssthresh 65535 ; Initial peer rwnd or 65535
+                                  :flight-size 0
+                                  :partial-bytes-acked 0})
                     :zero-checksum? (:zero-checksum? options)
                     :cert-data cert-data
                     :ice-ufrag (:ice-ufrag options)
