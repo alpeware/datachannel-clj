@@ -21,7 +21,7 @@
           handle-sctp-packet (fn [c p]
                                (when (and p c)
                                  (let [state-map @(:state c)
-                                       res (#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       res (core/handle-sctp-packet state-map p (System/currentTimeMillis))
                                        next-state (:new-state res)
                                        network-out (:network-out res)
                                        app-events (:app-events res)]
@@ -29,11 +29,11 @@
                                    (doseq [out network-out] (.offer (:sctp-out c) out))
                                    (doseq [evt app-events]
                                      (case (:type evt)
-                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
-                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
-                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
-                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
-                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       :on-message (when-let [cb (:on-message c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f (:payload evt)))) (when cb (cb (:payload evt)))))
+                                       :on-data (when-let [cb (:on-data c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f (assoc evt :payload (:payload evt) :stream-id (:stream-id evt))))) (when cb (cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt))))))
+                                       :on-open (when-let [cb (:on-open c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f))) (when cb (cb))))
+                                       :on-error (when-let [cb (:on-error c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f (:causes evt)))) (when cb (cb (:causes evt)))))
+                                       :on-close (when-let [cb (:on-close c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f))) (when cb (cb))))
                                        nil)))))]
 
       ;; 1. Client initiates connection with INIT
@@ -48,14 +48,14 @@
                                    :params {}}]}]
 
         ;; Server receives INIT first time
-        (handle-sctp-packet init-packet server-conn)
+        (handle-sctp-packet server-conn init-packet)
 
         ;; Server generates first INIT-ACK
         (let [init-ack-packet1 (.poll server-out)]
           (is init-ack-packet1 "Server should produce first INIT-ACK")
 
           ;; Server receives the exact same INIT again (e.g. retransmission by client)
-          (handle-sctp-packet init-packet server-conn)
+          (handle-sctp-packet server-conn init-packet)
 
           ;; Server generates another INIT-ACK
           (let [init-ack-packet2 (.poll server-out)]
@@ -75,7 +75,7 @@
               (is cookie-echo-packet "Client should produce COOKIE-ECHO in response to INIT-ACK1")
 
               ;; Server receives COOKIE-ECHO
-              (handle-sctp-packet cookie-echo-packet server-conn)
+              (handle-sctp-packet server-conn cookie-echo-packet)
 
               (let [cookie-ack-packet (.poll server-out)]
                 (is cookie-ack-packet "Server should produce COOKIE-ACK in response to COOKIE-ECHO")
@@ -85,7 +85,7 @@
                 (is (true? @server-opened) "Server on-open should be called")
 
                 ;; Client receives COOKIE-ACK
-                (handle-sctp-packet cookie-ack-packet client-conn)
+                (handle-sctp-packet client-conn cookie-ack-packet)
                 (is (= :established (:state @client-state)) "Client should transition to established")
                 (is (true? @client-opened) "Client on-open should be called")))))))))
 
@@ -108,7 +108,7 @@
           handle-sctp-packet (fn [c p]
                                (when (and p c)
                                  (let [state-map @(:state c)
-                                       res (#'core/handle-sctp-packet state-map p (System/currentTimeMillis))
+                                       res (core/handle-sctp-packet state-map p (System/currentTimeMillis))
                                        next-state (:new-state res)
                                        network-out (:network-out res)
                                        app-events (:app-events res)]
@@ -116,11 +116,11 @@
                                    (doseq [out network-out] (.offer (:sctp-out c) out))
                                    (doseq [evt app-events]
                                      (case (:type evt)
-                                       :on-message (when-let [cb (:on-message c)] (when (and cb @cb) (@cb (:payload evt))))
-                                       :on-data (when-let [cb (:on-data c)] (when (and cb @cb) (@cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt)))))
-                                       :on-open (when-let [cb (:on-open c)] (when (and cb @cb) (@cb)))
-                                       :on-error (when-let [cb (:on-error c)] (when (and cb @cb) (@cb (:causes evt))))
-                                       :on-close (when-let [cb (:on-close c)] (when (and cb @cb) (@cb)))
+                                       :on-message (when-let [cb (:on-message c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f (:payload evt)))) (when cb (cb (:payload evt)))))
+                                       :on-data (when-let [cb (:on-data c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f (assoc evt :payload (:payload evt) :stream-id (:stream-id evt))))) (when cb (cb (assoc evt :payload (:payload evt) :stream-id (:stream-id evt))))))
+                                       :on-open (when-let [cb (:on-open c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f))) (when cb (cb))))
+                                       :on-error (when-let [cb (:on-error c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f (:causes evt)))) (when cb (cb (:causes evt)))))
+                                       :on-close (when-let [cb (:on-close c)] (if (instance? clojure.lang.IRef cb) (let [f @cb] (when f (f))) (when cb (cb))))
                                        nil)))))]
 
       ;; 1. Client initiates connection with INIT
@@ -135,14 +135,14 @@
                                    :params {}}]}]
 
         ;; Server receives INIT first time
-        (handle-sctp-packet init-packet server-conn)
+        (handle-sctp-packet server-conn init-packet)
 
         ;; Server generates first INIT-ACK
         (let [init-ack-packet1 (.poll server-out)]
           (is init-ack-packet1 "Server should produce first INIT-ACK")
 
           ;; Server receives the exact same INIT again (e.g. retransmission by client)
-          (handle-sctp-packet init-packet server-conn)
+          (handle-sctp-packet server-conn init-packet)
 
           ;; Server generates another INIT-ACK
           (let [init-ack-packet2 (.poll server-out)]
@@ -162,7 +162,7 @@
               (is cookie-echo-packet "Client should produce COOKIE-ECHO in response to INIT-ACK2")
 
               ;; Server receives COOKIE-ECHO
-              (handle-sctp-packet cookie-echo-packet server-conn)
+              (handle-sctp-packet server-conn cookie-echo-packet)
 
               (let [cookie-ack-packet (.poll server-out)]
                 (is cookie-ack-packet "Server should produce COOKIE-ACK in response to COOKIE-ECHO")
@@ -172,6 +172,6 @@
                 (is (true? @server-opened) "Server on-open should be called")
 
                 ;; Client receives COOKIE-ACK
-                (handle-sctp-packet cookie-ack-packet client-conn)
+                (handle-sctp-packet client-conn cookie-ack-packet)
                 (is (= :established (:state @client-state)) "Client should transition to established")
                 (is (true? @client-opened) "Client on-open should be called")))))))))

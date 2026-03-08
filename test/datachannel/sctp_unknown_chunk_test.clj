@@ -17,8 +17,11 @@
             packet {:src-port 5000
                     :dst-port 5001
                     :verification-tag 0
-                    :chunks [unknown-chunk]}]
-        (handle-sctp-packet packet conn))
+                    :chunks [unknown-chunk]}
+            res (core/handle-sctp-packet @state packet (System/currentTimeMillis))]
+        (reset! state (:new-state res))
+        (doseq [p (:network-out res)]
+          (.offer out p)))
 
       (let [error-packet (.poll out)]
         (is error-packet "Connection should send an ERROR packet in response to unknown chunk with 01 upper bits")
