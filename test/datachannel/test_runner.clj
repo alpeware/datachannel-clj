@@ -21,6 +21,7 @@
             [datachannel.sctp-retransmission-test]
             [datachannel.sctp-recovers-on-last-retransmission-test]
             [datachannel.sctp-metrics-test]
+            [datachannel.sctp-heartbeat-test]
             ))
 
 (defn -main [& args]
@@ -47,5 +48,6 @@
          'datachannel.sctp-retransmission-test
          'datachannel.sctp-recovers-on-last-retransmission-test
          'datachannel.sctp-metrics-test
+         'datachannel.sctp-heartbeat-test
          )]
     (System/exit (+ fail error))))
