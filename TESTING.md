@@ -68,7 +68,7 @@
     - [x] Close Connection After First Failed Transmission
     - [x] Close Connection After One Failed Retransmission
     - [x] Error Counter Is Reset On Data Ack
-    - [ ] Both Sides Send Heartbeats
+    - [x] Both Sides Send Heartbeats
     - [x] Close Connection After Too Many Retransmissions
     - [ ] Recover On Last Retransmission
     - [ ] Send Many Fragmented Messages With Limited Rtx
