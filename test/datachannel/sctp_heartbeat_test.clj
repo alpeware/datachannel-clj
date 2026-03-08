@@ -33,12 +33,14 @@
                 chunk (first (:chunks packet))]
             (is (= :heartbeat (:type chunk)))
             ;; Simulate receiving HEARTBEAT-ACK
-            (#'core/handle-sctp-packet {:src-port 5000
+            (let [{:keys [new-state]} (#'core/handle-sctp-packet @state-atom
+                                       {:src-port 5000
                                         :dst-port 5000
                                         :verification-tag 5678
                                         :chunks [{:type :heartbeat-ack
                                                   :params (:params chunk)}]}
-                                       conn)))
+                                       now)]
+              (reset! state-atom new-state))))
         (is (not (contains? (:timers @state-atom) :t-heartbeat-rtx)) "RTX timer should be cleared by ACK")))))
 
 (deftest expect-heartbeats-not-sent-when-sending-data-test
