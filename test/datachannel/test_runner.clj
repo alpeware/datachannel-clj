@@ -20,6 +20,7 @@
             [datachannel.sctp-init-abort-test]
             [datachannel.sctp-retransmission-test]
             [datachannel.sctp-recovers-on-last-retransmission-test]
+            [datachannel.sctp-metrics-test]
             ))
 
 (defn -main [& args]
@@ -45,5 +46,6 @@
          'datachannel.sctp-init-abort-test
          'datachannel.sctp-retransmission-test
          'datachannel.sctp-recovers-on-last-retransmission-test
+         'datachannel.sctp-metrics-test
          )]
     (System/exit (+ fail error))))

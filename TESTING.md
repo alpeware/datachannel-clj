@@ -89,7 +89,7 @@
     - [ ] Triggers On Buffered Amount Low Only When Crossing Threshold
     - [ ] Doesnt Trigger On Total Buffer Amount Low When Below
     - [ ] Triggers On Total Buffer Amount Low When Crossing Threshold
-    - [ ] Initial Metrics Are Unset
+    - [x] Initial Metrics Are Unset
     - [ ] Message Interleaving Metrics Are Set
     - [ ] Rx And Tx Packet Metrics Increase
     - [ ] Retransmission Metrics Are Set For Fast Retransmit
