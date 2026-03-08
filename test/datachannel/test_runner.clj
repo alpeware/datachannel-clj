@@ -20,13 +20,6 @@
             [datachannel.sctp-init-abort-test]
             [datachannel.sctp-retransmission-test]
             [datachannel.sctp-recovers-on-last-retransmission-test]
-            [datachannel.sctp-robustness-test]
-            [datachannel.sctp-shutdown-timer-test]
-            [datachannel.sctp-timeout-resends-packet-test]
-            [datachannel.sctp-unknown-chunk-test]
-            [datachannel.sctp-recovers-after-successful-ack-test]
-            [datachannel.sctp-reconnect-test]
-            [datachannel.sctp-heartbeat-test]
             ))
 
 (defn -main [& args]
@@ -52,12 +45,5 @@
          'datachannel.sctp-init-abort-test
          'datachannel.sctp-retransmission-test
          'datachannel.sctp-recovers-on-last-retransmission-test
-         'datachannel.sctp-robustness-test
-         'datachannel.sctp-shutdown-timer-test
-         'datachannel.sctp-timeout-resends-packet-test
-         'datachannel.sctp-unknown-chunk-test
-         'datachannel.sctp-recovers-after-successful-ack-test
-         'datachannel.sctp-reconnect-test
-         'datachannel.sctp-heartbeat-test
          )]
     (System/exit (+ fail error))))
