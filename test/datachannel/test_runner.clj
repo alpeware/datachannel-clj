@@ -31,6 +31,7 @@
             [datachannel.sctp-shutdown-connection-test]
             [datachannel.sctp-send-message-after-established-test]
             [datachannel.sctp-cannot-send-empty-messages-test]
+            [datachannel.sctp-establish-connection-while-sending-data-test]
             ))
 
 (defn -main [& args]
@@ -67,5 +68,6 @@
          'datachannel.sctp-shutdown-connection-test
          'datachannel.sctp-send-message-after-established-test
          'datachannel.sctp-cannot-send-empty-messages-test
+         'datachannel.sctp-establish-connection-while-sending-data-test
          )]
     (System/exit (+ fail error))))
