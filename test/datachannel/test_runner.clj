@@ -34,6 +34,7 @@
             [datachannel.sctp-cannot-send-empty-messages-test]
             [datachannel.sctp-establish-connection-while-sending-data-test]
             [datachannel.sctp-close-after-too-many-lost-heartbeats-test]
+            [datachannel.sctp-recovers-after-successful-ack-test]
             ))
 
 (defn -main [& args]
@@ -73,5 +74,6 @@
          'datachannel.sctp-cannot-send-empty-messages-test
          'datachannel.sctp-establish-connection-while-sending-data-test
          'datachannel.sctp-close-after-too-many-lost-heartbeats-test
+         'datachannel.sctp-recovers-after-successful-ack-test
          )]
     (System/exit (+ fail error))))

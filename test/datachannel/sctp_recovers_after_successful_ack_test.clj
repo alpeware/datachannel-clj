@@ -6,74 +6,58 @@
   (testing "Recovers After A Successful Ack"
     (let [now (System/currentTimeMillis)
           max-rtx 10
-          state-atom (atom {:state :established
-                            :remote-ver-tag 1234
-                            :local-ver-tag 5678
-                            :next-tsn 1000
-                            :ssn 0
-                            :timers {:t-heartbeat {:expires-at (+ now 30000)}}
-                            :heartbeat-interval 30000
-                            :heartbeat-error-count 0
-                            :rto-initial 1000
-                            :max-retransmissions max-rtx})
-          out-queue (java.util.concurrent.LinkedBlockingQueue.)
-          conn {:state state-atom
-                :sctp-out out-queue
-                :on-error (atom (fn [cause] nil))}]
+          conn-state {:state :established
+                      :remote-ver-tag 1234
+                      :local-ver-tag 5678
+                      :next-tsn 1000
+                      :ssn 0
+                      :timers {:t-heartbeat {:expires-at (+ now 30000)}}
+                      :heartbeat-interval 30000
+                      :heartbeat-error-count 0
+                      :rto-initial 1000
+                      :max-retransmissions max-rtx}
 
-      ;; Lose (max-retransmissions - 1) heartbeats
-      (loop [i 0
-             current-time (+ now 30000)]
-        (when (< i (dec max-rtx))
-          ;; Expire t-heartbeat
-          (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
-            (reset! state-atom new-state)
-            (doseq [packet network-out]
-              (.offer out-queue packet)))
-          (.poll out-queue) ;; discard heartbeat request packet
+          ;; Lose (max-retransmissions - 1) heartbeats
+          s-lost
+          (loop [i 0
+                 current-time (+ now 30000)
+                 state conn-state]
+            (if (< i (dec max-rtx))
+              ;; Expire t-heartbeat
+              (let [res1 (core/handle-timeout state :t-heartbeat current-time)
+                    state1 (:new-state res1)
+                    ;; Expire t-heartbeat-rtx (simulates lost heartbeat)
+                    res2 (core/handle-timeout state1 :t-heartbeat-rtx (+ current-time 1000))
+                    state2 (:new-state res2)]
+                (is (= :established (:state state2)) "State should remain established")
+                (recur (inc i) (+ current-time 30000) state2))
+              state))
 
-          ;; Expire t-heartbeat-rtx (simulates lost heartbeat)
-          (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat-rtx (+ current-time 1000))]
-            (reset! state-atom new-state)
-            (doseq [packet network-out]
-              (.offer out-queue packet))
-            (is (= :established (:state @state-atom)) "State should remain established"))
-          (recur (inc i) (+ current-time 30000))))
+          ;; 10th time - last heartbeat before aborting
+          current-time (+ now (* 30000 max-rtx))
+          res-last (core/handle-timeout s-lost :t-heartbeat current-time)
+          s-last (:new-state res-last)
+          network-out-last (:network-out res-last)
+          _ (is (not-empty network-out-last) "Should emit an effect to send heartbeat")
+          hb-packet (first network-out-last)
+          hb-chunk (first (:chunks hb-packet))
+          _ (is (= :heartbeat (:type hb-chunk)))
 
-      ;; 10th time - last heartbeat before aborting
-      (let [current-time (+ now (* 30000 max-rtx))]
-        (let [{:keys [new-state network-out app-events]} (core/handle-timeout @state-atom :t-heartbeat current-time)]
-          (reset! state-atom new-state)
-          (doseq [packet network-out]
-            (.offer out-queue packet))
+          ;; Simulate receiving HEARTBEAT-ACK for this last heartbeat
+          ack-packet {:src-port 5000
+                      :dst-port 5000
+                      :verification-tag 5678
+                      :chunks [{:type :heartbeat-ack
+                                :params (:params hb-chunk)}]}
+          res-ack (core/handle-sctp-packet s-last ack-packet current-time)
+          s-ack (:new-state res-ack)]
 
-          (let [hb-effect (first network-out)]
-            (is hb-effect "Should emit an effect to send heartbeat")
+      ;; The heartbeat error count should be reset to 0, and t-heartbeat-rtx cleared
+      (is (= 0 (:heartbeat-error-count s-ack)))
+      (is (not (contains? (:timers s-ack) :t-heartbeat-rtx)))
 
-            (let [packet (.poll out-queue)
-                  chunk (first (:chunks packet))]
-              (is packet)
-              (is (= :heartbeat (:type chunk)))
-
-              ;; Simulate receiving HEARTBEAT-ACK for this last heartbeat
-              (let [ack-packet {:src-port 5000
-                                :dst-port 5000
-                                :verification-tag 5678
-                                :chunks [{:type :heartbeat-ack
-                                          :params (:params chunk)}]}
-                    res (core/handle-sctp-packet @state-atom ack-packet current-time)]
-                (reset! state-atom (:new-state res))))))
-
-        ;; The heartbeat error count should be reset to 0, and t-heartbeat-rtx cleared
-        (is (= 0 (:heartbeat-error-count @state-atom)))
-        (is (not (contains? (:timers @state-atom) :t-heartbeat-rtx)))
-
-        ;; Fast forward to next heartbeat to ensure it works again
-        (let [next-time (+ current-time 30000)
-              {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat next-time)]
-          (reset! state-atom new-state)
-          (doseq [packet network-out]
-            (.offer out-queue packet))
-          (let [packet (.poll out-queue)]
-            (is packet)
-            (is (= :heartbeat (:type (first (:chunks packet)))))))))))
+      ;; Fast forward to next heartbeat to ensure it works again
+      (let [next-time (+ current-time 30000)
+            res-next (core/handle-timeout s-ack :t-heartbeat next-time)]
+        (is (not-empty (:network-out res-next)))
+        (is (= :heartbeat (:type (first (:chunks (first (:network-out res-next)))))))))))
