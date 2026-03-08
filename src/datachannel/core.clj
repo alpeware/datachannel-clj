@@ -439,55 +439,47 @@
 (defn set-max-message-size! [connection max-size]
   (swap! (:state connection) assoc :max-message-size max-size))
 
-(defn send-data [connection ^bytes payload stream-id protocol]
-  (let [state (:state connection)
-        len (alength payload)
-        max-size (get @state :max-message-size 65519)]
+(defn send-data [state ^bytes payload stream-id protocol now-ms]
+  (let [len (alength payload)
+        max-size (get state :max-message-size 65519)]
     (when (zero? len)
       (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
     (when (> len max-size)
       (throw (ex-info "Cannot send too large message" {:type :too-large})))
-    (let [ver-tag (:remote-ver-tag @state)
-        tsn (let [t (or (:next-tsn @state) 0)]
-              (swap! state update :next-tsn inc)
-              t)
-        ssn (let [s (or (:ssn @state) 0)]
-              (swap! state update :ssn inc)
-              s)
-        packet {:src-port 5000
-                :dst-port 5000
-                :verification-tag ver-tag
-                :chunks [{:type :data
-                          :flags 3 ;; B and E bits
-                          :tsn tsn
-                          :stream-id stream-id
-                          :seq-num ssn
-                          :protocol protocol
-                          :payload payload}]}
-        now-ms (System/currentTimeMillis)]
-     (let [is-established? (= (:state @state) :established)]
-       (swap! state (fn [s]
-                      (let [q (get s :tx-queue [])
-                            new-q (conj q {:tsn tsn :packet packet :sent-at now-ms :retries 0})
-                            new-s (assoc s :tx-queue new-q)
-                            interval (get s :heartbeat-interval 30000)
-                            ;; Reset heartbeat timer when sending data
-                            new-s (if (and (pos? interval) (contains? (:timers new-s) :t-heartbeat))
-                                    (assoc-in new-s [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-                                    new-s)
-                            new-s (-> new-s
-                                      (update-in [:metrics :unacked-data] (fnil inc 0))
-                                      (cond-> is-established?
-                                        (-> (update-in [:metrics :tx-packets] (fnil inc 0))
-                                            (update-in [:metrics :tx-bytes] (fnil + 0) len))))]
-                        (if (and is-established? (nil? (get-in new-s [:timers :t3-rtx])))
-                          (assoc-in new-s [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-                          new-s))))
-       (when is-established?
-         (.offer (:sctp-out connection) packet))))))
-
-(defn send-msg [connection msg]
-  (send-data connection (.getBytes msg "UTF-8") 0 :webrtc/string))
+    (let [ver-tag (:remote-ver-tag state)
+          tsn (or (:next-tsn state) 0)
+          ssn (or (:ssn state) 0)
+          packet {:src-port 5000
+                  :dst-port 5000
+                  :verification-tag ver-tag
+                  :chunks [{:type :data
+                            :flags 3 ;; B and E bits
+                            :tsn tsn
+                            :stream-id stream-id
+                            :seq-num ssn
+                            :protocol protocol
+                            :payload payload}]}
+          is-established? (= (:state state) :established)
+          s1 (-> state
+                 (assoc :next-tsn (inc tsn) :ssn (inc ssn)))
+          q (get s1 :tx-queue [])
+          new-q (conj q {:tsn tsn :packet packet :sent-at now-ms :retries 0})
+          s2 (assoc s1 :tx-queue new-q)
+          interval (get s2 :heartbeat-interval 30000)
+          s3 (if (and (pos? interval) (contains? (:timers s2) :t-heartbeat))
+               (assoc-in s2 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+               s2)
+          s4 (-> s3
+                 (update-in [:metrics :unacked-data] (fnil inc 0))
+                 (cond-> is-established?
+                   (-> (update-in [:metrics :tx-packets] (fnil inc 0))
+                       (update-in [:metrics :tx-bytes] (fnil + 0) len))))
+          s5 (if (and is-established? (nil? (get-in s4 [:timers :t3-rtx])))
+               (assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+               s4)]
+      {:new-state s5
+       :network-out (if is-established? [packet] [])
+       :app-events []})))
 
 (defn close [connection]
   (close-channel (:channel connection))
