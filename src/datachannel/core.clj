@@ -523,7 +523,13 @@
                                   :heartbeat-interval (get options :heartbeat-interval 30000)
                                   :heartbeat-error-count 0
                                   :rto-initial (get options :rto-initial 1000)
-                                  :max-retransmissions (get options :max-retransmissions 10)})
+                                  :max-retransmissions (get options :max-retransmissions 10)
+                                  :metrics {:tx-packets 0
+                                            :rx-packets 0
+                                            :tx-bytes   0
+                                            :rx-bytes   0
+                                            :retransmissions 0
+                                            :unacked-data 0}})
                     :zero-checksum? (:zero-checksum? options)
                     :on-message (atom nil)
                     :on-data (atom nil)
