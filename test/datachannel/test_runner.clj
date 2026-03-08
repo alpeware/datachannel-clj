@@ -14,6 +14,7 @@
                         [datachannel.sctp-checksum-test]
             [datachannel.sctp-cookie-echo-abort-test]
             [datachannel.sctp-error-counter-reset-test]
+            [datachannel.sctp-wait-for-cookie-ack-test]
             ))
 
 (defn -main [& args]
@@ -33,5 +34,6 @@
                   'datachannel.sctp-checksum-test
          'datachannel.sctp-cookie-echo-abort-test
          'datachannel.sctp-error-counter-reset-test
+         'datachannel.sctp-wait-for-cookie-ack-test
          )]
     (System/exit (+ fail error))))
