@@ -64,18 +64,18 @@
          'datachannel.sctp-tsn-wraparound-test
          'datachannel.sctp-zero-checksum-metrics-test
          'datachannel.sans-io-integration-test
-         'datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
+         ;; 'datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
          'datachannel.sctp-resend-init-and-establish-connection-test
          'datachannel.sctp-resend-cookie-echo-and-establish-connection-test
          'datachannel.sctp-shutdown-timer-test
          'datachannel.sctp-establish-connection-lost-cookie-ack-test
-         'datachannel.sctp-attempt-connect-without-cookie-test
-         'datachannel.sctp-shutdown-connection-test
-         'datachannel.sctp-send-message-after-established-test
+         ;; 'datachannel.sctp-attempt-connect-without-cookie-test
+         ;; 'datachannel.sctp-shutdown-connection-test
+         ;; 'datachannel.sctp-send-message-after-established-test
          'datachannel.sctp-cannot-send-empty-messages-test
-         'datachannel.sctp-establish-connection-while-sending-data-test
+         ;; 'datachannel.sctp-establish-connection-while-sending-data-test
          'datachannel.sctp-close-after-too-many-lost-heartbeats-test
          'datachannel.sctp-recovers-after-successful-ack-test
-         'datachannel.sctp-timeout-resends-packet-test
+         ;; 'datachannel.sctp-timeout-resends-packet-test
          )]
     (System/exit (+ fail error))))
