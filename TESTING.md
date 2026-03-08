@@ -43,44 +43,44 @@
     - [x] Resending Init Too Many Times Aborts
     - [ ] Resend Cookie Echo And Establish Connection
     - [x] Resending Cookie Echo Too Many Times Aborts
-    - [x] Doesnt Send More Packets Until Cookie Ack Has Been Received
+    - [ ] Doesnt Send More Packets Until Cookie Ack Has Been Received
     - [ ] Shutdown Connection
     - [x] Shutdown Timer Expires Too Many Time Closes Connection
     - [ ] Establish Connection While Sending Data
     - [ ] Send Message After Established
-    - [x] Timeout Resends Packet
+    - [ ] Timeout Resends Packet
     - [ ] Send A Lot Of Bytes Missed Second Packet
-    - [x] Sending Heartbeat Answers With Ack
-    - [x] Expect Heartbeat To Be Sent
-    - [x] Expect Heartbeats Not Sent When Sending Data
-    - [x] Close Connection After First Lost Heartbeat
-    - [x] Close Connection After Second Lost Heartbeat
-    - [x] Close Connection After Too Many Lost Heartbeats
-    - [x] Recovers After A Successful Ack
+    - [ ] Sending Heartbeat Answers With Ack
+    - [ ] Expect Heartbeat To Be Sent
+    - [ ] Expect Heartbeats Not Sent When Sending Data
+    - [ ] Close Connection After First Lost Heartbeat
+    - [ ] Close Connection After Second Lost Heartbeat
+    - [ ] Close Connection After Too Many Lost Heartbeats
+    - [ ] Recovers After A Successful Ack
     - [x] Error Counter Is Reset On Heartbeat Ack
     - [ ] Reset Stream
     - [ ] Send Reset Stream When Streams Ready
     - [ ] Reset Stream Will Make Chunks Start At Zero Ssn
     - [ ] Reset Stream Will Only Reset The Requested Streams
     - [x] One Peer Reconnects
-    - [x] One Peer Reconnects With Pending Data
+    - [ ] One Peer Reconnects With Pending Data
     - [ ] Send Message With Limited Rtx
-    - [x] Close Connection After First Failed Transmission
-    - [x] Close Connection After One Failed Retransmission
+    - [ ] Close Connection After First Failed Transmission
+    - [ ] Close Connection After One Failed Retransmission
     - [x] Error Counter Is Reset On Data Ack
     - [x] Both Sides Send Heartbeats
-    - [x] Close Connection After Too Many Retransmissions
-    - [x] Recover On Last Retransmission
+    - [ ] Close Connection After Too Many Retransmissions
+    - [ ] Recover On Last Retransmission
     - [ ] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
     - [x] Receiving Error Chunk Reports As Callback
-    - [x] Set Max Message Size
+    - [ ] Set Max Message Size
     - [ ] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
     - [ ] Discards Messages With Low Lifetime If Must Buffer
     - [ ] Respects Per Stream Queue Limit
-    - [x] Cannot Send Empty Messages
-    - [x] Cannot Send Too Large Message
+    - [ ] Cannot Send Empty Messages
+    - [ ] Cannot Send Too Large Message
     - [ ] Has Reasonable Buffered Amount Values
     - [ ] Has Default On Buffered Amount Low Value Zero
     - [ ] Triggers On Buffered Amount Low With Default Value Zero
@@ -91,9 +91,9 @@
     - [ ] Triggers On Total Buffer Amount Low When Crossing Threshold
     - [x] Initial Metrics Are Unset
     - [ ] Message Interleaving Metrics Are Set
-    - [x] Rx And Tx Packet Metrics Increase
+    - [ ] Rx And Tx Packet Metrics Increase
     - [ ] Retransmission Metrics Are Set For Fast Retransmit
-    - [x] Retransmission Metrics Are Set For Normal Retransmit
+    - [ ] Retransmission Metrics Are Set For Normal Retransmit
     - [ ] Unack Data Also Includes Send Queue
     - [ ] Doesnt Send More Than Max Burst Packets
     - [ ] Is Ready For Handover When Established
@@ -131,5 +131,5 @@
     - [x] Connection Can Continue From First Init Ack
     - [x] Connection Can Continue From Second Init Ack
     - [ ] Handover Preserves Stream Reset State
-    - [x] Establish Simultaneous Connection With Lost Data
+    - [ ] Establish Simultaneous Connection With Lost Data
     - [ ] Advance Time Does Not Trigger Spurious Ack
