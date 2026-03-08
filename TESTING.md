@@ -32,22 +32,22 @@
 - [x] [TSN Wraparound](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_queue.rs)
 - [ ] [Delayed SACKs](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_timeout.rs)
 - [ ] [Full Socket State Machine](https://github.com/webrtc/dcsctp/blob/main/src/socket/socket_tests.rs)
-    - [x] Establish Connection
-    - [x] Send Many Api Method
+    - [ ] Establish Connection
+    - [ ] Send Many Api Method
     - [x] Establish Connection With Setup Collision
     - [x] Shutting Down While Establishing Connection
-    - [x] Establish Simultaneous Connection
-    - [x] Attempt Connect Without Cookie
-    - [x] Establish Connection Lost Cookie Ack
-    - [x] Resend Init And Establish Connection
+    - [ ] Establish Simultaneous Connection
+    - [ ] Attempt Connect Without Cookie
+    - [ ] Establish Connection Lost Cookie Ack
+    - [ ] Resend Init And Establish Connection
     - [x] Resending Init Too Many Times Aborts
-    - [x] Resend Cookie Echo And Establish Connection
+    - [ ] Resend Cookie Echo And Establish Connection
     - [x] Resending Cookie Echo Too Many Times Aborts
     - [x] Doesnt Send More Packets Until Cookie Ack Has Been Received
-    - [x] Shutdown Connection
+    - [ ] Shutdown Connection
     - [x] Shutdown Timer Expires Too Many Time Closes Connection
-    - [x] Establish Connection While Sending Data
-    - [x] Send Message After Established
+    - [ ] Establish Connection While Sending Data
+    - [ ] Send Message After Established
     - [x] Timeout Resends Packet
     - [ ] Send A Lot Of Bytes Missed Second Packet
     - [x] Sending Heartbeat Answers With Ack
@@ -75,7 +75,7 @@
     - [x] Receiving Unknown Chunk Responds With Error
     - [x] Receiving Error Chunk Reports As Callback
     - [x] Set Max Message Size
-    - [x] Send Many Messages
+    - [ ] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
     - [ ] Discards Messages With Low Lifetime If Must Buffer
     - [ ] Respects Per Stream Queue Limit
