@@ -56,7 +56,7 @@
     - [x] Close Connection After First Lost Heartbeat
     - [x] Close Connection After Second Lost Heartbeat
     - [x] Close Connection After Too Many Lost Heartbeats
-    - [ ] Recovers After A Successful Ack
+    - [x] Recovers After A Successful Ack
     - [x] Error Counter Is Reset On Heartbeat Ack
     - [ ] Reset Stream
     - [ ] Send Reset Stream When Streams Ready
