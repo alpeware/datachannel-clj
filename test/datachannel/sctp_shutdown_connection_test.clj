@@ -8,12 +8,12 @@
           state {:state :established
                  :remote-ver-tag 2222
                  :local-ver-tag 1111
-                 :src-port 5000
-                 :dst-port 5001
+                 :local-port 5000
+                 :remote-port 5001
                  :next-tsn 1000
                  :ssn 0
                  :timers {}
-                 :tx-queue []}
+                 :streams {}}
           res (core/handle-event state {:type :shutdown} now)
           new-state (:new-state res)
           net-out (:network-out res)
@@ -34,12 +34,12 @@
           state {:state :established
                  :remote-ver-tag 2222
                  :local-ver-tag 1111
-                 :src-port 5000
-                 :dst-port 5001
+                 :local-port 5000
+                 :remote-port 5001
                  :next-tsn 1000
                  :ssn 0
                  :timers {}
-                 :tx-queue [{:tsn 1000 :packet {} :sent-at now :retries 0}]}
+                 :streams {0 {:send-queue [{:tsn 1000 :chunk {:type :data} :sent-at now :retries 0 :sent? true}]}}}
           res (core/handle-event state {:type :shutdown} now)
           new-state (:new-state res)
           net-out (:network-out res)

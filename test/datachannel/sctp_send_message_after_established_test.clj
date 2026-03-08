@@ -43,7 +43,7 @@
             data-packet (first (:network-out res-a3))]
         (is data-packet "A should send a DATA packet")
         (is (= :data (:type (first (:chunks data-packet)))) "A should have a DATA chunk")
-        (is (= 1 (count (:tx-queue state-a4))) "A should have unacknowledged data in its tx-queue")
+        (is (= 1 (count (:send-queue (get-in state-a4 [:streams 0])))) "A should have unacknowledged data in its stream send-queue")
 
         ;; Z receives the DATA message
         (let [res-z3 (@#'core/handle-sctp-packet state-z2 data-packet now-ms)
@@ -58,4 +58,4 @@
           ;; A receives the SACK packet
           (let [res-a4 (@#'core/handle-sctp-packet state-a4 sack-packet now-ms)
                 state-a5 (:new-state res-a4)]
-            (is (empty? (:tx-queue state-a5)) "A should have cleared its tx-queue after receiving the SACK")))))))
+            (is (empty? (:send-queue (get-in state-a5 [:streams 0]))) "A should have cleared its stream send-queue after receiving the SACK")))))))
