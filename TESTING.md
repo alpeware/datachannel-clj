@@ -53,7 +53,7 @@
     - [ ] Sending Heartbeat Answers With Ack
     - [ ] Expect Heartbeat To Be Sent
     - [ ] Expect Heartbeats Not Sent When Sending Data
-    - [ ] Close Connection After First Lost Heartbeat
+    - [x] Close Connection After First Lost Heartbeat
     - [ ] Close Connection After Second Lost Heartbeat
     - [ ] Close Connection After Too Many Lost Heartbeats
     - [ ] Recovers After A Successful Ack
