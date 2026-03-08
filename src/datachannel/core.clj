@@ -247,10 +247,12 @@
                                       :dst-port (:src-port packet)
                                       :verification-tag (:init-tag chunk)
                                       :chunks [{:type :cookie-echo :cookie cookie}]}
-                          s2 (assoc-in s1 [:timers :t1-init] {:expires-at (+ now-ms 3000)
-                                                              :delay 3000
-                                                              :retries 0
-                                                              :packet out-packet})]
+                          s2 (-> s1
+                                 (assoc :state :cookie-echoed)
+                                 (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000)
+                                                               :delay 3000
+                                                               :retries 0
+                                                               :packet out-packet}))]
                       {:next-state s2 :next-out [out-packet] :next-events []})
                     {:next-state s1 :next-out [] :next-events []}))
 
@@ -287,8 +289,15 @@
                                         [s2 nil])
                       s4 (if-not (= (:state s3) :shutdown-sent)
                            (assoc s3 :state :established)
-                           s3)]
-                  {:next-state s4 :next-out (if out-packet [out-packet] []) :next-events [{:type :on-open}]})
+                           s3)
+                      tx-queue (get s4 :tx-queue [])
+                      new-out (if out-packet [out-packet] [])
+                      [s5 final-out] (if (and (= (:state current-state) :cookie-echoed) (= (:state s4) :established) (seq tx-queue))
+                                       (let [pkts (map :packet tx-queue)]
+                                         [(assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                                          (into new-out pkts)])
+                                       [s4 new-out])]
+                  {:next-state s5 :next-out final-out :next-events [{:type :on-open}]})
 
                 :heartbeat
                 (let [out-packet {:src-port (:dst-port packet)
@@ -608,19 +617,21 @@
                           :protocol protocol
                           :payload payload}]}
         now-ms (System/currentTimeMillis)]
-     (swap! state (fn [s]
-                    (let [q (get s :tx-queue [])
-                          new-q (conj q {:tsn tsn :packet packet :sent-at now-ms :retries 0})
-                          new-s (assoc s :tx-queue new-q)
-                          interval (get s :heartbeat-interval 30000)
-                          ;; Reset heartbeat timer when sending data
-                          new-s (if (and (pos? interval) (contains? (:timers new-s) :t-heartbeat))
-                                  (assoc-in new-s [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-                                  new-s)]
-                      (if (nil? (get-in new-s [:timers :t3-rtx]))
-                        (assoc-in new-s [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-                        new-s))))
-     (.offer (:sctp-out connection) packet)))
+     (let [is-established? (= (:state @state) :established)]
+       (swap! state (fn [s]
+                      (let [q (get s :tx-queue [])
+                            new-q (conj q {:tsn tsn :packet packet :sent-at now-ms :retries 0})
+                            new-s (assoc s :tx-queue new-q)
+                            interval (get s :heartbeat-interval 30000)
+                            ;; Reset heartbeat timer when sending data
+                            new-s (if (and (pos? interval) (contains? (:timers new-s) :t-heartbeat))
+                                    (assoc-in new-s [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+                                    new-s)]
+                        (if (and is-established? (nil? (get-in new-s [:timers :t3-rtx])))
+                          (assoc-in new-s [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                          new-s))))
+       (when is-established?
+         (.offer (:sctp-out connection) packet)))))
 
 (defn send-msg [connection msg]
   (send-data connection (.getBytes msg "UTF-8") 0 :webrtc/string))
