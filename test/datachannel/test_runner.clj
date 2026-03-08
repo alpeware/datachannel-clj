@@ -12,6 +12,7 @@
                         [datachannel.sctp-checksum-test]
             [datachannel.sctp-cookie-echo-abort-test]
             [datachannel.sctp-error-counter-reset-test]
+            [datachannel.sctp-sending-heartbeat-answers-with-ack-test]
             [datachannel.sctp-both-sides-send-heartbeats-test]
             [datachannel.sctp-close-after-first-lost-heartbeat-test]
             [datachannel.sctp-close-after-second-lost-heartbeat-test]
@@ -49,6 +50,7 @@
                   'datachannel.sctp-checksum-test
          'datachannel.sctp-cookie-echo-abort-test
          'datachannel.sctp-error-counter-reset-test
+         'datachannel.sctp-sending-heartbeat-answers-with-ack-test
          'datachannel.sctp-both-sides-send-heartbeats-test
          'datachannel.sctp-close-after-first-lost-heartbeat-test
          'datachannel.sctp-close-after-second-lost-heartbeat-test
