@@ -337,7 +337,8 @@
                                                    :packet out-packet})
                    (update :pending-control-chunks conj cookie-echo-chunk))]
         {:next-state s2 :next-events []})
-      (let [s2 (assoc state :state :closed)
+      (let [s2 (assoc state :state :closed
+                            :remote-ver-tag (:init-tag chunk))
             abort-chunk {:type :abort}
             s3 (update s2 :pending-control-chunks conj abort-chunk)]
         {:next-state s3 :next-events [{:type :on-error :cause :protocol-violation}]}))))
