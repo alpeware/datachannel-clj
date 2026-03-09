@@ -86,9 +86,11 @@ Here is a realistic example of how you might wrap the pure core inside a Java NI
           (let [timers (:timers @conn-state)]
             (doseq [[timer-id timer] timers]
               (when (>= now-ms (:expires-at timer))
-                (let [result (dc/handle-timeout @conn-state timer-id now-ms)]
+                (let [raw-result (dc/handle-timeout @conn-state timer-id now-ms)
+                      result (dc/serialize-network-out raw-result buffer)]
                   (reset! conn-state (:new-state result))
-                  (process-effects! channel result)))))
+                  ;; Note: In a real app you'd store the remote-addr for the peer
+                  (process-effects! channel result (java.net.InetSocketAddress. remote-host remote-port))))))
 
           ;; 4. Poll Network I/O
           (.select selector 10) ;; Wait up to 10ms
@@ -99,20 +101,21 @@ Here is a realistic example of how you might wrap the pure core inside a Java NI
                 (.remove key-iter)
                 (when (.isReadable key)
                   (.clear buffer)
-                  (when-let [_ (.read channel buffer)]
+                  (when-let [remote-addr (.receive channel buffer)]
                     (.flip buffer)
                     (let [bytes-read (.remaining buffer)
                           payload (byte-array bytes-read)]
                       (.get buffer payload)
                       ;; Pass bytes to the pure core
-                      (let [result (dc/handle-receive @conn-state payload now-ms)]
+                      (let [raw-result (dc/handle-receive @conn-state payload now-ms remote-addr)
+                            result (dc/serialize-network-out raw-result buffer)]
                         (reset! conn-state (:new-state result))
-                        (process-effects! channel result)))))))))))))
+                        (process-effects! channel result remote-addr)))))))))))))
 
-(defn- process-effects! [channel {:keys [network-out app-events]}]
+(defn- process-effects! [channel {:keys [network-out-bytes app-events]} remote-addr]
   ;; Transmit outgoing bytes
-  (doseq [packet network-out]
-    (.write channel (ByteBuffer/wrap packet)))
+  (doseq [packet network-out-bytes]
+    (.send channel packet remote-addr))
 
   ;; React to state changes
   (doseq [event app-events]

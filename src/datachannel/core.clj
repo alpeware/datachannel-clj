@@ -19,14 +19,6 @@
 (defn- make-buffer []
   (ByteBuffer/allocateDirect buffer-size))
 
-(defn- close-channel [ch]
-  (when ch
-    (try (.close ch) (catch Exception _))))
-
-(defn- close-selector [sel]
-  (when sel
-    (try (.close sel) (catch Exception _))))
-
 (defn packetize [state app-events]
   (packetize/packetize state app-events))
 
@@ -214,7 +206,3 @@
                 new-state (assoc-in current-state [:streams stream-id :send-queue]
                                     (conj (get-in current-state [:streams stream-id :send-queue] []) queue-item))]
             (recur (rest remaining-frags) new-state (inc current-tsn) (inc idx))))))))
-
-(defn close [connection]
-  (close-channel (:channel connection))
-  (close-selector (:selector connection)))
