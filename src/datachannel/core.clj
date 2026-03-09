@@ -61,7 +61,9 @@
                         (cond
                           (map? item) ; SCTP packet
                           (let [buf (or opt-buf (ByteBuffer/allocateDirect 65536))]
-                            (sctp/encode-packet item buf {:zero-checksum? zero-checksum?}))
+                            (sctp/encode-packet item buf {:zero-checksum? zero-checksum?})
+                            (.flip buf)
+                            buf)
                           (instance? ByteBuffer item) ; Already encoded (STUN/DTLS)
                           item
                           (bytes? item) ; byte-array
