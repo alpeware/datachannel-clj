@@ -38,6 +38,7 @@
             [datachannel.sctp-close-after-too-many-lost-heartbeats-test]
             [datachannel.sctp-recovers-after-successful-ack-test]
             [datachannel.sctp-timeout-resends-packet-test]
+            [datachannel.sctp-close-after-first-failed-transmission-test]
             [datachannel.sctp-init-ack-robustness-test]
             [datachannel.sctp-reconnect-test]
             [datachannel.sctp-unknown-chunk-test]
@@ -86,6 +87,7 @@
          'datachannel.sctp-close-after-too-many-lost-heartbeats-test
          'datachannel.sctp-recovers-after-successful-ack-test
          'datachannel.sctp-timeout-resends-packet-test
+         'datachannel.sctp-close-after-first-failed-transmission-test
          'datachannel.sctp-init-ack-robustness-test
          'datachannel.sctp-reconnect-test
          'datachannel.sctp-unknown-chunk-test
