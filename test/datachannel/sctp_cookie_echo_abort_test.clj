@@ -62,27 +62,27 @@
         (is cookie-echo-packet "Client should produce COOKIE-ECHO")
         (is (= :cookie-echo (-> cookie-echo-packet :chunks first :type)))
 
-        ;; Client state should now have :t1-cookie timer for the COOKIE-ECHO packet
-        (is (some? (get-in @client-state [:timers :t1-cookie])) "Client should set t1-cookie timer for COOKIE-ECHO")
+        ;; Client state should now have :sctp/t1-cookie timer for the COOKIE-ECHO packet
+        (is (some? (get-in @client-state [:timers :sctp/t1-cookie])) "Client should set t1-cookie timer for COOKIE-ECHO")
 
         ;; Simulate timeout expirations repeatedly until max-retransmissions is reached (8 retries)
         (let [now (System/currentTimeMillis)]
           (loop [retries 0
                  current-now now]
             (if (< retries 8)
-              (let [timer (get-in @client-state [:timers :t1-cookie])
+              (let [timer (get-in @client-state [:timers :sctp/t1-cookie])
                     ;; Fast forward time
                     expired-now (:expires-at timer)
-                    result (core/handle-timeout @client-state :t1-cookie expired-now)]
+                    result (core/handle-timeout @client-state :sctp/t1-cookie expired-now)]
                 (reset! client-state (:new-state result))
                 (is (= 1 (count (:network-out result))))
                 (is true)
                 (recur (inc retries) expired-now))
 
               ;; Finally, the 9th expiration should abort
-              (let [timer (get-in @client-state [:timers :t1-cookie])
+              (let [timer (get-in @client-state [:timers :sctp/t1-cookie])
                     expired-now (:expires-at timer)
-                    result (core/handle-timeout @client-state :t1-cookie expired-now)]
+                    result (core/handle-timeout @client-state :sctp/t1-cookie expired-now)]
                 (reset! client-state (:new-state result))
                 (is (= 1 (count (:app-events result))))
                 (let [effect (first (:app-events result))]
@@ -90,4 +90,4 @@
                   (is (= :max-retransmissions (:cause effect)))
                   ;; Check state is closed
                   (is (= :closed (:state @client-state)))
-                  (is (nil? (get-in @client-state [:timers :t1-cookie]))))))))))))
+                  (is (nil? (get-in @client-state [:timers :sctp/t1-cookie]))))))))))))

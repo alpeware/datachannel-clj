@@ -22,7 +22,7 @@
           (is (= :init (:type (first (:chunks first-init)))))
 
           ;; Now simulate t1-init timeout
-          (let [timer-id :t1-init
+          (let [timer-id :sctp/t1-init
                 t1-timer (get-in new-state [:timers timer-id])
                 expires-at (:expires-at t1-timer)
 

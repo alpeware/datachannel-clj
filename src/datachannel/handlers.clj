@@ -3,8 +3,8 @@
 
 (defmulti handle-timeout-timer (fn [state timer-id now-ms] timer-id))
 
-(defmethod handle-timeout-timer :t2-shutdown [state timer-id now-ms]
-  (let [timer (get-in state [:timers :t2-shutdown])]
+(defmethod handle-timeout-timer :sctp/t2-shutdown [state timer-id now-ms]
+  (let [timer (get-in state [:timers :sctp/t2-shutdown])]
     (if-not timer
       {:new-state state :app-events []}
       (let [retries (:retries timer)]
@@ -12,14 +12,14 @@
           (let [abort-chunk {:type :abort}]
             {:new-state (-> state
                             (assoc :state :closed)
-                            (update :timers dissoc :t2-shutdown)
+                            (update :timers dissoc :sctp/t2-shutdown)
                             (update :pending-control-chunks conj abort-chunk))
              :app-events [{:type :on-error :cause :max-retransmissions}]})
           (let [new-delay (* (:delay timer) 2)
                 new-delay (min new-delay 60000)
                 packet (:packet timer)]
             {:new-state (-> state
-                            (assoc-in [:timers :t2-shutdown]
+                            (assoc-in [:timers :sctp/t2-shutdown]
                                       {:expires-at (+ now-ms new-delay)
                                        :delay new-delay
                                        :retries (inc retries)
@@ -27,19 +27,19 @@
                             (update :pending-control-chunks into (:chunks packet)))
              :app-events []}))))))
 
-(defmethod handle-timeout-timer :t1-init [state timer-id now-ms]
-  (let [timer (get-in state [:timers :t1-init])
+(defmethod handle-timeout-timer :sctp/t1-init [state timer-id now-ms]
+  (let [timer (get-in state [:timers :sctp/t1-init])
         retries (:retries timer)]
     (if (>= retries 8)
       {:new-state (-> state
                       (assoc :state :closed)
-                      (update :timers dissoc :t1-init))
+                      (update :timers dissoc :sctp/t1-init))
        :app-events [{:type :on-error :cause :max-retransmissions}]}
       (let [new-delay (* (:delay timer) 2)
             new-delay (min new-delay 60000) ;; Cap delay
             packet (:packet timer)]
         {:new-state (-> state
-                        (assoc-in [:timers :t1-init]
+                        (assoc-in [:timers :sctp/t1-init]
                                   {:expires-at (+ now-ms new-delay)
                                    :delay new-delay
                                    :retries (inc retries)
@@ -47,19 +47,19 @@
                         (update :pending-control-chunks into (:chunks packet)))
          :app-events []}))))
 
-(defmethod handle-timeout-timer :t1-cookie [state timer-id now-ms]
-  (let [timer (get-in state [:timers :t1-cookie])
+(defmethod handle-timeout-timer :sctp/t1-cookie [state timer-id now-ms]
+  (let [timer (get-in state [:timers :sctp/t1-cookie])
         retries (:retries timer)]
     (if (>= retries 8)
       {:new-state (-> state
                       (assoc :state :closed)
-                      (update :timers dissoc :t1-cookie))
+                      (update :timers dissoc :sctp/t1-cookie))
        :app-events [{:type :on-error :cause :max-retransmissions}]}
       (let [new-delay (* (:delay timer) 2)
             new-delay (min new-delay 60000) ;; Cap delay
             packet (:packet timer)]
         {:new-state (-> state
-                        (assoc-in [:timers :t1-cookie]
+                        (assoc-in [:timers :sctp/t1-cookie]
                                   {:expires-at (+ now-ms new-delay)
                                    :delay new-delay
                                    :retries (inc retries)
@@ -67,12 +67,12 @@
                         (update :pending-control-chunks into (:chunks packet)))
          :app-events []}))))
 
-(defmethod handle-timeout-timer :t3-rtx [state timer-id now-ms]
-  (let [timer (get-in state [:timers :t3-rtx])
+(defmethod handle-timeout-timer :sctp/t3-rtx [state timer-id now-ms]
+  (let [timer (get-in state [:timers :sctp/t3-rtx])
         active-streams (filter #(seq (:send-queue (val %))) (:streams state))]
     (if (empty? active-streams)
       ;; If queue is empty, stop the timer
-      {:new-state (update state :timers dissoc :t3-rtx) :app-events []}
+      {:new-state (update state :timers dissoc :sctp/t3-rtx) :app-events []}
       (let [[stream-id stream-data] (first active-streams)
             q (:send-queue stream-data)
             first-item (first q)
@@ -109,14 +109,14 @@
                          (assoc :flight-size new-flight-size)
                          (update :pending-control-chunks conj forward-tsn-chunk))
                   s2 (if (empty? new-q)
-                       (update s1 :timers dissoc :t3-rtx)
+                       (update s1 :timers dissoc :sctp/t3-rtx)
                        s1)]
               {:new-state s2 :app-events []})
             ;; Standard SCTP: abort connection
             (let [abort-chunk {:type :abort}]
               {:new-state (-> state
                               (assoc :state :closed)
-                              (update :timers dissoc :t3-rtx)
+                              (update :timers dissoc :sctp/t3-rtx)
                               (update :pending-control-chunks conj abort-chunk))
                :app-events [{:type :on-error :cause :max-retransmissions}]}))
           (let [new-delay (* (:delay timer) 2)
@@ -135,7 +135,7 @@
                 chunk-size (+ 16 (if (:payload (:chunk first-item)) (alength ^bytes (:payload (:chunk first-item))) 0))
                 flight-size (max 0 (- (get state :flight-size 0) chunk-size))]
             {:new-state (-> state
-                            (assoc-in [:timers :t3-rtx] {:expires-at (+ now-ms new-delay) :delay new-delay})
+                            (assoc-in [:timers :sctp/t3-rtx] {:expires-at (+ now-ms new-delay) :delay new-delay})
                             (update-in [:metrics :retransmissions] (fnil inc 0))
                             (assoc-in [:streams stream-id :send-queue] new-q)
                             (assoc :ssthresh new-ssthresh)
@@ -146,18 +146,18 @@
                             (assoc :flight-size flight-size))
              :app-events []}))))))
 
-(defmethod handle-timeout-timer :t-heartbeat [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t-heartbeat [state timer-id now-ms]
   (let [interval (get state :heartbeat-interval 30000)
         rto (get state :rto-initial 1000)
         hb-chunk {:type :heartbeat
                   :params [{:type :heartbeat-info :info (byte-array 8)}]}]
     {:new-state (-> state
-                    (assoc-in [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-                    (assoc-in [:timers :t-heartbeat-rtx] {:expires-at (+ now-ms rto)})
+                    (assoc-in [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
+                    (assoc-in [:timers :sctp/t-heartbeat-rtx] {:expires-at (+ now-ms rto)})
                     (update :pending-control-chunks conj hb-chunk))
      :app-events []}))
 
-(defmethod handle-timeout-timer :t-heartbeat-rtx [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t-heartbeat-rtx [state timer-id now-ms]
   (let [errors (get state :heartbeat-error-count 0)
         max-retries (get state :max-retransmissions 10)
         new-errors (inc errors)]
@@ -165,20 +165,41 @@
       (let [abort-chunk {:type :abort}]
         {:new-state (-> state
                         (assoc :state :closed)
-                        (update :timers dissoc :t-heartbeat :t-heartbeat-rtx)
+                        (update :timers dissoc :sctp/t-heartbeat :sctp/t-heartbeat-rtx)
                         (update :pending-control-chunks conj abort-chunk))
          :app-events [{:type :on-error :cause :max-retransmissions}]})
       {:new-state (-> state
                       (assoc :heartbeat-error-count new-errors)
-                      (update :timers dissoc :t-heartbeat-rtx))
+                      (update :timers dissoc :sctp/t-heartbeat-rtx))
        :app-events []})))
 
 (defmethod handle-timeout-timer :default [state timer-id now-ms]
   {:new-state state :app-events []})
 
-(defn handle-timeout [state timer-id now-ms]
-  (let [res (handle-timeout-timer state timer-id now-ms)]
-    (packetize/packetize (:new-state res) (:app-events res))))
+(defn handle-timeout [state timer-id now-ms & [^javax.net.ssl.SSLEngine engine]]
+  (let [ns-str (namespace timer-id)]
+    (cond
+      (= ns-str "sctp")
+      (let [res (handle-timeout-timer state timer-id now-ms)]
+        (packetize/packetize (:new-state res) (:app-events res)))
+
+      (= ns-str "stun")
+      (let [req (datachannel.stun/make-simple-binding-request)]
+        {:new-state state :network-out [req] :app-events []})
+
+      (= ns-str "dtls")
+      (if engine
+        (do
+          (.beginHandshake engine)
+          (let [out-buf (java.nio.ByteBuffer/allocateDirect 65536)
+                empty-in (java.nio.ByteBuffer/allocateDirect 0)
+                {:keys [packets]} (datachannel.dtls/handshake engine empty-in out-buf)]
+            {:new-state state :network-out (vec packets) :app-events []}))
+        {:new-state state :network-out [] :app-events []})
+
+      :else
+      (let [res (handle-timeout-timer state timer-id now-ms)]
+        (packetize/packetize (:new-state res) (:app-events res))))))
 
 (defmulti handle-event-type (fn [state event now-ms] (:type event)))
 
@@ -199,7 +220,7 @@
     {:new-state (-> state
                     (assoc :state :cookie-wait)
                     (assoc :next-tsn init-tsn)
-                    (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet init-packet})
+                    (assoc-in [:timers :sctp/t1-init] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet init-packet})
                     (update :pending-control-chunks conj init-chunk)
                     (update-in [:metrics :tx-packets] (fnil inc 0)))
      :app-events []}))
@@ -214,7 +235,7 @@
                              :chunks [shutdown-chunk]}
             new-state (-> state
                           (assoc :state :shutdown-sent)
-                          (assoc-in [:timers :t2-shutdown] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet shutdown-packet})
+                          (assoc-in [:timers :sctp/t2-shutdown] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet shutdown-packet})
                           (update :pending-control-chunks conj shutdown-chunk))]
         {:new-state new-state :app-events []})
       {:new-state (assoc state :state :shutdown-pending) :app-events []})

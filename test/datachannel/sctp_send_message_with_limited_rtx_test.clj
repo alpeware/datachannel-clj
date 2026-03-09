@@ -16,11 +16,11 @@
           item (assoc item :max-retransmits 0)
           state1 (assoc-in state1 [:streams 0 :send-queue] [item])
 
-          timer (get-in state1 [:timers :t3-rtx])
+          timer (get-in state1 [:timers :sctp/t3-rtx])
           next-now (:expires-at timer)
 
           ;; Handle timeout
-          res2 (core/handle-timeout state1 :t3-rtx next-now)
+          res2 (core/handle-timeout state1 :sctp/t3-rtx next-now)
           state2 (:new-state res2)
           net-out (:network-out res2)]
 
