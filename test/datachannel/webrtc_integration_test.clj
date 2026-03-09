@@ -3,7 +3,8 @@
             [datachannel.core :as dc]
             [datachannel.stun :as stun]
             [datachannel.dtls :as dtls]
-            [datachannel.nio :as nio])
+            [datachannel.nio :as nio]
+            [datachannel.sdp :as sdp])
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType RTCDataChannelObserver]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
@@ -16,11 +17,6 @@
 (defn extract-ice-credentials [sdp]
   {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))
    :pwd (second (re-find #"a=ice-pwd:([^\r\n]+)" sdp))})
-
-(defn parse-candidate [candidate-sdp]
-  (let [parts (.split candidate-sdp " ")]
-    {:ip (get parts 4)
-     :port (Integer/parseInt (get parts 5))}))
 
 (defn create-offer [pc]
   (let [p (promise)]
@@ -64,8 +60,9 @@
           remote-creds (atom nil)
           local-ip (get-local-ip)
           port (+ 35000 (rand-int 5000))
-          ice-ufrag "cljufrag"
-          ice-pwd "cljpwd12345678901234567890"
+          ice-creds (sdp/generate-ice-credentials)
+          ice-ufrag (:ufrag ice-creds)
+          ice-pwd (:pwd ice-creds)
 
           channel (nio/create-non-blocking-channel port local-ip)
           selector (nio/create-selector)
@@ -147,7 +144,7 @@
                          (onIceCandidate [_ candidate]
                            (when-let [creds @remote-creds]
                              (try
-                               (let [cand-info (parse-candidate (.sdp candidate))
+                               (let [cand-info (sdp/parse-candidate (.sdp candidate))
                                      req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
                                      addr (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info)))]
                                  (.send channel req addr))
@@ -188,21 +185,12 @@
             (reset! remote-creds (extract-ice-credentials (.sdp offer)))
             (set-local-description pc offer)
 
-            (let [sdp-str (str "v=0\r\n"
-                               "o=- 123456789 2 IN IP4 " local-ip "\r\n"
-                               "s=-\r\n"
-                               "t=0 0\r\n"
-                               "a=group:BUNDLE 0\r\n"
-                               "m=application " port " UDP/DTLS/SCTP webrtc-datachannel\r\n"
-                               "c=IN IP4 " local-ip "\r\n"
-                               "a=setup:passive\r\n"
-                               "a=mid:0\r\n"
-                               "a=sctp-port:5000\r\n"
-                               "a=fingerprint:sha-256 " server-cert-fingerprint "\r\n"
-                               "a=ice-ufrag:" ice-ufrag "\r\n"
-                               "a=ice-pwd:" ice-pwd "\r\n"
-                               "a=ice-lite\r\n"
-                               "a=rtcp-mux\r\n")
+            (let [sdp-str (sdp/format-answer
+                           {:local-ip    local-ip
+                            :port        port
+                            :ice-ufrag   ice-ufrag
+                            :ice-pwd     ice-pwd
+                            :fingerprint server-cert-fingerprint})
                   answer (RTCSessionDescription. RTCSdpType/ANSWER sdp-str)]
 
               (set-remote-description pc answer)
@@ -221,7 +209,7 @@
                       (let [req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
                             remote-cand (first (.getIceCandidates pc))
                             addr (if remote-cand
-                                   (let [cand-info (parse-candidate (.sdp remote-cand))]
+                                   (let [cand-info (sdp/parse-candidate (.sdp remote-cand))]
                                      (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info))))
                                    (InetSocketAddress. ^String local-ip (int port)))]
                         (.send channel req addr))
