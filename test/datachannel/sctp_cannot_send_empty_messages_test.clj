@@ -4,8 +4,7 @@
 
 (deftest cannot-send-empty-messages-test
   (testing "Cannot send empty messages via send-data"
-    (let [connection (core/create-connection {} true)
-          state @(:state (:connection connection))
+    (let [state (core/create-connection {} true)
           established-state (assoc state :state :established)
           payload (byte-array 0)
           stream-id 0

@@ -8,9 +8,8 @@
 
           ;; Initialize client state and trigger connect
           client-opts {:heartbeat-interval 30000 :max-retransmissions 10}
-          conn-res (core/create-connection client-opts true)
-          client-state @(get-in conn-res [:connection :state])
-          client-ver-tag (:local-ver-tag conn-res)
+          client-state (core/create-connection client-opts true)
+          client-ver-tag (:local-ver-tag client-state)
 
           connect-event {:type :connect}
           res1 (core/handle-event client-state connect-event now-ms)

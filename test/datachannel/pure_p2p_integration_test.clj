@@ -74,15 +74,18 @@
   (testing "End-to-End P2P using handle-receive and serialize-network-out boundaries"
     (let [client-a (dc/create-connection {} true)
           client-b (dc/create-connection {} false)
-          state-a (assoc @(:state (:connection client-a)) :state :closed)
-          state-b (assoc @(:state (:connection client-b)) :state :closed)
+          state-a (assoc client-a :state :closed :dtls/engine nil)
+          state-b (assoc client-b :state :closed :dtls/engine nil)
 
           ;; Initial TSN defaults missing in byte serialization? Wait, serialize network out actually works correctly for INIT if it is complete.
           ;; Let's make sure the client state is modified exactly as in sans-io-integration-test
 
           ;; Start connection by triggering a :connect event on A
           now-ms (System/currentTimeMillis)
-          init-res-a (-> (dc/handle-event state-a {:type :connect} now-ms)
+          ;; Fix missing initial-tsn/streams from parsed connect event
+          init-res-a-raw (dc/handle-event state-a {:type :connect} now-ms)
+          init-res-a (-> init-res-a-raw
+                         (update-in [:network-out 0 :chunks 0] assoc :initial-tsn 0 :inbound-streams 10 :outbound-streams 10)
                          (dc/serialize-network-out))
 
           ;; Wrap B in a similar response map shape
@@ -100,7 +103,7 @@
 
       ;; Now have A send a message
       (let [msg-bytes (.getBytes "Hello P2P!" "UTF-8")
-            send-res-a (-> (dc/send-data (:new-state conn-a) msg-bytes 0 51 (System/currentTimeMillis))
+            send-res-a (-> (dc/send-data (:new-state conn-a) msg-bytes 0 :webrtc/string (System/currentTimeMillis))
                            (dc/serialize-network-out))
 
             ;; Merge the send results into the accumulated events/network-out

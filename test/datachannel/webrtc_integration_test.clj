@@ -70,10 +70,10 @@
           clj-conn (dc/create-connection {:ice-ufrag ice-ufrag
                                           :ice-pwd ice-pwd
                                           :mtu 1200} false)
-          cert-data (:cert-data (:connection clj-conn))
+          cert-data (:cert-data clj-conn)
           server-cert-fingerprint (:fingerprint cert-data)
-          engine (:engine clj-conn)
-          state-atom (:state (:connection clj-conn))
+          engine (:dtls/engine clj-conn)
+          state-atom (atom clj-conn)
           running (atom true)]
 
       (try
@@ -100,11 +100,11 @@
                                 (.get buffer bytes)
                                 ;; Let dc/handle-receive do STUN and DTLS decryption/handshake
                                 (let [state @state-atom
-                                      result (dc/handle-receive (assoc state :ice-pwd ice-pwd) bytes (System/currentTimeMillis) remote-addr engine)]
+                                      result (dc/handle-receive state bytes (System/currentTimeMillis) remote-addr)]
                                   (reset! state-atom (:new-state result))
 
                                   ;; Emit outbound bytes
-                                  (let [serialized (dc/serialize-network-out result nil engine)]
+                                  (let [serialized (dc/serialize-network-out result)]
                                     (doseq [out-buf (:network-out-bytes serialized)]
                                       (.send channel out-buf @java-peer-addr)))
 
