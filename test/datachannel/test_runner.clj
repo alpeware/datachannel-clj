@@ -20,6 +20,7 @@
             [datachannel.sctp-both-sides-send-heartbeats-test]
             [datachannel.sctp-close-after-first-lost-heartbeat-test]
             [datachannel.sctp-close-after-second-lost-heartbeat-test]
+            [datachannel.sctp-close-after-too-many-retransmissions-test]
             [datachannel.sctp-establish-connection-test]
             [datachannel.sctp-init-abort-test]
             [datachannel.sctp-metrics-test]
@@ -72,6 +73,7 @@
          'datachannel.sctp-both-sides-send-heartbeats-test
          'datachannel.sctp-close-after-first-lost-heartbeat-test
          'datachannel.sctp-close-after-second-lost-heartbeat-test
+         'datachannel.sctp-close-after-too-many-retransmissions-test
          'datachannel.sctp-establish-connection-test
          'datachannel.sctp-init-abort-test
          'datachannel.sctp-metrics-test
