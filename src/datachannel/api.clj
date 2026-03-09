@@ -32,23 +32,22 @@
      :remote-addr (atom nil)}))
 
 (defn- apply-action!
-  "Applies a pure action function to the state atom, extracts effects, and executes them."
+  "Applies a pure action function to the state atom sequentially using a lock, extracts effects, and executes them."
   [node action-fn callbacks]
-  (let [effects (atom nil)
-        channel @(:channel node)
-        remote-addr @(:remote-addr node)]
-    (swap! (:state-atom node)
-           (fn [st]
-             (let [res (action-fn st)
-                   res-ser (dc/serialize-network-out res)
-                   new-st (:new-state res-ser)
-                   was-established? (:established-notified? new-st)
-                   is-established? (= (:state new-st) :established)
-                   should-notify? (and is-established? (not was-established?))
-                   final-st (if should-notify? (assoc new-st :established-notified? true) new-st)]
-               (reset! effects (assoc res-ser :should-notify-open? should-notify?))
-               final-st)))
-    (let [{:keys [network-out-bytes app-events should-notify-open?]} @effects]
+  (let [effects (locking (:state-atom node)
+                  (let [st @(:state-atom node)
+                        res (action-fn st)
+                        res-ser (dc/serialize-network-out res)
+                        new-st (:new-state res-ser)
+                        was-established? (:established-notified? new-st)
+                        is-established? (= (:state new-st) :established)
+                        should-notify? (and is-established? (not was-established?))
+                        final-st (if should-notify? (assoc new-st :established-notified? true) new-st)]
+                    (reset! (:state-atom node) final-st)
+                    (assoc res-ser :should-notify-open? should-notify?)))]
+    (let [{:keys [network-out-bytes app-events should-notify-open?]} effects
+          channel @(:channel node)
+          remote-addr @(:remote-addr node)]
       (when (and channel remote-addr)
         (doseq [^ByteBuffer buf network-out-bytes]
           (.send channel buf remote-addr)))
@@ -152,11 +151,7 @@
                          callbacks)
           (apply-action! node
                          (fn [st]
-                           (let [res (dc/handle-event st {:type :connect} (System/currentTimeMillis))]
-                             (if (and (seq (:network-out res)) (= :init (get-in res [:network-out 0 :chunks 0 :type])))
-                               ;; Add defaults to INIT chunks like in pure-p2p-integration-test
-                               (update-in res [:network-out 0 :chunks 0] assoc :initial-tsn 0 :inbound-streams 10 :outbound-streams 10)
-                               res)))
+                           (dc/handle-event st {:type :connect} (System/currentTimeMillis)))
                          callbacks)))
       node)))
 
