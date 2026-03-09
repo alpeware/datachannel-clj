@@ -49,7 +49,7 @@
     - [x] Establish Connection While Sending Data
     - [x] Send Message After Established
     - [x] Timeout Resends Packet
-    - [ ] Send A Lot Of Bytes Missed Second Packet
+    - [x] Send A Lot Of Bytes Missed Second Packet
     - [x] Sending Heartbeat Answers With Ack
     - [x] Expect Heartbeat To Be Sent
     - [ ] Expect Heartbeats Not Sent When Sending Data
