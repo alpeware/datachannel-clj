@@ -65,7 +65,7 @@
     - [x] One Peer Reconnects
     - [x] One Peer Reconnects With Pending Data
     - [ ] Send Message With Limited Rtx
-    - [ ] Close Connection After First Failed Transmission
+    - [x] Close Connection After First Failed Transmission
     - [ ] Close Connection After One Failed Retransmission
     - [x] Error Counter Is Reset On Data Ack
     - [x] Both Sides Send Heartbeats
