@@ -234,14 +234,48 @@
                         q (:send-queue stream-data)
                         first-item (first q)
                         retries (:retries first-item)
-                        max-retries (get state :max-retransmissions 10)]
+                        global-max-retries (get state :max-retransmissions 10)
+                        item-max-retries (:max-retransmits first-item)
+                        max-retries (if item-max-retries item-max-retries global-max-retries)]
                     (if (>= retries max-retries)
-                      (let [abort-chunk {:type :abort}]
-                        {:new-state (-> state
-                                        (assoc :state :closed)
-                                        (update :timers dissoc :t3-rtx)
-                                        (update :pending-control-chunks conj abort-chunk))
-                         :app-events [{:type :on-error :cause :max-retransmissions}]})
+                      (if item-max-retries
+                        ;; Partial reliability: abandon message and send FORWARD-TSN
+                        (let [;; Find all chunks belonging to the same user message (until we see ending flag)
+                              ;; SCTP flags: B=2, E=1. If B is not set, we might be in the middle of a message.
+                              ;; For simplicity, we drop from the front until we hit an item where (bit-and flags 1) is non-zero (ending=true)
+                              dropped-items (loop [items []
+                                                   rem-q q]
+                                              (if (empty? rem-q)
+                                                items
+                                                (let [it (first rem-q)
+                                                      flags (get-in it [:chunk :flags] 3)]
+                                                  (if (pos? (bit-and flags 1)) ; ending flag set
+                                                    (conj items it)
+                                                    (recur (conj items it) (rest rem-q))))))
+                              new-q (vec (drop (count dropped-items) q))
+                              last-dropped-tsn (:tsn (last dropped-items))
+                              ;; Only subtract bytes for chunks that were actually sent (in flight)
+                              abandoned-bytes (reduce + (map #(if (:sent? %) (+ 16 (if (:payload (:chunk %)) (alength ^bytes (:payload (:chunk %))) 0)) 0) dropped-items))
+                              new-flight-size (max 0 (- (get state :flight-size 0) abandoned-bytes))
+                              ;; Extract stream-id and seq-num from the first dropped item for the FORWARD-TSN payload
+                              stream-id-to-fwd (get-in (first dropped-items) [:chunk :stream-id] stream-id)
+                              seq-num-to-fwd (get-in (first dropped-items) [:chunk :seq-num] 0)
+                              forward-tsn-chunk {:type :forward-tsn :new-cumulative-tsn last-dropped-tsn :streams [{:stream-id stream-id-to-fwd :stream-sequence seq-num-to-fwd}]}
+                              s1 (-> state
+                                     (assoc-in [:streams stream-id :send-queue] new-q)
+                                     (assoc :flight-size new-flight-size)
+                                     (update :pending-control-chunks conj forward-tsn-chunk))
+                              s2 (if (empty? new-q)
+                                   (update s1 :timers dissoc :t3-rtx)
+                                   s1)]
+                          {:new-state s2 :app-events []})
+                        ;; Standard SCTP: abort connection
+                        (let [abort-chunk {:type :abort}]
+                          {:new-state (-> state
+                                          (assoc :state :closed)
+                                          (update :timers dissoc :t3-rtx)
+                                          (update :pending-control-chunks conj abort-chunk))
+                           :app-events [{:type :on-error :cause :max-retransmissions}]}))
                       (let [new-delay (* (:delay timer) 2)
                             new-delay (min new-delay 60000)
                             ;; Mark sent? false so packetize will re-transmit it
