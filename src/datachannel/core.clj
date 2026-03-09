@@ -55,15 +55,21 @@
 
 (defn serialize-network-out
   "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
-  [result-map & [^ByteBuffer opt-buf]]
+  [result-map & [^ByteBuffer opt-buf ^SSLEngine engine]]
   (let [zero-checksum? (get-in result-map [:new-state :metrics :uses-zero-checksum])
         encoded (mapv (fn [item]
                         (cond
                           (map? item) ; SCTP packet
                           (let [buf (or opt-buf (ByteBuffer/allocateDirect 65536))]
+                            (.clear buf)
                             (sctp/encode-packet item buf {:zero-checksum? zero-checksum?})
                             (.flip buf)
-                            buf)
+                            (if (and engine (or (= (.getHandshakeStatus engine) SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                                                (= (.getHandshakeStatus engine) SSLEngineResult$HandshakeStatus/FINISHED)))
+                              (let [net-out (ByteBuffer/allocateDirect 65536)
+                                    {:keys [status bytes]} (dtls/send-app-data engine buf net-out)]
+                                (ByteBuffer/wrap bytes))
+                              buf))
                           (instance? ByteBuffer item) ; Already encoded (STUN/DTLS)
                           item
                           (bytes? item) ; byte-array
@@ -73,7 +79,7 @@
                       (:network-out result-map []))]
     (assoc result-map :network-out-bytes encoded)))
 
-(defn handle-receive [state ^bytes network-bytes now-ms & [remote-addr]]
+(defn handle-receive [state ^bytes network-bytes now-ms & [remote-addr ^SSLEngine engine]]
   (if (zero? (alength network-bytes))
     {:new-state state :network-out [] :app-events []}
     (let [first-byte (bit-and (aget network-bytes 0) 0xFF)]
@@ -88,9 +94,34 @@
 
         ;; DTLS
         (and (>= first-byte 20) (<= first-byte 63))
-        {:new-state state :network-out [] :app-events [{:type :dtls-packet :payload network-bytes}]}
+        (if-not engine
+          {:new-state state :network-out [] :app-events [{:type :dtls-packet :payload network-bytes}]}
+          (let [hs-status (.getHandshakeStatus engine)]
+            (if (or (= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                    (= hs-status SSLEngineResult$HandshakeStatus/FINISHED))
+              ;; Application data
+              (let [in-buf (ByteBuffer/wrap network-bytes)
+                    out-buf (ByteBuffer/allocateDirect 65536)
+                    {:keys [status bytes]} (dtls/receive-app-data engine in-buf out-buf)]
+                (if (and bytes (pos? (alength bytes)))
+                  (let [sctp-buf (ByteBuffer/wrap bytes)
+                        packet (sctp/decode-packet sctp-buf)]
+                    (handle-sctp-packet state packet now-ms))
+                  {:new-state state :network-out [] :app-events []}))
+              ;; Handshake
+              (let [in-buf (ByteBuffer/wrap network-bytes)
+                    out-buf (ByteBuffer/allocateDirect 65536)
+                    {:keys [status packets app-data]} (dtls/handshake engine in-buf out-buf)]
+                (if (and app-data (pos? (alength app-data)))
+                  (let [sctp-buf (ByteBuffer/wrap app-data)
+                        packet (sctp/decode-packet sctp-buf)
+                        sctp-res (handle-sctp-packet state packet now-ms)]
+                    (-> sctp-res
+                        (update :network-out (fn [no] (into (vec packets) no)))
+                        (update :app-events conj {:type :dtls-handshake-progress})))
+                  {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]})))))
 
-        ;; SCTP (Default)
+        ;; SCTP (Default, raw)
         :else
         (let [buf (ByteBuffer/wrap network-bytes)
               packet (sctp/decode-packet buf)]

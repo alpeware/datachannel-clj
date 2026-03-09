@@ -89,14 +89,14 @@
                                 (let [len (.remaining buffer)
                                       bytes (byte-array len)]
                                   (.get buffer bytes)
-                                  (let [result (dc/handle-receive {:ice-pwd ice-pwd} bytes (System/currentTimeMillis) remote-addr)]
+                                  (let [result (dc/handle-receive {:ice-pwd ice-pwd} bytes (System/currentTimeMillis) remote-addr nil)]
                                     (doseq [event (:app-events result)]
                                       (when (= (:type event) :stun-packet)
                                         (let [parsed (stun/parse-packet (ByteBuffer/wrap (:payload event)))
                                               msg-type (:type parsed)]
                                           (when (or (= msg-type 0x0001) (= msg-type 0x0101))
                                             (reset! stun-received-at-clj true)))))
-                                    (let [serialized (dc/serialize-network-out result)]
+                                    (let [serialized (dc/serialize-network-out result nil nil)]
                                       (doseq [out-buf (:network-out-bytes serialized)]
                                         (.send channel out-buf remote-addr))))))))))))
                   (catch Exception e
