@@ -41,6 +41,7 @@
             [datachannel.sctp-reconnect-test]
             [datachannel.sctp-unknown-chunk-test]
             [datachannel.sctp-send-many-api-method-test]
+            [datachannel.sctp-send-a-lot-of-bytes-missed-second-packet-test]
             ))
 
 (defn -main [& args]
@@ -87,5 +88,6 @@
          'datachannel.sctp-reconnect-test
          'datachannel.sctp-unknown-chunk-test
          'datachannel.sctp-send-many-api-method-test
+         'datachannel.sctp-send-a-lot-of-bytes-missed-second-packet-test
          )]
     (System/exit (+ fail error))))

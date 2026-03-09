@@ -72,8 +72,8 @@
                     ;; Approximate size, +16 for chunk header overhead
                     chunk-size (+ 16 (if (:payload data-chunk) (alength ^bytes (:payload data-chunk)) 0))
                     cwnd (get state :cwnd 1000000)]
-                (if (> (+ current-flight-size chunk-size) cwnd)
-                  ;; Congestion window full, halt pulling new data
+                (if (and (> current-flight-size 0) (> (+ current-flight-size chunk-size) cwnd))
+                  ;; Congestion window full, halt pulling new data (allow if flight-size is 0 to prevent complete stall)
                   {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
                    :network-out (if (seq bundled-chunks)
                                   [{:src-port (get state :local-port 5000)
@@ -118,13 +118,14 @@
 (defn handle-event [state event now-ms]
   (let [res (case (:type event)
               :connect
-              (let [{:keys [local-ver-tag initial-tsn]} state
+              (let [{:keys [local-ver-tag initial-tsn next-tsn]} state
+                    init-tsn (or initial-tsn next-tsn 0)
                     init-chunk {:type :init
                                 :init-tag local-ver-tag
                                 :a-rwnd 100000
                                 :outbound-streams 10
                                 :inbound-streams 10
-                                :initial-tsn initial-tsn
+                                :initial-tsn init-tsn
                                 :params {}}
                     init-packet {:src-port 5000
                                  :dst-port 5000
@@ -132,6 +133,7 @@
                                  :chunks [init-chunk]}]
                 {:new-state (-> state
                                 (assoc :state :cookie-wait)
+                                (assoc :next-tsn init-tsn)
                                 (assoc-in [:timers :t1-init] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet init-packet})
                                 (update :pending-control-chunks conj init-chunk)
                                 (update-in [:metrics :tx-packets] (fnil inc 0)))
@@ -260,7 +262,10 @@
                                         (update-in [:metrics :retransmissions] (fnil inc 0))
                                         (assoc-in [:streams stream-id :send-queue] new-q)
                                         (assoc :ssthresh new-ssthresh)
-                                        (assoc :cwnd new-cwnd)
+                                        ;; Set cwnd to accommodate at least the MTU, fast retransmit logic requires flight-size to drop.
+                                        ;; If flight-size + chunk-size > cwnd, packetize won't pull.
+                                        ;; Here we set cwnd to something large enough, or just MTU but ensure flight-size is updated properly.
+                                        (assoc :cwnd (max new-cwnd (+ flight-size chunk-size)))
                                         (assoc :flight-size flight-size))
                          :app-events []})))))
 
@@ -300,28 +305,72 @@
 
 (defmulti process-chunk (fn [state chunk packet now-ms] (:type chunk)))
 
+(defn- compute-gap-blocks [remote-tsn out-of-order-tsns]
+  (if (empty? out-of-order-tsns)
+    []
+    (let [tsns (seq out-of-order-tsns)]
+      (loop [remaining (rest tsns)
+             current-start (- (first tsns) remote-tsn)
+             current-end (- (first tsns) remote-tsn)
+             blocks []]
+        (if (empty? remaining)
+          (conj blocks [current-start current-end])
+          (let [tsn (first remaining)
+                offset (- tsn remote-tsn)]
+            (if (= offset (inc current-end))
+              (recur (rest remaining) current-start offset blocks)
+              (recur (rest remaining) offset offset (conj blocks [current-start current-end])))))))))
+
 (defmethod process-chunk :data [state chunk packet now-ms]
   (let [proto (:protocol chunk)
         tsn (:tsn chunk)
-        s1 (if (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int (get state :remote-tsn -1)))))
-             (assoc state :remote-tsn tsn)
-             state)
-        sack-chunk {:type :sack
-                    :cum-tsn-ack (:remote-tsn s1)
-                    :a-rwnd 100000
-                    :gap-blocks []
-                    :duplicate-tsns []}
-        s1 (update s1 :pending-control-chunks conj sack-chunk)
-        stream-id (:stream-id chunk)
-        recv-q (get-in s1 [:streams stream-id :recv-queue] [])
-        new-recv-q (conj recv-q chunk)
-        s2 (assoc-in s1 [:streams stream-id :recv-queue] new-recv-q)]
-    {:next-state s2 :next-events []}))
+        remote-tsn (get state :remote-tsn -1)
+        ooo-tsns (get state :out-of-order-tsns (sorted-set))
+        ;; Proper RFC 4960 serial arithmetic for newer/older
+        diff (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int remote-tsn)))
+        is-newer? (or (= remote-tsn -1) (> diff 0))
+        ;; It's old (already acked or out of bounds) if it's not newer and not in out-of-order-tsns
+        ;; But wait, out-of-order-tsns are newer than remote-tsn.
+        ;; So if it's <= remote-tsn (in serial math, i.e., not newer), it's either an old packet or a duplicate.
+        ;; For SCTP SACKs, duplicate-tsns are reported.
+        is-duplicate? (and (not is-newer?) (not= remote-tsn -1))]
+    (if is-duplicate?
+      (let [sack-chunk {:type :sack
+                        :cum-tsn-ack remote-tsn
+                        :a-rwnd 100000
+                        :gap-blocks (compute-gap-blocks remote-tsn ooo-tsns)
+                        :duplicate-tsns [tsn]}
+            s1 (update state :pending-control-chunks conj sack-chunk)]
+        {:next-state s1 :next-events []})
+      (let [expected-tsn (if (= remote-tsn -1) tsn (if (= remote-tsn 4294967295) 0 (inc remote-tsn)))
+            s1 (if (= tsn expected-tsn)
+                 ;; Contiguous
+                 (loop [curr-tsn tsn
+                        curr-ooo ooo-tsns]
+                   (let [next-tsn (if (= curr-tsn 4294967295) 0 (inc curr-tsn))]
+                     (if (contains? curr-ooo next-tsn)
+                       (recur next-tsn (disj curr-ooo next-tsn))
+                       (assoc state :remote-tsn curr-tsn :out-of-order-tsns curr-ooo))))
+                 ;; Out of order
+                 (assoc state :out-of-order-tsns (conj ooo-tsns tsn)))
+            sack-chunk {:type :sack
+                        :cum-tsn-ack (:remote-tsn s1)
+                        :a-rwnd 100000
+                        :gap-blocks (compute-gap-blocks (:remote-tsn s1) (:out-of-order-tsns s1))
+                        :duplicate-tsns []}
+            s2 (update s1 :pending-control-chunks conj sack-chunk)
+            stream-id (:stream-id chunk)
+            ;; We must fetch the queue directly from s2 rather than the incoming state
+            recv-q (get-in s2 [:streams stream-id :recv-queue] [])
+            ;; Ensure that ANY chunk we receive (contiguous or not) goes into the receive queue for reassembly
+            new-recv-q (if (some #(= (:tsn %) tsn) recv-q) recv-q (conj recv-q chunk))
+            s3 (assoc-in s2 [:streams stream-id :recv-queue] new-recv-q)]
+        {:next-state s3 :next-events []}))))
 
 (defmethod process-chunk :init [state chunk packet now-ms]
   (let [s1 (-> state
                (assoc :remote-ver-tag (:init-tag chunk)
-                      :remote-tsn (dec (:initial-tsn chunk))
+                      :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1)
                       :ssn 0
                       :state :cookie-wait))
         cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
@@ -337,7 +386,7 @@
 
 (defmethod process-chunk :init-ack [state chunk packet now-ms]
   (let [s1 (assoc state :remote-ver-tag (:init-tag chunk)
-                        :remote-tsn (dec (:initial-tsn chunk)))]
+                        :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1))]
     (if-let [cookie (get-in chunk [:params :cookie])]
       (let [cookie-echo-chunk {:type :cookie-echo :cookie cookie}
             out-packet {:src-port (:dst-port packet)
@@ -634,20 +683,36 @@
                          new-q
                          app-events
                          next-ssn)
-                  (if e-bit?
-                    ;; End of fragmented Ordered
-                    (let [full-msg (conj current-msg chunk)]
-                      (recur (rest remaining)
-                             []
-                             new-q
-                             (conj app-events {:type :on-message :payload (assemble-payload full-msg) :stream-id (:stream-id chunk) :protocol (:protocol chunk)})
-                             (inc next-ssn)))
-                    ;; Middle of fragmented Ordered
+                  (if (empty? current-msg)
+                    ;; Received a middle or end chunk without a start chunk, leave it in queue
                     (recur (rest remaining)
-                           (conj current-msg chunk)
-                           new-q
+                           current-msg
+                           (conj new-q chunk)
                            app-events
-                           next-ssn))))
+                           next-ssn)
+                    (let [last-chunk (last current-msg)
+                          expected-tsn (inc (:tsn last-chunk))]
+                      (if (= (:tsn chunk) expected-tsn)
+                        (if e-bit?
+                          ;; End of fragmented Ordered
+                          (let [full-msg (conj current-msg chunk)]
+                            (recur (rest remaining)
+                                   []
+                                   new-q
+                                   (conj app-events {:type :on-message :payload (assemble-payload full-msg) :stream-id (:stream-id chunk) :protocol (:protocol chunk)})
+                                   (inc next-ssn)))
+                          ;; Middle of fragmented Ordered
+                          (recur (rest remaining)
+                                 (conj current-msg chunk)
+                                 new-q
+                                 app-events
+                                 next-ssn))
+                        ;; TSN gap detected inside fragmented message, put back in queue
+                        (recur (rest remaining)
+                               current-msg
+                               (conj new-q chunk)
+                               app-events
+                               next-ssn))))))
               ;; Not expected SSN, hold in queue
               (recur (rest remaining)
                      current-msg
@@ -772,41 +837,69 @@
     (when (> len max-size)
       (throw (ex-info "Cannot send too large message" {:type :too-large})))
     (let [ver-tag (:remote-ver-tag state)
-          tsn (or (:next-tsn state) 0)
           ssn (get-in state [:streams stream-id :next-ssn] 0)
-          data-chunk {:type :data
-                      :flags 3 ;; B and E bits
-                      :tsn tsn
-                      :stream-id stream-id
-                      :seq-num ssn
-                      :protocol protocol
-                      :payload payload}
+          mtu (get state :mtu 1200)
+          max-payload-per-chunk (- mtu 16)
           is-established? (= (:state state) :established)
-          s1 (-> state
-                 (assoc :next-tsn (inc tsn))
-                 (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
-          queue-item {:tsn tsn :chunk data-chunk :sent-at now-ms :retries 0 :sent? false}
-          s2 (assoc-in s1 [:streams stream-id :send-queue] (conj (get-in s1 [:streams stream-id :send-queue] []) queue-item))
-          interval (get s2 :heartbeat-interval 30000)
-          s3 (if (and (pos? interval) (contains? (:timers s2) :t-heartbeat))
-               (assoc-in s2 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
-               s2)
-          s4 (-> s3
-                 (update-in [:metrics :unacked-data] (fnil inc 0))
-                 (cond-> is-established?
-                   (-> (update-in [:metrics :tx-packets] (fnil inc 0))
-                       (update-in [:metrics :tx-bytes] (fnil + 0) len))))
-          s5 (if (and is-established? (nil? (get-in s4 [:timers :t3-rtx])))
-               (assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-               s4)
-          ;; If not established, we just buffered it in streams.
-          ;; Don't packetize network-out if not established
-          res (if is-established?
-                {:new-state s5 :app-events []}
-                {:new-state s5 :app-events []})]
-      (if is-established?
-        (packetize (:new-state res) (:app-events res))
-        {:new-state (:new-state res) :network-out [] :app-events []}))))
+          fragments (if (<= len max-payload-per-chunk)
+                      [payload]
+                      (loop [offset 0
+                             frags []]
+                        (if (>= offset len)
+                          frags
+                          (let [frag-len (min max-payload-per-chunk (- len offset))
+                                frag (java.util.Arrays/copyOfRange payload offset (+ offset frag-len))]
+                            (recur (+ offset frag-len) (conj frags frag))))))]
+      (loop [remaining-frags fragments
+             current-state state
+             current-tsn (or (:next-tsn state) 0)
+             idx 0]
+        (if (empty? remaining-frags)
+          (let [s1 (-> current-state
+                       (assoc :next-tsn current-tsn)
+                       (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
+                interval (get s1 :heartbeat-interval 30000)
+                s2 (if (and (pos? interval) (contains? (:timers s1) :t-heartbeat))
+                     (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+                     s1)
+                s3 (-> s2
+                       (update-in [:metrics :unacked-data] (fnil + 0) (count fragments))
+                       (cond-> is-established?
+                         (-> (update-in [:metrics :tx-packets] (fnil + 0) (count fragments))
+                             (update-in [:metrics :tx-bytes] (fnil + 0) len))))
+                s4 (if (and is-established? (nil? (get-in s3 [:timers :t3-rtx])))
+                     (assoc-in s3 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                     s3)]
+            (if is-established?
+              (loop [current-state s4
+                     all-pkts []
+                     passes 0]
+                (if (> passes 100)
+                  {:new-state current-state :network-out all-pkts :app-events []}
+                  (let [pack-res (packetize current-state [])
+                        pkts (:network-out pack-res)]
+                    (if (empty? pkts)
+                      {:new-state current-state :network-out all-pkts :app-events []}
+                      (recur (:new-state pack-res) (into all-pkts pkts) (inc passes))))))
+              {:new-state s4 :network-out [] :app-events []}))
+          (let [frag (first remaining-frags)
+                total-frags (count fragments)
+                flags (if (= total-frags 1) 3
+                          (cond
+                            (= idx 0) 2
+                            (= idx (dec total-frags)) 1
+                            :else 0))
+                data-chunk {:type :data
+                            :flags flags
+                            :tsn current-tsn
+                            :stream-id stream-id
+                            :seq-num ssn
+                            :protocol protocol
+                            :payload frag}
+                queue-item {:tsn current-tsn :chunk data-chunk :sent-at now-ms :retries 0 :sent? false}
+                new-state (assoc-in current-state [:streams stream-id :send-queue]
+                                    (conj (get-in current-state [:streams stream-id :send-queue] []) queue-item))]
+            (recur (rest remaining-frags) new-state (inc current-tsn) (inc idx))))))))
 
 (defn close [connection]
   (close-channel (:channel connection))
