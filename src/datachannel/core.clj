@@ -89,8 +89,8 @@
         (let [buf (ByteBuffer/wrap network-bytes)
               stun-res (stun/handle-packet buf remote-addr state)]
           (if (instance? ByteBuffer stun-res)
-            {:new-state state :network-out [stun-res] :app-events []}
-            {:new-state state :network-out [] :app-events []}))
+            {:new-state state :network-out [stun-res] :app-events [{:type :stun-packet :payload network-bytes}]}
+            {:new-state state :network-out [] :app-events [{:type :stun-packet :payload network-bytes}]}))
 
         ;; DTLS
         (and (>= first-byte 20) (<= first-byte 63))

@@ -8,6 +8,7 @@
             [datachannel.rehandshake-test]
                         [datachannel.stun-test]
             [datachannel.stun-integration-test]
+            [datachannel.stun-webrtc-integration-test]
                         [datachannel.sctp-state-machine-test]
             [datachannel.sctp-establish-simultaneous-connection-test]
                         [datachannel.sctp-error-chunk-test]
@@ -62,6 +63,7 @@
          'datachannel.rehandshake-test
                   'datachannel.stun-test
          'datachannel.stun-integration-test
+         'datachannel.stun-webrtc-integration-test
                   'datachannel.sctp-state-machine-test
                   'datachannel.sctp-establish-simultaneous-connection-test
                   'datachannel.sctp-error-chunk-test

@@ -1,7 +1,9 @@
 (ns datachannel.stun-webrtc-integration-test
   (:require [clojure.test :refer :all]
             [datachannel.core :as dc]
-            [datachannel.stun :as stun])
+            [datachannel.stun :as stun]
+            [datachannel.dtls :as dtls]
+            [datachannel.nio :as nio])
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
@@ -61,20 +63,44 @@
           local-ip (get-local-ip)
           port (+ 25000 (rand-int 5000))
           ice-ufrag "testufrag"
-          ice-pwd "testpwd"
+          ice-pwd "testpwd"]
 
-          original-handle-packet stun/handle-packet]
-
-      (with-redefs [stun/handle-packet (fn [buf addr conn]
-                                        (let [pos (.position buf)
-                                              msg-type (bit-and (.getShort buf pos) 0xffff)]
-                                          ;; 0x0001 is Binding Request, 0x0101 is Binding Success Response
+        (let [channel (nio/create-non-blocking-channel port local-ip)
+              selector (nio/create-selector)
+              _ (nio/register-for-read channel selector)
+              cert-data (dtls/generate-cert)
+              server-cert-fingerprint (:fingerprint cert-data)
+              running (atom true)
+              buffer (ByteBuffer/allocateDirect 65536)
+              loop-future
+              (future
+                (try
+                  (while @running
+                    (when (> (.select selector 100) 0)
+                      (let [keys (.selectedKeys selector)
+                            iter (.iterator keys)]
+                        (while (.hasNext iter)
+                          (let [k (.next iter)]
+                            (.remove iter)
+                            (when (.isReadable k)
+                              (.clear buffer)
+                              (when-let [remote-addr (.receive channel buffer)]
+                                (.flip buffer)
+                                (let [len (.remaining buffer)
+                                      bytes (byte-array len)]
+                                  (.get buffer bytes)
+                                  (let [result (dc/handle-receive {:ice-pwd ice-pwd} bytes (System/currentTimeMillis) remote-addr)]
+                                    (doseq [event (:app-events result)]
+                                      (when (= (:type event) :stun-packet)
+                                        (let [parsed (stun/parse-packet (ByteBuffer/wrap (:payload event)))
+                                              msg-type (:type parsed)]
                                           (when (or (= msg-type 0x0001) (= msg-type 0x0101))
-                                            (reset! stun-received-at-clj true))
-                                          (original-handle-packet buf addr conn)))]
-
-        (let [server (dc/listen port :host local-ip :ice-ufrag ice-ufrag :ice-pwd ice-pwd)
-              server-cert-fingerprint (:fingerprint (:cert-data server))
+                                            (reset! stun-received-at-clj true)))))
+                                    (let [serialized (dc/serialize-network-out result)]
+                                      (doseq [out-buf (:network-out-bytes serialized)]
+                                        (.send channel out-buf remote-addr))))))))))))
+                  (catch Exception e
+                    (println "Error in UDP loop:" e))))
 
               observer (reify PeerConnectionObserver
                          (onIceCandidate [_ candidate]
@@ -84,7 +110,7 @@
                                      req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
                                      addr (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info)))]
                                  (when (or (.isLoopbackAddress (.getAddress addr)) (.isSiteLocalAddress (.getAddress addr)))
-                                   (.send (:channel server) req addr)))
+                                   (.send channel req addr)))
                                (catch Exception e))))
                          (onIceConnectionChange [_ state])
                          (onConnectionChange [_ state])
@@ -138,7 +164,9 @@
                     "Clojure did not receive any STUN Binding Request from Java")))
 
             (finally
-              (dc/close server)
+              (reset! running false)
+              (try (.close channel) (catch Exception _))
+              (try (.close selector) (catch Exception _))
               (.close pc)
               (.dispose factory)
-              (.dispose adm))))))))
+              (.dispose adm)))))))
