@@ -14,6 +14,7 @@
             [datachannel.sctp-error-counter-reset-test]
             [datachannel.sctp-sending-heartbeat-answers-with-ack-test]
             [datachannel.sctp-expect-heartbeat-to-be-sent-test]
+            [datachannel.sctp-expect-heartbeats-not-sent-when-sending-data-test]
             [datachannel.sctp-both-sides-send-heartbeats-test]
             [datachannel.sctp-close-after-first-lost-heartbeat-test]
             [datachannel.sctp-close-after-second-lost-heartbeat-test]
@@ -61,6 +62,7 @@
          'datachannel.sctp-error-counter-reset-test
          'datachannel.sctp-sending-heartbeat-answers-with-ack-test
          'datachannel.sctp-expect-heartbeat-to-be-sent-test
+         'datachannel.sctp-expect-heartbeats-not-sent-when-sending-data-test
          'datachannel.sctp-both-sides-send-heartbeats-test
          'datachannel.sctp-close-after-first-lost-heartbeat-test
          'datachannel.sctp-close-after-second-lost-heartbeat-test

@@ -52,7 +52,7 @@
     - [x] Send A Lot Of Bytes Missed Second Packet
     - [x] Sending Heartbeat Answers With Ack
     - [x] Expect Heartbeat To Be Sent
-    - [ ] Expect Heartbeats Not Sent When Sending Data
+    - [x] Expect Heartbeats Not Sent When Sending Data
     - [x] Close Connection After First Lost Heartbeat
     - [x] Close Connection After Second Lost Heartbeat
     - [x] Close Connection After Too Many Lost Heartbeats
