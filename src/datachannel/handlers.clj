@@ -173,33 +173,41 @@
                       (update :timers dissoc :sctp/t-heartbeat-rtx))
        :app-events []})))
 
+
+(defmethod handle-timeout-timer :stun/keepalive [state timer-id now-ms]
+  (let [req (datachannel.stun/make-simple-binding-request)]
+    {:new-state (assoc-in state [:timers :stun/keepalive] {:expires-at (+ now-ms 15000)})
+     :network-out [req]
+     :app-events []}))
+
+
+(defmethod handle-timeout-timer :dtls/flight-timeout [state timer-id now-ms]
+  (if-let [^javax.net.ssl.SSLEngine engine (:dtls/engine state)]
+    (let [hs-status (.getHandshakeStatus engine)]
+      (if (or (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/FINISHED)
+              (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING))
+        {:new-state (update state :timers dissoc :dtls/flight-timeout)
+         :network-out []
+         :app-events []}
+        (let [out-buf (java.nio.ByteBuffer/allocateDirect 65536)
+              empty-in (java.nio.ByteBuffer/allocateDirect 0)
+              {:keys [packets]} (datachannel.dtls/handshake engine empty-in out-buf)]
+          {:new-state (assoc-in state [:timers :dtls/flight-timeout] {:expires-at (+ now-ms 1000)})
+           :network-out (vec packets)
+           :app-events []})))
+    {:new-state (update state :timers dissoc :dtls/flight-timeout)
+     :network-out []
+     :app-events []}))
+
 (defmethod handle-timeout-timer :default [state timer-id now-ms]
   {:new-state state :app-events []})
 
-(defn handle-timeout [state timer-id now-ms & [^javax.net.ssl.SSLEngine engine]]
-  (let [ns-str (namespace timer-id)]
-    (cond
-      (= ns-str "sctp")
-      (let [res (handle-timeout-timer state timer-id now-ms)]
-        (packetize/packetize (:new-state res) (:app-events res)))
-
-      (= ns-str "stun")
-      (let [req (datachannel.stun/make-simple-binding-request)]
-        {:new-state state :network-out [req] :app-events []})
-
-      (= ns-str "dtls")
-      (if engine
-        (do
-          (.beginHandshake engine)
-          (let [out-buf (java.nio.ByteBuffer/allocateDirect 65536)
-                empty-in (java.nio.ByteBuffer/allocateDirect 0)
-                {:keys [packets]} (datachannel.dtls/handshake engine empty-in out-buf)]
-            {:new-state state :network-out (vec packets) :app-events []}))
-        {:new-state state :network-out [] :app-events []})
-
-      :else
-      (let [res (handle-timeout-timer state timer-id now-ms)]
-        (packetize/packetize (:new-state res) (:app-events res))))))
+(defn handle-timeout [state timer-id now-ms & [^javax.net.ssl.SSLEngine _engine]]
+  (let [res (handle-timeout-timer state timer-id now-ms)]
+    (if (or (seq (:pending-control-chunks (:new-state res)))
+            (= "sctp" (namespace timer-id)))
+      (packetize/packetize (:new-state res) (:app-events res))
+      res)))
 
 (defmulti handle-event-type (fn [state event now-ms] (:type event)))
 
