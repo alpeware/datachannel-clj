@@ -1,6 +1,8 @@
 (ns datachannel.test-runner
   (:require [clojure.test :refer [run-tests]]
             [datachannel.sctp-test]
+            [datachannel.sctp-send-message-with-limited-rtx-test]
+            [datachannel.sctp-send-many-fragmented-messages-with-limited-rtx-test]
             [datachannel.dtls-test]
             [datachannel.handshake-test]
             [datachannel.rehandshake-test]
@@ -51,6 +53,8 @@
   (let [{:keys [fail error]}
         (run-tests
                   'datachannel.sctp-test
+         'datachannel.sctp-send-message-with-limited-rtx-test
+         'datachannel.sctp-send-many-fragmented-messages-with-limited-rtx-test
          'datachannel.dtls-test
          'datachannel.handshake-test
          'datachannel.rehandshake-test

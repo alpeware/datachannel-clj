@@ -64,14 +64,14 @@
     - [ ] Reset Stream Will Only Reset The Requested Streams
     - [x] One Peer Reconnects
     - [x] One Peer Reconnects With Pending Data
-    - [ ] Send Message With Limited Rtx
+    - [x] Send Message With Limited Rtx
     - [x] Close Connection After First Failed Transmission
     - [x] Close Connection After One Failed Retransmission
     - [x] Error Counter Is Reset On Data Ack
     - [x] Both Sides Send Heartbeats
     - [ ] Close Connection After Too Many Retransmissions
     - [ ] Recover On Last Retransmission
-    - [ ] Send Many Fragmented Messages With Limited Rtx
+    - [x] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
     - [x] Receiving Error Chunk Reports As Callback
     - [ ] Set Max Message Size

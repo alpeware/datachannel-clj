@@ -131,6 +131,15 @@
 (defmethod decode-chunk-payload :cookie-ack [_ _ chunk-data _ _ _]
   chunk-data)
 
+(defmethod decode-chunk-payload :forward-tsn [_ buf chunk-data val-len _ _]
+  (let [new-cum-tsn (get-unsigned-int buf)
+        streams-len (- val-len 4)
+        num-streams (quot streams-len 4)
+        streams (vec (for [_ (range num-streams)]
+                       {:stream-id (get-unsigned-short buf)
+                        :stream-sequence (get-unsigned-short buf)}))]
+    (merge chunk-data {:new-cumulative-tsn new-cum-tsn :streams streams})))
+
 (defmethod decode-chunk-payload :shutdown [_ _ chunk-data _ _ _]
   chunk-data)
 
@@ -357,6 +366,12 @@
 
 (defmethod encode-chunk-payload :heartbeat-ack [_ ^ByteBuffer buf chunk]
   (encode-params buf (:params chunk)))
+
+(defmethod encode-chunk-payload :forward-tsn [_ ^ByteBuffer buf chunk]
+  (.putInt buf (unchecked-int (:new-cumulative-tsn chunk)))
+  (doseq [s (:streams chunk [])]
+    (.putShort buf (unchecked-short (:stream-id s)))
+    (.putShort buf (unchecked-short (:stream-sequence s)))))
 
 (defmethod encode-chunk-payload :shutdown [_ ^ByteBuffer buf chunk])
 (defmethod encode-chunk-payload :shutdown-ack [_ ^ByteBuffer buf chunk])
