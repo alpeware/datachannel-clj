@@ -9,7 +9,7 @@
     (.get (.duplicate bb) buf)
     buf))
 
-(defn pump-network [state-a state-b max-iterations]
+(defn pump-network [state-a state-b condition? max-iterations]
   (loop [a state-a
          b state-b
          i 0]
@@ -17,9 +17,8 @@
           a-events (:app-events a [])
           b-events (:app-events b [])]
       (if (or (>= i max-iterations)
-              (some #(= :on-message (:type %)) a-events)
-              (some #(= :on-message (:type %)) b-events))
-        {:a a :b b :iterations i}
+              (not (condition? a b)))
+        [a b]
         (let [a-bytes (:network-out-bytes a [])
               b-bytes (:network-out-bytes b [])
 
@@ -90,10 +89,10 @@
           init-res-b {:new-state state-b :network-out [] :network-out-bytes [] :app-events []}
 
           ;; Pump until connection is open (or max iterations)
-          connected-res (pump-network init-res-a init-res-b 50)
-
-          conn-a (:a connected-res)
-          conn-b (:b connected-res)]
+          [conn-a conn-b] (pump-network init-res-a init-res-b
+                                        (fn [a b] (not (and (= :established (:state (:new-state a)))
+                                                            (= :established (:state (:new-state b))))))
+                                        100)]
 
       ;; Verify they are connected
       (is (= :established (:state (:new-state conn-a))) "Peer A should be established")
@@ -109,15 +108,10 @@
                             (assoc :new-state (:new-state send-res-a))
                             (update :network-out-bytes into (:network-out-bytes send-res-a [])))
 
-            ;; Reset app events for the next phase
-            a-clean (assoc a-with-send :app-events [])
-            b-clean (assoc conn-b :app-events [])
-
-            final-res (pump-network a-clean b-clean 50)
-
-            final-b (:b final-res)
-            on-message-events (filter #(= :on-message (:type %)) (:app-events final-b))]
-
-        (is (not-empty on-message-events) "Peer B should have received an :on-message event")
-        (when (not-empty on-message-events)
-          (is (= "Hello P2P!" (String. (:payload (first on-message-events)) "UTF-8")) "Payload should match"))))))
+            ;; Pump network again until B receives a message
+            [final-a final-b] (pump-network a-with-send conn-b
+                                            (fn [a b] (not-any? #(= :on-message (:type %)) (:app-events b)))
+                                            50)]
+        (is (some #(= :on-message (:type %)) (:app-events final-b)) "Peer B should have received the message")
+        (let [msg-event (first (filter #(= :on-message (:type %)) (:app-events final-b)))]
+          (is (= "Hello P2P!" (String. (:payload msg-event) "UTF-8")) "Message content should match"))))))

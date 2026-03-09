@@ -51,6 +51,7 @@
             [datachannel.sctp-close-after-one-failed-retransmission-test]
             [datachannel.sctp-recover-on-last-retransmission-test]
             [datachannel.pure-p2p-integration-test]
+            [datachannel.webrtc-integration-test]
             ))
 
 (defn -main [& args]
@@ -107,5 +108,6 @@
          'datachannel.sctp-close-after-one-failed-retransmission-test
          'datachannel.sctp-recover-on-last-retransmission-test
          'datachannel.pure-p2p-integration-test
+         'datachannel.webrtc-integration-test
          )]
     (System/exit (+ fail error))))
