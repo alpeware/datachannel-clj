@@ -1,0 +1,55 @@
+(ns datachannel.api-test
+  (:require [clojure.test :refer :all]
+            [datachannel.api :as api]
+            [datachannel.sdp :as sdp]))
+
+(deftest api-shell-test
+  (testing "Shell completely abstracts the BYOL loop for two nodes"
+    (let [node-a (api/create-node {:port 5001 :setup "active"})
+          node-b (api/create-node {:port 5002 :setup "passive"})
+
+          ;; Extract remote params to cross-feed
+          remote-a {:ip "127.0.0.1" :port 5002}
+          remote-b {:ip "127.0.0.1" :port 5001}
+
+          ;; Observers
+          a-open? (atom false)
+          b-open? (atom false)
+          a-msgs (atom [])
+          b-msgs (atom [])
+
+          cb-a {:on-open #(reset! a-open? true)
+                :on-message #(swap! a-msgs conj %)}
+          cb-b {:on-open #(reset! b-open? true)
+                :on-message #(swap! b-msgs conj %)}]
+
+      (try
+        (api/start! node-a remote-a cb-a)
+        (api/start! node-b remote-b cb-b)
+
+        ;; Wait up to 5s for connection to establish
+        (loop [i 0]
+          (when (and (< i 50) (not (and @a-open? @b-open?)))
+            (Thread/sleep 100)
+            (recur (inc i))))
+
+        (is @a-open? "Node A should be open")
+        (is @b-open? "Node B should be open")
+
+        (when (and @a-open? @b-open?)
+          ;; Send a message from A to B
+          (api/send! node-a "Hello from A!")
+
+          ;; Wait up to 1s for B to receive message
+          (loop [i 0]
+            (when (and (< i 10) (empty? @b-msgs))
+              (Thread/sleep 100)
+              (recur (inc i))))
+
+          (is (= 1 (count @b-msgs)) "Node B should have received a message")
+          (let [msg-evt (first @b-msgs)]
+            (is (= "Hello from A!" (String. (:payload msg-evt) "UTF-8")) "Message content should match")))
+
+        (finally
+          (api/close! node-a)
+          (api/close! node-b))))))
