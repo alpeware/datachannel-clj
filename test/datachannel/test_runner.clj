@@ -48,6 +48,7 @@
             [datachannel.sctp-send-many-api-method-test]
             [datachannel.sctp-send-a-lot-of-bytes-missed-second-packet-test]
             [datachannel.sctp-close-after-one-failed-retransmission-test]
+            [datachannel.sctp-recover-on-last-retransmission-test]
             ))
 
 (defn -main [& args]
@@ -101,5 +102,6 @@
          'datachannel.sctp-send-many-api-method-test
          'datachannel.sctp-send-a-lot-of-bytes-missed-second-packet-test
          'datachannel.sctp-close-after-one-failed-retransmission-test
+         'datachannel.sctp-recover-on-last-retransmission-test
          )]
     (System/exit (+ fail error))))
