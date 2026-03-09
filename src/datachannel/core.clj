@@ -37,9 +37,6 @@
   (handlers/handle-timeout state timer-id now-ms))
 
 
-(defn handle-receive [state network-bytes now-ms]
-  {:new-state state :network-out [] :app-events []})
-
 (defn reassemble [state app-events]
   (reassemble/reassemble state app-events))
 
@@ -64,6 +61,46 @@
       (let [reassembled (reassemble (:new-state res) (:app-events res))]
         (packetize (:new-state reassembled) (:app-events reassembled))))))
 
+(defn serialize-network-out
+  "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
+  [result-map & [^ByteBuffer opt-buf]]
+  (let [zero-checksum? (get-in result-map [:new-state :metrics :uses-zero-checksum])
+        encoded (mapv (fn [item]
+                        (cond
+                          (map? item) ; SCTP packet
+                          (let [buf (or opt-buf (ByteBuffer/allocateDirect 65536))]
+                            (sctp/encode-packet item buf {:zero-checksum? zero-checksum?}))
+                          (instance? ByteBuffer item) ; Already encoded (STUN/DTLS)
+                          item
+                          (bytes? item) ; byte-array
+                          (ByteBuffer/wrap item)
+                          :else
+                          (throw (ex-info "Unknown item type in network-out" {:item item}))))
+                      (:network-out result-map []))]
+    (assoc result-map :network-out-bytes encoded)))
+
+(defn handle-receive [state ^bytes network-bytes now-ms & [remote-addr]]
+  (if (zero? (alength network-bytes))
+    {:new-state state :network-out [] :app-events []}
+    (let [first-byte (bit-and (aget network-bytes 0) 0xFF)]
+      (cond
+        ;; STUN
+        (and (>= first-byte 0) (<= first-byte 3))
+        (let [buf (ByteBuffer/wrap network-bytes)
+              stun-res (stun/handle-packet buf remote-addr state)]
+          (if (instance? ByteBuffer stun-res)
+            {:new-state state :network-out [stun-res] :app-events []}
+            {:new-state state :network-out [] :app-events []}))
+
+        ;; DTLS
+        (and (>= first-byte 20) (<= first-byte 63))
+        {:new-state state :network-out [] :app-events [{:type :dtls-packet :payload network-bytes}]}
+
+        ;; SCTP (Default)
+        :else
+        (let [buf (ByteBuffer/wrap network-bytes)
+              packet (sctp/decode-packet buf)]
+          (handle-sctp-packet state packet now-ms))))))
 
 (defn create-connection [options client-mode?]
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
