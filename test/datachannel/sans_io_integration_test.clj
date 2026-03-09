@@ -41,15 +41,8 @@
     (let [alice-result (core/create-connection {} true)
           bob-result (core/create-connection {} false)
 
-          alice-connection (:connection alice-result)
-          bob-connection (:connection bob-result)
-
-          state-a-atom (if (instance? clojure.lang.Atom (:state alice-connection))
-                         (:state alice-connection)
-                         (atom (:state alice-connection)))
-          state-b-atom (if (instance? clojure.lang.Atom (:state bob-connection))
-                         (:state bob-connection)
-                         (atom (:state bob-connection)))
+          state-a-atom (atom alice-result)
+          state-b-atom (atom bob-result)
 
           ;; Generate initial connect event
           now-ms (System/currentTimeMillis)

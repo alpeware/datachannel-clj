@@ -6,17 +6,15 @@
   (testing "Send A Lot Of Bytes Missed Second Packet"
     (let [now-ms 1000
           state-a (core/create-connection {:mtu 1200} false)
-          state-a (:connection state-a)
           state-z (core/create-connection {:mtu 1200} false)
-          state-z (:connection state-z)
 
           ;; A connects: sends INIT
-          res-a1 (core/handle-event @(:state state-a) {:type :connect} now-ms)
+          res-a1 (core/handle-event state-a {:type :connect} now-ms)
           state-a1 (:new-state res-a1)
           init-packet (first (:network-out res-a1))
 
           ;; Z receives INIT and replies with INIT-ACK
-          res-z1 (@#'core/handle-sctp-packet @(:state state-z) init-packet now-ms)
+          res-z1 (@#'core/handle-sctp-packet state-z init-packet now-ms)
           state-z1 (:new-state res-z1)
           init-ack-packet (first (:network-out res-z1))
 

@@ -4,9 +4,7 @@
 
 (deftest initial-metrics-are-unset-test
   (testing "Initial Metrics Are Unset"
-    (let [connection-info (@#'core/create-connection {} true)
-          conn (:connection connection-info)
-          state @(:state conn)
+    (let [state (@#'core/create-connection {} true)
           metrics (:metrics state)]
       (is (not (nil? metrics)) "Metrics map should be initialized")
       (is (= 0 (:tx-packets metrics)) "tx-packets should be 0")

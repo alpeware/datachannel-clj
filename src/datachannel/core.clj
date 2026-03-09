@@ -55,8 +55,9 @@
 
 (defn serialize-network-out
   "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
-  [result-map & [^ByteBuffer opt-buf ^SSLEngine engine]]
+  [result-map & [^ByteBuffer opt-buf]]
   (let [zero-checksum? (get-in result-map [:new-state :metrics :uses-zero-checksum])
+        engine (get-in result-map [:new-state :dtls/engine])
         encoded (mapv (fn [item]
                         (cond
                           (map? item) ; SCTP packet
@@ -79,10 +80,11 @@
                       (:network-out result-map []))]
     (assoc result-map :network-out-bytes encoded)))
 
-(defn handle-receive [state ^bytes network-bytes now-ms & [remote-addr ^SSLEngine engine]]
+(defn handle-receive [state ^bytes network-bytes now-ms & [remote-addr]]
   (if (zero? (alength network-bytes))
     {:new-state state :network-out [] :app-events []}
-    (let [first-byte (bit-and (aget network-bytes 0) 0xFF)]
+    (let [first-byte (bit-and (aget network-bytes 0) 0xFF)
+          engine (:dtls/engine state)]
       (cond
         ;; STUN
         (and (>= first-byte 0) (<= first-byte 3))
@@ -131,42 +133,39 @@
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
         engine (dtls/create-engine ctx client-mode?)
-        local-ver-tag (.nextInt secure-rand 2147483647)
-        connection {:state (atom {:remote-ver-tag 0
-                                  :local-ver-tag local-ver-tag
-                                  :next-tsn 0
-                                  :ssn 0
-                                  :timers {}
-                                  :heartbeat-interval (get options :heartbeat-interval 30000)
-                                  :heartbeat-error-count 0
-                                  :rto-initial (get options :rto-initial 1000)
-                                  :max-retransmissions (get options :max-retransmissions 10)
-                                  :mtu (get options :mtu 1200)
-                                  :streams {}
-                                  :pending-control-chunks []
-                                  :metrics {:tx-packets 0
-                                            :rx-packets 0
-                                            :tx-bytes   0
-                                            :rx-bytes   0
-                                            :retransmissions 0
-                                            :unacked-data 0
-                                            :uses-zero-checksum (boolean (:zero-checksum? options))}
-                                  :cwnd (let [mtu (get options :mtu 1200)]
-                                          (min (* 4 mtu) (max (* 2 mtu) 4380)))
-                                  :ssthresh 65535 ; Initial peer rwnd or 65535
-                                  :flight-size 0
-                                  :partial-bytes-acked 0})
-                    :zero-checksum? (:zero-checksum? options)
-                    :cert-data cert-data
-                    :ice-ufrag (:ice-ufrag options)
-                    :ice-pwd (:ice-pwd options)
-                    }]
-    {:engine engine
-     :connection connection
-     :local-ver-tag local-ver-tag}))
+        local-ver-tag (.nextInt secure-rand 2147483647)]
+    {:remote-ver-tag 0
+     :local-ver-tag local-ver-tag
+     :next-tsn 0
+     :ssn 0
+     :timers {}
+     :heartbeat-interval (get options :heartbeat-interval 30000)
+     :heartbeat-error-count 0
+     :rto-initial (get options :rto-initial 1000)
+     :max-retransmissions (get options :max-retransmissions 10)
+     :mtu (get options :mtu 1200)
+     :streams {}
+     :pending-control-chunks []
+     :metrics {:tx-packets 0
+               :rx-packets 0
+               :tx-bytes   0
+               :rx-bytes   0
+               :retransmissions 0
+               :unacked-data 0
+               :uses-zero-checksum (boolean (:zero-checksum? options))}
+     :cwnd (let [mtu (get options :mtu 1200)]
+             (min (* 4 mtu) (max (* 2 mtu) 4380)))
+     :ssthresh 65535 ; Initial peer rwnd or 65535
+     :flight-size 0
+     :partial-bytes-acked 0
+     :zero-checksum? (:zero-checksum? options)
+     :cert-data cert-data
+     :ice-ufrag (:ice-ufrag options)
+     :ice-pwd (:ice-pwd options)
+     :dtls/engine engine}))
 
-(defn set-max-message-size! [connection max-size]
-  (swap! (:state connection) assoc :max-message-size max-size))
+(defn set-max-message-size [state max-size]
+  (assoc state :max-message-size max-size))
 
 (defn send-data [state ^bytes payload stream-id protocol now-ms]
   (let [len (alength payload)
