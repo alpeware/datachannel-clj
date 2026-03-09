@@ -4,11 +4,15 @@
 
 (defn create-non-blocking-channel
   "Creates and binds a DatagramChannel configured for non-blocking I/O."
-  [port]
-  (let [channel (DatagramChannel/open)]
-    (.configureBlocking channel false)
-    (.bind (.socket channel) (InetSocketAddress. port))
-    channel))
+  ([port]
+   (create-non-blocking-channel port nil))
+  ([port host]
+   (let [channel (DatagramChannel/open)]
+     (.configureBlocking channel false)
+     (if host
+       (.bind (.socket channel) (InetSocketAddress. host port))
+       (.bind (.socket channel) (InetSocketAddress. port)))
+     channel)))
 
 (defn create-selector
   "Opens a new NIO Selector."
