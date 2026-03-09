@@ -19,7 +19,7 @@
                    :dst-port 5001
                    :next-tsn 1000
                    :ssn 0
-                   :timers {:t-heartbeat {:expires-at (+ now interval-a)}}
+                   :timers {:sctp/t-heartbeat {:expires-at (+ now interval-a)}}
                    :heartbeat-interval interval-a
                    :heartbeat-error-count 0
                    :rto-initial 1000
@@ -32,7 +32,7 @@
                    :dst-port 5000
                    :next-tsn 2000
                    :ssn 0
-                   :timers {:t-heartbeat {:expires-at (+ now interval-z)}}
+                   :timers {:sctp/t-heartbeat {:expires-at (+ now interval-z)}}
                    :heartbeat-interval interval-z
                    :heartbeat-error-count 0
                    :rto-initial 1000
@@ -40,7 +40,7 @@
 
       ;; Advance time by interval-a, triggering A's heartbeat
       (let [time-1 (+ now interval-a)
-            res-a1 (core/handle-timeout state-a :t-heartbeat time-1)
+            res-a1 (core/handle-timeout state-a :sctp/t-heartbeat time-1)
             state-a (:new-state res-a1)
             hb-req-a (first (:network-out res-a1))]
 
@@ -60,7 +60,7 @@
 
             ;; Advance time to interval-z, triggering Z's heartbeat
             (let [time-2 (+ now interval-z)
-                  res-z3 (core/handle-timeout state-z :t-heartbeat time-2)
+                  res-z3 (core/handle-timeout state-z :sctp/t-heartbeat time-2)
                   state-z (:new-state res-z3)
                   hb-req-z (first (:network-out res-z3))]
 

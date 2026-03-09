@@ -22,12 +22,12 @@
           _ (is (= :cookie-wait (:state state-a1)))
 
           ;; Simulate A's INIT being lost...
-          ;; Now we expire the :t1-init timer on A
-          t1-timer (get-in state-a1 [:timers :t1-init])
+          ;; Now we expire the :sctp/t1-init timer on A
+          t1-timer (get-in state-a1 [:timers :sctp/t1-init])
           _ (is t1-timer "A should have started t1-init timer")
           expires-at (:expires-at t1-timer)
 
-          res-a2 (#'core/handle-timeout state-a1 :t1-init expires-at)
+          res-a2 (#'core/handle-timeout state-a1 :sctp/t1-init expires-at)
           state-a2 (:new-state res-a2)
           resent-init-packet (first (:network-out res-a2))
           _ (is resent-init-packet "A should resend INIT")

@@ -11,7 +11,7 @@
                  :local-ver-tag 5678
                  :next-tsn 1000
                  :ssn 0
-                 :timers {:t-heartbeat {:expires-at (+ now 30000)}}
+                 :timers {:sctp/t-heartbeat {:expires-at (+ now 30000)}}
                  :heartbeat-interval 30000
                  :heartbeat-error-count 0
                  :rto-initial 1000
@@ -23,11 +23,11 @@
         (if (<= error-count max-retries)
           ;; Advance t-heartbeat, then advance t-heartbeat-rtx
           (let [hb-time (+ current-time 30000)
-                res1 (core/handle-timeout current-state :t-heartbeat hb-time)
+                res1 (core/handle-timeout current-state :sctp/t-heartbeat hb-time)
                 state-hb (:new-state res1)
 
                 rtx-time (+ hb-time 1000)
-                res2 (core/handle-timeout state-hb :t-heartbeat-rtx rtx-time)
+                res2 (core/handle-timeout state-hb :sctp/t-heartbeat-rtx rtx-time)
                 state-rtx (:new-state res2)]
 
             (if (< error-count max-retries)

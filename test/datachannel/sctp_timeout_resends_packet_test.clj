@@ -12,15 +12,15 @@
           data-packet (first (:network-out res1))]
       (is data-packet "Should send a DATA packet")
       (is (= 1 (count (get-in state1 [:streams 0 :send-queue]))) "Should have unacknowledged data in send-queue")
-      (is (contains? (:timers state1) :t3-rtx) "Should start t3-rtx timer")
+      (is (contains? (:timers state1) :sctp/t3-rtx) "Should start t3-rtx timer")
 
-      (let [timer (get-in state1 [:timers :t3-rtx])
+      (let [timer (get-in state1 [:timers :sctp/t3-rtx])
             next-now (:expires-at timer)
-            res2 (core/handle-timeout state1 :t3-rtx next-now)
+            res2 (core/handle-timeout state1 :sctp/t3-rtx next-now)
             state2 (:new-state res2)
             retx-packet (first (:network-out res2))]
         (is retx-packet "Should resend DATA packet on timeout")
         (is (= :data (:type (first (:chunks retx-packet)))) "Should have a DATA chunk")
         (is (= 1 (count (get-in state2 [:streams 0 :send-queue]))) "Should still have unacknowledged data in send-queue")
-        (is (contains? (:timers state2) :t3-rtx) "Should restart t3-rtx timer")
-        (is (> (:delay (get-in state2 [:timers :t3-rtx])) (:delay timer)) "Should increase backoff delay")))))
+        (is (contains? (:timers state2) :sctp/t3-rtx) "Should restart t3-rtx timer")
+        (is (> (:delay (get-in state2 [:timers :sctp/t3-rtx])) (:delay timer)) "Should increase backoff delay")))))

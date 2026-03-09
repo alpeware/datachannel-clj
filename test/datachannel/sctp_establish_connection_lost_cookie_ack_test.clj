@@ -37,7 +37,7 @@
           ;; The COOKIE-ACK is lost! It never reaches the client.
           ;; Client's t1-cookie timer expires.
           (let [time-2 (+ now 3000)
-                res-c2 (core/handle-timeout client-state-ce :t1-cookie time-2)
+                res-c2 (core/handle-timeout client-state-ce :sctp/t1-cookie time-2)
                 client-state-ce2 (:new-state res-c2)
                 retry-cookie-echo-packet (first (:network-out res-c2))]
             (is retry-cookie-echo-packet "Client should resend COOKIE-ECHO on timeout")

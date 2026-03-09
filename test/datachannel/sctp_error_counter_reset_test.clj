@@ -10,7 +10,7 @@
                             :local-ver-tag 5678
                             :next-tsn 1000
                             :ssn 0
-                            :timers {:t-heartbeat {:expires-at (+ now 30000)}}
+                            :timers {:sctp/t-heartbeat {:expires-at (+ now 30000)}}
                             :heartbeat-interval 30000
                             :heartbeat-error-count 0
                             :rto-initial 1000
@@ -22,18 +22,18 @@
 
       ;; 1. Expire t-heartbeat
       (let [timer-expire-time (+ now 30000)
-            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat timer-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :sctp/t-heartbeat timer-expire-time)]
         (reset! state-atom new-state))
 
       ;; 2. Expire t-heartbeat-rtx -> error count becomes 1
       (let [rtx-expire-time (+ now 30000 1000)
-            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat-rtx rtx-expire-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :sctp/t-heartbeat-rtx rtx-expire-time)]
         (reset! state-atom new-state)
         (is (= 1 (:heartbeat-error-count @state-atom))))
 
       ;; 3. Ack the next heartbeat
       (let [next-hb-time (+ now 60000)
-            {:keys [new-state network-out]} (core/handle-timeout @state-atom :t-heartbeat next-hb-time)]
+            {:keys [new-state network-out]} (core/handle-timeout @state-atom :sctp/t-heartbeat next-hb-time)]
         (reset! state-atom new-state)
         (let [packet (first network-out)
               chunk (first (:chunks packet))]

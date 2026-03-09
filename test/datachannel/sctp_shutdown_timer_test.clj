@@ -15,7 +15,7 @@
           shutdown-packet {:src-port 5000 :dst-port 5001 :verification-tag 2222 :chunks [{:type :shutdown}]}
           state-sent (-> state
                          (assoc :state :shutdown-sent)
-                         (assoc-in [:timers :t2-shutdown] {:expires-at (+ now 1000) :delay 1000 :retries 0 :packet shutdown-packet}))]
+                         (assoc-in [:timers :sctp/t2-shutdown] {:expires-at (+ now 1000) :delay 1000 :retries 0 :packet shutdown-packet}))]
 
       (is (= :shutdown-sent (:state state-sent)))
 
@@ -24,9 +24,9 @@
             (loop [current-state state-sent
                    i 0]
               (if (< i 8)
-                (let [timer (get-in current-state [:timers :t2-shutdown])
+                (let [timer (get-in current-state [:timers :sctp/t2-shutdown])
                       next-now (:expires-at timer)
-                      {:keys [new-state network-out]} (core/handle-timeout current-state :t2-shutdown next-now)]
+                      {:keys [new-state network-out]} (core/handle-timeout current-state :sctp/t2-shutdown next-now)]
                   ;; Check if it sent the retransmitted SHUTDOWN chunk
                   (is (seq network-out) "Should output retransmitted packet")
                   (is (= :shutdown (:type (first (:chunks (first network-out))))))
@@ -34,12 +34,12 @@
                 current-state))]
 
         ;; 9th expiry should close
-        (let [timer (get-in state-after-8-expiries [:timers :t2-shutdown])
+        (let [timer (get-in state-after-8-expiries [:timers :sctp/t2-shutdown])
               next-now (:expires-at timer)
-              {:keys [new-state network-out app-events]} (core/handle-timeout state-after-8-expiries :t2-shutdown next-now)]
+              {:keys [new-state network-out app-events]} (core/handle-timeout state-after-8-expiries :sctp/t2-shutdown next-now)]
 
           (is (= :closed (:state new-state)) "Connection should be closed after 9th expiry")
-          (is (not (contains? (:timers new-state) :t2-shutdown)) "t2-shutdown timer should be removed")
+          (is (not (contains? (:timers new-state) :sctp/t2-shutdown)) "t2-shutdown timer should be removed")
 
           ;; Check if it sent an ABORT chunk
           (let [abort-pkt (first network-out)]

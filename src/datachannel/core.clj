@@ -25,8 +25,8 @@
 (defn handle-event [state event now-ms]
   (handlers/handle-event state event now-ms))
 
-(defn handle-timeout [state timer-id now-ms]
-  (handlers/handle-timeout state timer-id now-ms))
+(defn handle-timeout [state timer-id now-ms & [engine]]
+  (handlers/handle-timeout state timer-id now-ms engine))
 
 
 (defn reassemble [state app-events]
@@ -198,16 +198,16 @@
                        (assoc :next-tsn current-tsn)
                        (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
                 interval (get s1 :heartbeat-interval 30000)
-                s2 (if (and (pos? interval) (contains? (:timers s1) :t-heartbeat))
-                     (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+                s2 (if (and (pos? interval) (contains? (:timers s1) :sctp/t-heartbeat))
+                     (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
                      s1)
                 s3 (-> s2
                        (update-in [:metrics :unacked-data] (fnil + 0) (count fragments))
                        (cond-> is-established?
                          (-> (update-in [:metrics :tx-packets] (fnil + 0) (count fragments))
                              (update-in [:metrics :tx-bytes] (fnil + 0) len))))
-                s4 (if (and is-established? (nil? (get-in s3 [:timers :t3-rtx])))
-                     (assoc-in s3 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                s4 (if (and is-established? (nil? (get-in s3 [:timers :sctp/t3-rtx])))
+                     (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                      s3)]
             (if is-established?
               (loop [current-state s4

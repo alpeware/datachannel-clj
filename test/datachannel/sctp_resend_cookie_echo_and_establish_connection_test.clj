@@ -32,12 +32,12 @@
           _ (is (= :cookie-echoed (:state state-a2)))
 
           ;; Simulate A's COOKIE-ECHO being lost...
-          ;; Now we expire the :t1-cookie timer on A
-          t1-timer (get-in state-a2 [:timers :t1-cookie])
+          ;; Now we expire the :sctp/t1-cookie timer on A
+          t1-timer (get-in state-a2 [:timers :sctp/t1-cookie])
           _ (is t1-timer "A should have started t1-cookie timer")
           expires-at (:expires-at t1-timer)
 
-          res-a3 (#'core/handle-timeout state-a2 :t1-cookie expires-at)
+          res-a3 (#'core/handle-timeout state-a2 :sctp/t1-cookie expires-at)
           state-a3 (:new-state res-a3)
           resent-cookie-echo-packet (first (:network-out res-a3))
           _ (is resent-cookie-echo-packet "A should resend COOKIE-ECHO")

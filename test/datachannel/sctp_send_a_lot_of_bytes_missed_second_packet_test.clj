@@ -69,7 +69,7 @@
 
                 ;; A should eventually timeout and retransmit the missing packet
                 (let [timeout-ms (+ now-ms 2000) ;; After T3-RTX expires
-                      res-a7 (@#'core/handle-timeout state-a6 :t3-rtx timeout-ms)
+                      res-a7 (@#'core/handle-timeout state-a6 :sctp/t3-rtx timeout-ms)
                       state-a7 (:new-state res-a7)
                       rtx-packets (:network-out res-a7)]
                   (is (seq rtx-packets) "A should retransmit the missing packet")

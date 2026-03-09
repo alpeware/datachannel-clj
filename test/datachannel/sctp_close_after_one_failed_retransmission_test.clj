@@ -12,18 +12,18 @@
           data-packet (first (:network-out res1))]
       (is data-packet "Should send a DATA packet")
       (is (= 1 (count (get-in state1 [:streams 0 :send-queue]))) "Should have unacknowledged data in send-queue")
-      (is (contains? (:timers state1) :t3-rtx) "Should start t3-rtx timer")
+      (is (contains? (:timers state1) :sctp/t3-rtx) "Should start t3-rtx timer")
 
-      (let [timer (get-in state1 [:timers :t3-rtx])
+      (let [timer (get-in state1 [:timers :sctp/t3-rtx])
             next-now (:expires-at timer)
-            res2 (core/handle-timeout state1 :t3-rtx next-now)
+            res2 (core/handle-timeout state1 :sctp/t3-rtx next-now)
             state2 (:new-state res2)]
         (is (= :established (:state state2)) "Should remain established after first timeout")
         (is (= 1 (count (:network-out res2))) "Should resend DATA packet")
 
-        (let [timer2 (get-in state2 [:timers :t3-rtx])
+        (let [timer2 (get-in state2 [:timers :sctp/t3-rtx])
               next-now2 (:expires-at timer2)
-              res3 (core/handle-timeout state2 :t3-rtx next-now2)
+              res3 (core/handle-timeout state2 :sctp/t3-rtx next-now2)
               state3 (:new-state res3)]
 
           (is (= :closed (:state state3)) "Should close connection after one failed retransmission")

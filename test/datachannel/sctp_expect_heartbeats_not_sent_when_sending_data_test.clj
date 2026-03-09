@@ -18,7 +18,7 @@
                  :heartbeat-interval 30000
                  :cwnd 1200
                  :flight-size 0
-                 :timers {:t-heartbeat {:expires-at (+ now 100)}}}
+                 :timers {:sctp/t-heartbeat {:expires-at (+ now 100)}}}
 
           ;; Send data before heartbeat expires
           payload (byte-array [1 2 3])
@@ -26,7 +26,7 @@
           state2 (:new-state res1)
 
           ;; Heartbeat timer should have been updated by send-data to (+ now 50) + 30000 = 31050
-          hb-timer (get-in state2 [:timers :t-heartbeat :expires-at])]
+          hb-timer (get-in state2 [:timers :sctp/t-heartbeat :expires-at])]
 
       (is (not= nil hb-timer) "Heartbeat timer should still exist")
       (is (= 31050 hb-timer) "Heartbeat timer should be reset to current time + interval"))))

@@ -13,13 +13,13 @@
                  :next-tsn 1000
                  :remote-tsn 0
                  :ssn 0
-                 :timers {:t-heartbeat {:expires (+ now 100)}}}
+                 :timers {:sctp/t-heartbeat {:expires (+ now 100)}}}
 
           ;; Trigger the timeout
-          res (core/handle-timeout state :t-heartbeat (+ now 150))
+          res (core/handle-timeout state :sctp/t-heartbeat (+ now 150))
           out-pkts (:network-out res)
           heartbeat-pkt (first out-pkts)]
 
       (is (= 1 (count out-pkts)) "Should send exactly one packet in response")
       (is (= :heartbeat (:type (first (:chunks heartbeat-pkt)))) "The chunk type should be heartbeat")
-      (is (contains? (:timers (:new-state res)) :t-heartbeat-rtx) "Should start a retransmission timer for the heartbeat"))))
+      (is (contains? (:timers (:new-state res)) :sctp/t-heartbeat-rtx) "Should start a retransmission timer for the heartbeat"))))

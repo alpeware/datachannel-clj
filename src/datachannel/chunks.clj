@@ -95,8 +95,8 @@
                         :chunks [cookie-echo-chunk]}
             s2 (-> s1
                    (assoc :state :cookie-echoed)
-                   (update :timers dissoc :t1-init)
-                   (assoc-in [:timers :t1-cookie] {:expires-at (+ now-ms 3000)
+                   (update :timers dissoc :sctp/t1-init)
+                   (assoc-in [:timers :sctp/t1-cookie] {:expires-at (+ now-ms 3000)
                                                    :delay 3000
                                                    :retries 0
                                                    :packet out-packet})
@@ -112,16 +112,16 @@
   (let [interval (get state :heartbeat-interval 30000)
         s1 (-> state
                (assoc :state :established)
-               (update :timers dissoc :t1-init)
-               (update :timers dissoc :t1-cookie))
+               (update :timers dissoc :sctp/t1-init)
+               (update :timers dissoc :sctp/t1-cookie))
         s2 (if (pos? interval)
-             (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+             (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
              s1)
         cookie-ack-chunk {:type :cookie-ack}
         s3 (update s2 :pending-control-chunks conj cookie-ack-chunk)
         has-buffered-data? (some #(seq (:send-queue (val %))) (:streams s3))
         s4 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s3) :established) has-buffered-data?)
-             (assoc-in s3 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+             (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
              s3)
         tx-pkts (reduce + (map #(count (:send-queue (val %))) (:streams s4)))
         tx-bytes (reduce + (map (fn [st]
@@ -140,10 +140,10 @@
 (defmethod process-chunk :cookie-ack [state chunk packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
         s1 (-> state
-               (update :timers dissoc :t1-init)
-               (update :timers dissoc :t1-cookie))
+               (update :timers dissoc :sctp/t1-init)
+               (update :timers dissoc :sctp/t1-cookie))
         s2 (if (pos? interval)
-             (assoc-in s1 [:timers :t-heartbeat] {:expires-at (+ now-ms interval)})
+             (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
              s1)
         s3 (if (= (:state s2) :shutdown-pending)
              (let [s-shut (assoc s2 :state :shutdown-sent)
@@ -152,7 +152,7 @@
                       :dst-port (:src-port packet)
                       :verification-tag (:remote-ver-tag s-shut)
                       :chunks [shutdown-chunk]}
-                   s-shut-t (assoc-in s-shut [:timers :t2-shutdown]
+                   s-shut-t (assoc-in s-shut [:timers :sctp/t2-shutdown]
                                       {:expires-at (+ now-ms 3000)
                                        :delay 3000
                                        :retries 0
@@ -164,7 +164,7 @@
              s3)
         has-buffered-data? (some #(seq (:send-queue (val %))) (:streams s4))
         s5 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s4) :established) has-buffered-data?)
-             (assoc-in s4 [:timers :t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+             (assoc-in s4 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
              s4)
         tx-pkts (reduce + (map #(count (:send-queue (val %))) (:streams s5)))
         tx-bytes (reduce + (map (fn [st]
@@ -247,14 +247,14 @@
                (assoc :heartbeat-error-count 0)
                (assoc-in [:metrics :unacked-data] total-unacked))
         s2 (if all-empty?
-             (update s1 :timers dissoc :t3-rtx)
+             (update s1 :timers dissoc :sctp/t3-rtx)
              s1)]
     {:next-state s2 :next-events []}))
 
 (defmethod process-chunk :heartbeat-ack [state chunk packet now-ms]
   (let [s1 (-> state
                (assoc :heartbeat-error-count 0)
-               (update :timers dissoc :t-heartbeat-rtx))]
+               (update :timers dissoc :sctp/t-heartbeat-rtx))]
     {:next-state s1 :next-events []}))
 
 (defmethod process-chunk :shutdown [state chunk packet now-ms]
@@ -265,7 +265,7 @@
                     :verification-tag (:remote-ver-tag s1)
                     :chunks [shutdown-ack-chunk]}
         s2 (-> s1
-               (assoc-in [:timers :t2-shutdown]
+               (assoc-in [:timers :sctp/t2-shutdown]
                          {:expires-at (+ now-ms 3000)
                           :delay 3000
                           :retries 0
@@ -274,14 +274,14 @@
     {:next-state s2 :next-events []}))
 
 (defmethod process-chunk :shutdown-ack [state chunk packet now-ms]
-  (let [s1 (update state :timers dissoc :t2-shutdown)
+  (let [s1 (update state :timers dissoc :sctp/t2-shutdown)
         s2 (assoc s1 :state :closed)
         shutdown-complete-chunk {:type :shutdown-complete}
         s3 (update s2 :pending-control-chunks conj shutdown-complete-chunk)]
     {:next-state s3 :next-events []}))
 
 (defmethod process-chunk :shutdown-complete [state chunk packet now-ms]
-  (let [s1 (update state :timers dissoc :t2-shutdown)
+  (let [s1 (update state :timers dissoc :sctp/t2-shutdown)
         s2 (assoc s1 :state :closed)]
     {:next-state s2 :next-events [{:type :on-close}]}))
 
