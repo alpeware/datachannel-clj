@@ -69,8 +69,8 @@
     - [x] Close Connection After One Failed Retransmission
     - [x] Error Counter Is Reset On Data Ack
     - [x] Both Sides Send Heartbeats
-    - [ ] Close Connection After Too Many Retransmissions
-    - [ ] Recover On Last Retransmission
+    - [x] Close Connection After Too Many Retransmissions
+    - [x] Recover On Last Retransmission
     - [x] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
     - [x] Receiving Error Chunk Reports As Callback
