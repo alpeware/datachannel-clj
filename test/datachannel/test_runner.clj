@@ -54,7 +54,8 @@
             [datachannel.webrtc-integration-test]
             [datachannel.api-test]
             [datachannel.sctp-set-max-message-size-test]
-            [datachannel.sctp-cannot-send-too-large-message-test]))
+            [datachannel.sctp-cannot-send-too-large-message-test]
+            [datachannel.fuzz-test]))
 
 (defn -main [& _args]
   (let [{:keys [fail error]}
@@ -113,5 +114,6 @@
          'datachannel.webrtc-integration-test
          'datachannel.api-test
          'datachannel.sctp-set-max-message-size-test
-         'datachannel.sctp-cannot-send-too-large-message-test)]
+         'datachannel.sctp-cannot-send-too-large-message-test
+         'datachannel.fuzz-test)]
     (System/exit (+ fail error))))

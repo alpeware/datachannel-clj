@@ -198,7 +198,10 @@
   :bytes - A byte array of the decrypted application data, if any."
   [^SSLEngine engine ^ByteBuffer net-in ^ByteBuffer app-out]
   (.clear app-out)
-  (let [res (.unwrap engine net-in app-out)]
-    (.flip app-out)
-    {:status (.getStatus res)
-     :bytes (buffer->bytes app-out)}))
+  (try
+    (let [res (.unwrap engine net-in app-out)]
+      (.flip app-out)
+      {:status (.getStatus res)
+       :bytes (buffer->bytes app-out)})
+    (catch Exception _
+      {:status nil :bytes nil})))

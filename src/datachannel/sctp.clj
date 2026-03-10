@@ -81,13 +81,13 @@
     (if (zero? rem) 0 (- 4 rem))))
 
 (defn- get-unsigned-int [^ByteBuffer buf]
-  (bit-and (.getInt buf) 0xffffffff))
+  (try (bit-and (.getInt buf) 0xffffffff) (catch Exception _ 0)))
 
 (defn- get-unsigned-short [^ByteBuffer buf]
-  (bit-and (.getShort buf) 0xffff))
+  (try (bit-and (.getShort buf) 0xffff) (catch Exception _ 0)))
 
 (defn- get-unsigned-byte [^ByteBuffer buf]
-  (bit-and (.get buf) 0xff))
+  (try (bit-and (.get buf) 0xff) (catch Exception _ 0)))
 
 (defn decode-params [^ByteBuffer buf total-length]
   (let [end (+ (.position buf) total-length)]
@@ -260,29 +260,33 @@
   (decode-heartbeat-ack-chunk buf chunk-data val-len))
 
 (defn decode-chunk [^ByteBuffer buf]
-  (let [type-code (get-unsigned-byte buf)
-        flags (get-unsigned-byte buf)
-        len (get-unsigned-short buf)
-        type-key (get chunk-type-map type-code type-code)
-        val-len (- len 4)]
-    (cond
-      (or (< len 4) (> val-len (.remaining buf)))
-      nil
+  (if (< (.remaining buf) 4)
+    nil
+    (let [type-code (get-unsigned-byte buf)
+          flags (get-unsigned-byte buf)
+          len (get-unsigned-short buf)
+          type-key (get chunk-type-map type-code type-code)
+          val-len (- len 4)]
+      (cond
+        (or (< len 4) (> val-len (.remaining buf)))
+        nil
 
-      :else
-      (let [chunk-start (.position buf)
-            chunk-data {:type type-key
-                        :flags flags
-                        :length len}
-            parsed-data
-            (decode-chunk-payload type-key buf chunk-data val-len chunk-start flags)]
+        :else
+        (let [chunk-start (.position buf)
+              chunk-data {:type type-key
+                          :flags flags
+                          :length len}
+              parsed-data
+              (try
+                (decode-chunk-payload type-key buf chunk-data val-len chunk-start flags)
+                (catch Exception _ nil))]
 
-        (let [padding (pad len)]
-          (if (<= (+ (.position buf) padding) (.limit buf))
-            (.position buf (+ (.position buf) padding))
-            (.position buf (.limit buf))))
+          (let [padding (pad len)]
+            (if (<= (+ (.position buf) padding) (.limit buf))
+              (.position buf (+ (.position buf) padding))
+              (.position buf (.limit buf))))
 
-        parsed-data))))
+          parsed-data)))))
 
 (defn update-checksum [^ByteBuffer buf]
   (let [crc (CRC32C.)
