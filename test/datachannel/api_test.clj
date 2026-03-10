@@ -50,7 +50,8 @@
 
         (when (and @a-open? @b-open?)
           ;; Send a message from A to B
-          (api/send! node-a "Hello from A!")
+          (let [channel-id (api/create-data-channel! node-a "gossip" {:ordered false :max-retransmits 0})]
+            (api/send! node-a "Hello from A!" channel-id))
 
           ;; Wait up to 1s for B to receive message
           (loop [i 0]

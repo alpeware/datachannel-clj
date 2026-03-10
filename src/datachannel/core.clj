@@ -172,7 +172,30 @@
      :ice-gathering-state :new
      :ice-connection-state :new
      :seen-candidates #{}
+     :data-channels {}
+     :client-mode? client-mode?
      :dtls/engine engine}))
+
+(defn create-data-channel [state label options]
+  (let [opts (merge {:ordered true
+                     :max-packet-life-time nil
+                     :max-retransmits nil
+                     :protocol ""
+                     :negotiated false}
+                    options)
+        provided-id (:id opts)
+        client? (:client-mode? state)
+        id (if provided-id
+             provided-id
+             (loop [potential-id (if client? 0 1)]
+               (if (contains? (:data-channels state) potential-id)
+                 (recur (+ potential-id 2))
+                 potential-id)))
+        new-state (assoc-in state [:data-channels id] (assoc opts :label label))]
+    {:new-state new-state
+     :channel-id id
+     :network-out []
+     :app-events []}))
 
 (defn set-max-message-size [state max-size]
   (assoc state :new-state (assoc state :max-message-size max-size)))
@@ -185,7 +208,9 @@
     (when (> len max-size)
       (throw (ex-info "Cannot send too large message" {:type :too-large})))
     (let [_ver-tag (:remote-ver-tag state)
-          ssn (get-in state [:streams stream-id :next-ssn] 0)
+          channel-opts (get-in state [:data-channels stream-id])
+          ordered? (if (some? channel-opts) (:ordered channel-opts) true)
+          ssn (if ordered? (get-in state [:streams stream-id :next-ssn] 0) 0)
           mtu (get state :mtu 1200)
           max-payload-per-chunk (- mtu 16)
           is-established? (= (:state state) :established)
@@ -207,7 +232,7 @@
                    (if (empty? remaining-frags)
                      (let [s1 (-> current-state
                                   (assoc :next-tsn current-tsn)
-                                  (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
+                                  (cond-> ordered? (assoc-in [:streams stream-id :next-ssn] (inc ssn))))
                            interval (get s1 :heartbeat-interval 30000)
                            s2 (if (and (pos? interval) (contains? (:timers s1) :sctp/t-heartbeat))
                                 (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
@@ -239,8 +264,9 @@
                                        (= idx 0) 2
                                        (= idx (dec total-frags)) 1
                                        :else 0))
+                           final-flags (if ordered? flags (bit-or flags 4))
                            data-chunk {:type :data
-                                       :flags flags
+                                       :flags final-flags
                                        :tsn current-tsn
                                        :stream-id stream-id
                                        :seq-num ssn
