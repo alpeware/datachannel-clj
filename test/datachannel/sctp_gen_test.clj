@@ -59,37 +59,52 @@
                         (and (>= flight-size 0)
                              (>= cwnd 0)))
                       (let [[op-type arg1 arg2 arg3] (first ops)
-                            [next-state next-now]
+                            old-buffered (into {} (map (fn [s] [s (dc/get-buffered-amount state s)]) (keys (:streams state))))
+                            [next-state next-now app-events]
                             (case op-type
                               :advance-time
-                              [(let [new-now (+ now-ms arg1)]
-                                 (reduce (fn [s [timer-id t]]
-                                           (if (<= (:expires-at t) new-now)
-                                             (:new-state (dc/handle-timeout s timer-id new-now))
-                                             s))
-                                         state
-                                         (:timers state)))
-                               (+ now-ms arg1)]
+                              (let [new-now (+ now-ms arg1)
+                                    res (reduce (fn [acc [timer-id t]]
+                                                  (if (<= (:expires-at t) new-now)
+                                                    (let [r (dc/handle-timeout (:s acc) timer-id new-now)]
+                                                      {:s (:new-state r)
+                                                       :evts (into (:evts acc) (:app-events r []))})
+                                                    acc))
+                                                {:s state :evts []}
+                                                (:timers state))]
+                                [(:s res) new-now (:evts res)])
                               :receive-packet
-                              [(:new-state (dc/handle-receive state arg1 now-ms nil))
-                               now-ms]
+                              (let [res (dc/handle-receive state arg1 now-ms nil)]
+                                [(:new-state res) now-ms (:app-events res)])
                               :send-data
-                              [(try
-                                 (let [res (dc/send-data state arg1 arg2 arg3 now-ms)]
-                                   (:new-state res))
-                                 (catch clojure.lang.ExceptionInfo e
-                                   ;; Expect too large or empty message exceptions
-                                   (if (or (= (:type (ex-data e)) :empty-payload)
-                                           (= (:type (ex-data e)) :too-large))
-                                     state
-                                     (throw e))))
-                               now-ms])]
+                              (try
+                                (let [res (dc/send-data state arg1 arg2 arg3 now-ms)]
+                                  [(:new-state res) now-ms (:app-events res)])
+                                (catch clojure.lang.ExceptionInfo e
+                                  ;; Expect too large or empty message exceptions
+                                  (if (or (= (:type (ex-data e)) :empty-payload)
+                                          (= (:type (ex-data e)) :too-large))
+                                    [state now-ms []]
+                                    (throw e)))))
+
+                            new-buffered (into {} (map (fn [s] [s (dc/get-buffered-amount next-state s)]) (keys (:streams next-state))))
+                            low-threshold (get next-state :buffered-amount-low-threshold 0)]
                         (if (or (< (get next-state :flight-size 0) 0)
                                 (< (get next-state :cwnd 0) 0)
                                 (not (every? (fn [s]
                                                (= (dc/get-buffered-amount next-state s)
                                                   (queue-size (get-in next-state [:streams s :send-queue] []))))
-                                             (keys (:streams next-state)))))
+                                             (keys (:streams next-state))))
+                                ;; Check buffered-amount-low events
+                                (not (every? (fn [s]
+                                               (let [o (get old-buffered s 0)
+                                                     n (get new-buffered s 0)
+                                                     crossed? (and (> o low-threshold) (<= n low-threshold))
+                                                     evt-present? (some #(and (= (:type %) :on-buffered-amount-low)
+                                                                              (= (:stream-id %) s))
+                                                                        app-events)]
+                                                 (= crossed? (boolean evt-present?))))
+                                             (keys new-buffered))))
                           false
                           (recur next-state (rest ops) next-now))))))))
 
