@@ -39,7 +39,7 @@
                 (is (= :closed (:state state-rtx)))
                 (is (= 1 (count (:network-out res2))))
                 (is (= :abort (-> res2 :network-out first :chunks first :type)))
-                (is (= 1 (count (:app-events res2))))
+                (is (= 2 (count (:app-events res2))))
                 (is (= :on-error (-> res2 :app-events first :type)))
                 (is (= :max-retransmissions (-> res2 :app-events first :cause))))))
           nil)))))

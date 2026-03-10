@@ -26,7 +26,7 @@
         (is (= 5000 (:src-port pkt)) "Packet should have correct src port")
         (is (= 5001 (:dst-port pkt)) "Packet should have correct dst port"))
       (is (contains? (:timers new-state) :sctp/t2-shutdown) "Should start :sctp/t2-shutdown timer")
-      (is (empty? app-events) "Should not generate app events"))))
+      (is (= [{:type :on-closing}] app-events) "Should not generate app events"))))
 
 (deftest shutdown-connection-with-pending-data-test
   (testing "Shutdown Connection With Pending Data"
@@ -48,4 +48,4 @@
       (is (= :shutdown-pending (:state new-state)) "State should transition to :shutdown-pending")
       (is (empty? net-out) "Should not output packets immediately")
       (is (not (contains? (:timers new-state) :sctp/t2-shutdown)) "Should not start :sctp/t2-shutdown timer")
-      (is (empty? app-events) "Should not generate app events"))))
+      (is (= [{:type :on-closing}] app-events) "Should not generate app events"))))

@@ -19,6 +19,6 @@
             res2 (core/handle-timeout state1 :sctp/t3-rtx next-now)
             state2 (:new-state res2)]
         (is (= :closed (:state state2)) "Should close connection after first failed transmission")
-        (is (= 1 (count (:app-events res2))) "Should emit app event")
+        (is (= 2 (count (:app-events res2))) "Should emit app event")
         (is (= :on-error (:type (first (:app-events res2)))) "App event should be on-error")
         (is (= :max-retransmissions (:cause (first (:app-events res2)))) "App event cause should be max-retransmissions")))))

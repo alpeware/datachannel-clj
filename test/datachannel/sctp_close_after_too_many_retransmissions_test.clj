@@ -18,5 +18,5 @@
                                             :tsn 100}]}}}
           result (core/handle-timeout state :sctp/t3-rtx now-ms)]
       (is (= :closed (get-in result [:new-state :state])))
-      (is (= [{:type :on-error :cause :max-retransmissions}] (:app-events result)))
+      (is (= [{:type :on-error :cause :max-retransmissions} {:type :on-close}] (:app-events result)))
       (is (= :abort (get-in result [:network-out 0 :chunks 0 :type]))))))
