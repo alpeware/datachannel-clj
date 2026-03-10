@@ -1,5 +1,5 @@
 (ns datachannel.stun-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is]]
             [datachannel.stun :as stun])
   (:import [java.nio ByteBuffer]))
 
@@ -28,12 +28,11 @@
         _ (.put val-buf xor-addr)
         _ (.flip val-buf)
         val-bytes (byte-array 8)
-        _ (.get val-buf val-bytes)]
-
-    (let [decoded (stun/decode-xor-mapped-address val-bytes cookie)]
-      (is (= 0x01 (:family decoded)))
-      (is (= original-port (:port decoded)))
-      (is (= "192.168.0.1" (.getHostAddress (:address decoded)))))))
+        _ (.get val-buf val-bytes)
+        decoded (stun/decode-xor-mapped-address val-bytes cookie)]
+    (is (= 0x01 (:family decoded)))
+    (is (= original-port (:port decoded)))
+    (is (= "192.168.0.1" (.getHostAddress (:address decoded))))))
 
 (deftest test-decode-xor-mapped-address-unsupported-family
   (let [val-bytes (byte-array [0 0x02 0 0 0 0 0 0])] ;; Family 0x02 (IPv6)

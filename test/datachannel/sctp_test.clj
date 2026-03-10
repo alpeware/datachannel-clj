@@ -1,11 +1,9 @@
 (ns datachannel.sctp-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is]]
             [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as gen]
-            [clojure.test.check :as tc]
             [clojure.test.check.generators :as tc-gen]
             [clojure.test.check.properties :as prop]
-            [clojure.test.check.clojure-test :refer [defspec]]
+            [clojure.test.check.clojure-test :as tc-ct]
             [datachannel.sctp :as sctp])
   (:import [java.nio ByteBuffer]))
 
@@ -163,7 +161,9 @@
                     (:chunks p1)
                     (:chunks p2)))))
 
-(defspec packet-encoding-decoding-test 100
+(declare test-packet-encoding-decoding)
+(tc-ct/defspec test-packet-encoding-decoding
+  100
   (prop/for-all [packet packet-gen]
     (let [decoded (round-trip packet)]
       (packet= packet decoded))))

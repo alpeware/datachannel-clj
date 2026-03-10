@@ -57,7 +57,7 @@
             [datachannel.sctp-cannot-send-too-large-message-test]
             ))
 
-(defn -main [& args]
+(defn -main [& _args]
   (let [{:keys [fail error]}
         (run-tests
                   'datachannel.sctp-test

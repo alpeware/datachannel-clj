@@ -1,5 +1,5 @@
 (ns datachannel.stun-integration-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is]]
             [datachannel.stun :as stun])
   (:import [java.net InetSocketAddress]
            [java.nio.channels DatagramChannel]

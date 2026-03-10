@@ -1,11 +1,10 @@
 (ns datachannel.webrtc-integration-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is]]
             [datachannel.core :as dc]
             [datachannel.stun :as stun]
-            [datachannel.dtls :as dtls]
             [datachannel.nio :as nio]
             [datachannel.sdp :as sdp])
-  (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType RTCDataChannelObserver]
+  (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
            [java.net InetAddress InetSocketAddress]
@@ -148,22 +147,22 @@
                                      req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
                                      addr (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info)))]
                                  (.send channel req addr))
-                               (catch Exception e))))
+                               (catch Exception _e))))
                          (onIceConnectionChange [_ state]
                            (println "Java ICE State:" state))
                          (onConnectionChange [_ state]
                            (println "Java Connection State:" state))
-                         (onSignalingChange [_ state])
-                         (onIceGatheringChange [_ state])
-                         (onIceCandidatesRemoved [_ candidates])
-                         (onAddStream [_ stream])
-                         (onRemoveStream [_ stream])
+                         (onSignalingChange [_ _state])
+                         (onIceGatheringChange [_ _state])
+                         (onIceCandidatesRemoved [_ _candidates])
+                         (onAddStream [_ _stream])
+                         (onRemoveStream [_ _stream])
                          (onDataChannel [_ ch]
                            (reset! java-dc ch))
                          (onRenegotiationNeeded [_])
-                         (onAddTrack [_ receiver streams])
-                         (onTrack [_ transceiver])
-                         (onIceCandidateError [_ event]))
+                         (onAddTrack [_ _receiver _streams])
+                         (onTrack [_ _transceiver])
+                         (onIceCandidateError [_ _event]))
               pc (.createPeerConnection factory config observer)
               dc-init (dev.onvoid.webrtc.RTCDataChannelInit.)]
           (set! (.ordered dc-init) true)
@@ -178,7 +177,7 @@
                                       (let [bytes (byte-array (.remaining buffer))]
                                         (.get buffer bytes)
                                         (deliver msg-received (String. bytes "UTF-8"))))
-                                    (onBufferedAmountChange [_ amount])))
+                                    (onBufferedAmountChange [_ _amount])))
             (reset! java-dc ch))
 
           (let [offer (create-offer pc)]
@@ -213,7 +212,7 @@
                                      (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info))))
                                    (InetSocketAddress. ^String local-ip (int port)))]
                         (.send channel req addr))
-                      (catch Exception e)))
+                      (catch Exception _e)))
                   (Thread/sleep 100)
                   (recur (inc i)))))
             (let [v (deref stun-bound 100 :timeout)]

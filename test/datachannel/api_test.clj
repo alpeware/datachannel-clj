@@ -1,7 +1,6 @@
 (ns datachannel.api-test
-  (:require [clojure.test :refer :all]
-            [datachannel.api :as api]
-            [datachannel.sdp :as sdp]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [datachannel.api :as api]))
 
 (deftest set-max-message-size-api-test
   (testing "Calling set-max-message-size! successfully mutates the state"

@@ -1,5 +1,5 @@
 (ns datachannel.sctp-send-message-after-established-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest send-message-after-established-test
@@ -32,30 +32,30 @@
 
           ;; A receives COOKIE-ACK
           res-a2 (@#'core/handle-sctp-packet state-a2 cookie-ack-packet now-ms)
-          state-a3 (:new-state res-a2)]
+          state-a3 (:new-state res-a2)
 
-      ;; Now both A and Z are in the :established state.
+          ;; Now both A and Z are in the :established state.
 
-      ;; A sends a message
-      (let [payload (.getBytes "Hello SCTP" "UTF-8")
-            res-a3 (core/send-data state-a3 payload 0 :webrtc/string now-ms)
-            state-a4 (:new-state res-a3)
-            data-packet (first (:network-out res-a3))]
-        (is data-packet "A should send a DATA packet")
-        (is (= :data (:type (first (:chunks data-packet)))) "A should have a DATA chunk")
-        (is (= 1 (count (:send-queue (get-in state-a4 [:streams 0])))) "A should have unacknowledged data in its stream send-queue")
+          ;; A sends a message
+          payload (.getBytes "Hello SCTP" "UTF-8")
+          res-a3-send (core/send-data state-a3 payload 0 :webrtc/string now-ms)
+          state-a4 (:new-state res-a3-send)
+          data-packet (first (:network-out res-a3-send))
+          _ (is data-packet "A should send a DATA packet")
+          _ (is (= :data (:type (first (:chunks data-packet)))) "A should have a DATA chunk")
+          _ (is (= 1 (count (:send-queue (get-in state-a4 [:streams 0])))) "A should have unacknowledged data in its stream send-queue")
 
-        ;; Z receives the DATA message
-        (let [res-z3 (@#'core/handle-sctp-packet state-z2 data-packet now-ms)
-              state-z3 (:new-state res-z3)
-              sack-packet (first (:network-out res-z3))
-              app-events (:app-events res-z3)]
-          (is sack-packet "Z should send a SACK packet")
-          (is (= :sack (:type (first (:chunks sack-packet)))) "Z should have a SACK chunk")
-          (is (some #(= :on-message (:type %)) app-events) "Z should have fired an :on-message event")
-          (is (= "Hello SCTP" (String. ^bytes (:payload (first (filter #(= :on-message (:type %)) app-events))) "UTF-8")) "Z should have received the correct payload")
+          ;; Z receives the DATA message
+          res-z3 (@#'core/handle-sctp-packet state-z2 data-packet now-ms)
+          _state-z3 (:new-state res-z3)
+          sack-packet (first (:network-out res-z3))
+          app-events (:app-events res-z3)
+          _ (is sack-packet "Z should send a SACK packet")
+          _ (is (= :sack (:type (first (:chunks sack-packet)))) "Z should have a SACK chunk")
+          _ (is (some #(= :on-message (:type %)) app-events) "Z should have fired an :on-message event")
+          _ (is (= "Hello SCTP" (String. ^bytes (:payload (first (filter #(= :on-message (:type %)) app-events))) "UTF-8")) "Z should have received the correct payload")
 
           ;; A receives the SACK packet
-          (let [res-a4 (@#'core/handle-sctp-packet state-a4 sack-packet now-ms)
-                state-a5 (:new-state res-a4)]
-            (is (empty? (:send-queue (get-in state-a5 [:streams 0]))) "A should have cleared its stream send-queue after receiving the SACK")))))))
+          res-a4 (@#'core/handle-sctp-packet state-a4 sack-packet now-ms)
+          state-a5 (:new-state res-a4)]
+      (is (empty? (:send-queue (get-in state-a5 [:streams 0]))) "A should have cleared its stream send-queue after receiving the SACK"))))

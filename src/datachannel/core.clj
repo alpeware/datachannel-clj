@@ -7,17 +7,12 @@
             [datachannel.handlers :as handlers]
             [datachannel.chunks :as chunks])
   (:import [java.nio ByteBuffer]
-           [java.net InetSocketAddress StandardSocketOptions]
-                      [javax.net.ssl SSLEngine SSLEngineResult SSLEngineResult$Status SSLEngineResult$HandshakeStatus]
-           [java.util.concurrent LinkedBlockingQueue TimeUnit]
+           [javax.net.ssl SSLEngineResult$HandshakeStatus]
            [java.security SecureRandom]))
 
 (defonce ^:private secure-rand (SecureRandom.))
 
 (def buffer-size 65536)
-
-(defn- make-buffer []
-  (ByteBuffer/allocateDirect buffer-size))
 
 (defn packetize [state app-events]
   (packetize/packetize state app-events))
@@ -37,21 +32,21 @@
         state-with-rx (-> state
                           (update-in [:metrics :rx-packets] (fnil inc 0))
                           (assoc :remote-port (:src-port packet))
-                          (assoc :local-port (:dst-port packet)))]
-    (let [res (loop [current-state state-with-rx
-                     remaining-chunks chunks
-                     app-events []]
-                (if (empty? remaining-chunks)
-                  {:new-state current-state
-                   :app-events app-events}
-                  (let [chunk (first remaining-chunks)
-                        {:keys [next-state next-events]}
-                        (chunks/process-chunk current-state chunk packet now-ms)]
-                    (recur next-state
-                           (rest remaining-chunks)
-                           (into app-events next-events)))))]
-      (let [reassembled (reassemble (:new-state res) (:app-events res))]
-        (packetize (:new-state reassembled) (:app-events reassembled))))))
+                          (assoc :local-port (:dst-port packet)))
+        res (loop [current-state state-with-rx
+                   remaining-chunks chunks
+                   app-events []]
+              (if (empty? remaining-chunks)
+                {:new-state current-state
+                 :app-events app-events}
+                (let [chunk (first remaining-chunks)
+                      {:keys [next-state next-events]}
+                      (chunks/process-chunk current-state chunk packet now-ms)]
+                  (recur next-state
+                         (rest remaining-chunks)
+                         (into app-events next-events)))))
+        reassembled (reassemble (:new-state res) (:app-events res))]
+    (packetize (:new-state reassembled) (:app-events reassembled))))
 
 (defn serialize-network-out
   "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
@@ -68,7 +63,7 @@
                             (if (and engine (or (= (.getHandshakeStatus engine) SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
                                                 (= (.getHandshakeStatus engine) SSLEngineResult$HandshakeStatus/FINISHED)))
                               (let [net-out (ByteBuffer/allocateDirect 65536)
-                                    {:keys [status bytes]} (dtls/send-app-data engine buf net-out)]
+                                    {:keys [_status bytes]} (dtls/send-app-data engine buf net-out)]
                                 (ByteBuffer/wrap bytes))
                               buf))
                           (instance? ByteBuffer item) ; Already encoded (STUN/DTLS)
@@ -104,7 +99,7 @@
               ;; Application data
               (let [in-buf (ByteBuffer/wrap network-bytes)
                     out-buf (ByteBuffer/allocateDirect 65536)
-                    {:keys [status bytes]} (dtls/receive-app-data engine in-buf out-buf)]
+                    {:keys [_status bytes]} (dtls/receive-app-data engine in-buf out-buf)]
                 (if (and bytes (pos? (alength bytes)))
                   (let [sctp-buf (ByteBuffer/wrap bytes)
                         packet (sctp/decode-packet sctp-buf)]
@@ -113,7 +108,7 @@
               ;; Handshake
               (let [in-buf (ByteBuffer/wrap network-bytes)
                     out-buf (ByteBuffer/allocateDirect 65536)
-                    {:keys [status packets app-data]} (dtls/handshake engine in-buf out-buf)]
+                    {:keys [_status packets app-data]} (dtls/handshake engine in-buf out-buf)]
                 (if (and app-data (pos? (alength app-data)))
                   (let [sctp-buf (ByteBuffer/wrap app-data)
                         packet (sctp/decode-packet sctp-buf)
@@ -174,7 +169,7 @@
       (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
     (when (> len max-size)
       (throw (ex-info "Cannot send too large message" {:type :too-large})))
-    (let [ver-tag (:remote-ver-tag state)
+    (let [_ver-tag (:remote-ver-tag state)
           ssn (get-in state [:streams stream-id :next-ssn] 0)
           mtu (get state :mtu 1200)
           max-payload-per-chunk (- mtu 16)

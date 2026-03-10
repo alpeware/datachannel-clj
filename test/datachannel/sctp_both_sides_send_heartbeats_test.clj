@@ -1,5 +1,5 @@
 (ns datachannel.sctp-both-sides-send-heartbeats-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest both-sides-send-heartbeats-test
@@ -36,47 +36,45 @@
                    :heartbeat-interval interval-z
                    :heartbeat-error-count 0
                    :rto-initial 1000
-                   :max-retransmissions 10}]
+                   :max-retransmissions 10}
 
-      ;; Advance time by interval-a, triggering A's heartbeat
-      (let [time-1 (+ now interval-a)
-            res-a1 (core/handle-timeout state-a :sctp/t-heartbeat time-1)
-            state-a (:new-state res-a1)
-            hb-req-a (first (:network-out res-a1))]
+          ;; Advance time by interval-a, triggering A's heartbeat
+          time-1 (+ now interval-a)
+          res-a1 (core/handle-timeout state-a :sctp/t-heartbeat time-1)
+          state-a1 (:new-state res-a1)
+            hb-req-a (first (:network-out res-a1))
+            _ (is (some? hb-req-a) "A should send a heartbeat")
+            _ (is (= :heartbeat (:type (first (:chunks hb-req-a)))) "A sent a heartbeat chunk")
 
-        (is (some? hb-req-a) "A should send a heartbeat")
-        (is (= :heartbeat (:type (first (:chunks hb-req-a)))) "A sent a heartbeat chunk")
+            ;; Z receives A's heartbeat and sends an ACK
+            res-z2 (core/handle-sctp-packet state-z hb-req-a time-1)
+            state-z1 (:new-state res-z2)
+            hb-ack-z (first (:network-out res-z2))
+            _ (is (some? hb-ack-z) "Z should send a heartbeat ack")
+            _ (is (= :heartbeat-ack (:type (first (:chunks hb-ack-z)))) "Z sent a heartbeat ack chunk")
 
-        ;; Z receives A's heartbeat and sends an ACK
-        (let [res-z2 (core/handle-sctp-packet state-z hb-req-a time-1)
-              state-z (:new-state res-z2)
-              hb-ack-z (first (:network-out res-z2))]
-          (is (some? hb-ack-z) "Z should send a heartbeat ack")
-          (is (= :heartbeat-ack (:type (first (:chunks hb-ack-z)))) "Z sent a heartbeat ack chunk")
-
-          ;; A receives Z's heartbeat ack
-          (let [res-a2 (core/handle-sctp-packet state-a hb-ack-z time-1)
-                state-a (:new-state res-a2)]
+            ;; A receives Z's heartbeat ack
+            res-a2 (core/handle-sctp-packet state-a1 hb-ack-z time-1)
+            state-a2 (:new-state res-a2)
 
             ;; Advance time to interval-z, triggering Z's heartbeat
-            (let [time-2 (+ now interval-z)
-                  res-z3 (core/handle-timeout state-z :sctp/t-heartbeat time-2)
-                  state-z (:new-state res-z3)
-                  hb-req-z (first (:network-out res-z3))]
+            time-2 (+ now interval-z)
+            res-z3 (core/handle-timeout state-z1 :sctp/t-heartbeat time-2)
+            state-z2 (:new-state res-z3)
+            hb-req-z (first (:network-out res-z3))
+            _ (is (some? hb-req-z) "Z should send a heartbeat")
+            _ (is (= :heartbeat (:type (first (:chunks hb-req-z)))) "Z sent a heartbeat chunk")
 
-              (is (some? hb-req-z) "Z should send a heartbeat")
-              (is (= :heartbeat (:type (first (:chunks hb-req-z)))) "Z sent a heartbeat chunk")
+            ;; A receives Z's heartbeat and sends an ACK
+            res-a3 (core/handle-sctp-packet state-a2 hb-req-z time-2)
+            state-a3 (:new-state res-a3)
+            hb-ack-a (first (:network-out res-a3))
+            _ (is (some? hb-ack-a) "A should send a heartbeat ack")
+            _ (is (= :heartbeat-ack (:type (first (:chunks hb-ack-a)))) "A sent a heartbeat ack chunk")
 
-              ;; A receives Z's heartbeat and sends an ACK
-              (let [res-a3 (core/handle-sctp-packet state-a hb-req-z time-2)
-                    state-a (:new-state res-a3)
-                    hb-ack-a (first (:network-out res-a3))]
-
-                (is (some? hb-ack-a) "A should send a heartbeat ack")
-                (is (= :heartbeat-ack (:type (first (:chunks hb-ack-a)))) "A sent a heartbeat ack chunk")
-
-                ;; Z receives A's heartbeat ack
-                (let [res-z4 (core/handle-sctp-packet state-z hb-ack-a time-2)
-                      state-z (:new-state res-z4)]
-                  (is (= 0 (:heartbeat-error-count state-z)) "Z error count reset")
-                  (is (= 0 (:heartbeat-error-count state-a)) "A error count reset"))))))))))
+            ;; Z receives A's heartbeat ack
+            res-z4 (core/handle-sctp-packet state-z2 hb-ack-a time-2)
+            state-z3 (:new-state res-z4)
+            _ (is (= 0 (:heartbeat-error-count state-z3)) "Z error count reset")
+            _ (is (= 0 (:heartbeat-error-count state-a3)) "A error count reset")]
+        state-z3)))

@@ -1,5 +1,5 @@
 (ns datachannel.sctp-error-chunk-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest receiving-error-chunk-reports-as-callback-test
@@ -8,10 +8,10 @@
           out-queue (java.util.concurrent.LinkedBlockingQueue.)
           error-called (atom false)
           received-causes (atom nil)
-          on-error (atom (fn [causes]
+          _on-error (atom (fn [causes]
                            (reset! error-called true)
                            (reset! received-causes causes)))
-          conn {:state state-atom :sctp-out out-queue }
+          _conn {:state state-atom :sctp-out out-queue }
 
 
           error-packet {:src-port 5000 :dst-port 5001 :verification-tag 0

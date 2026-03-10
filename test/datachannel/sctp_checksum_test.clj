@@ -1,5 +1,5 @@
 (ns datachannel.sctp-checksum-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.sctp :as sctp])
   (:import [java.nio ByteBuffer]))
 

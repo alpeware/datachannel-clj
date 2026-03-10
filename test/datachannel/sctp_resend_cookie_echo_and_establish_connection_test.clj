@@ -1,5 +1,5 @@
 (ns datachannel.sctp-resend-cookie-echo-and-establish-connection-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest resend-cookie-echo-and-establish-connection-test

@@ -1,9 +1,6 @@
 (ns datachannel.webrtc-test-util
-  (:require [datachannel.stun :as stun])
-  (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType RTCOfferOptions RTCAnswerOptions SetSessionDescriptionObserver CreateSessionDescriptionObserver]
-           [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
-           [java.util ArrayList]
-           [java.net InetAddress InetSocketAddress]
+  (:import [dev.onvoid.webrtc PeerConnectionObserver RTCOfferOptions RTCAnswerOptions SetSessionDescriptionObserver CreateSessionDescriptionObserver]
+           [java.net InetAddress]
            [java.nio.channels UnsupportedAddressTypeException]))
 
 (defn get-local-ip []
@@ -55,7 +52,7 @@
     (onIceCandidate [_ candidate] (when on-ice-candidate
                                     (try
                                       (on-ice-candidate candidate)
-                                      (catch UnsupportedAddressTypeException e nil))))
+                                      (catch UnsupportedAddressTypeException _e nil))))
     (onIceConnectionChange [_ state] (println "Java ICE Connection State:" state))
     (onConnectionChange [_ state] (println "Java Connection State:" state))
     (onDataChannel [_ _])

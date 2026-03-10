@@ -1,5 +1,5 @@
 (ns datachannel.sctp-timeout-resends-packet-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest timeout-resends-packet-test

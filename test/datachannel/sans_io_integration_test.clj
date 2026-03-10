@@ -1,7 +1,6 @@
 (ns datachannel.sans-io-integration-test
-  (:require [clojure.test :refer :all]
-            [datachannel.core :as core]
-            [datachannel.sctp :as sctp]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [datachannel.core :as core]))
 
 (defn pump-network
   "A deterministic, synchronous network loop for testing two Sans-IO endpoints."
