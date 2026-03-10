@@ -71,15 +71,15 @@
       (reset! state-atom (assoc @state-atom :heartbeat-error-count 1))
 
       (let [{:keys [new-state]} (#'core/handle-sctp-packet @state-atom
-                                                            {:src-port 5000
-                                                             :dst-port 5000
-                                                             :verification-tag 5678
-                                                             :chunks [{:type :sack
-                                                                       :cum-tsn-ack 1000
-                                                                       :a-rwnd 100000
-                                                                       :gap-blocks []
-                                                                       :duplicate-tsns []}]}
-                                                            now)]
+                                                           {:src-port 5000
+                                                            :dst-port 5000
+                                                            :verification-tag 5678
+                                                            :chunks [{:type :sack
+                                                                      :cum-tsn-ack 1000
+                                                                      :a-rwnd 100000
+                                                                      :gap-blocks []
+                                                                      :duplicate-tsns []}]}
+                                                           now)]
         (reset! state-atom new-state))
 
       (is (= 0 (:heartbeat-error-count @state-atom))))))

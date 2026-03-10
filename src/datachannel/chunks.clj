@@ -86,7 +86,7 @@
 
 (defmethod process-chunk :init-ack [state chunk packet now-ms]
   (let [s1 (assoc state :remote-ver-tag (:init-tag chunk)
-                        :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1))]
+                  :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1))]
     (if-let [cookie (get-in chunk [:params :cookie])]
       (let [cookie-echo-chunk {:type :cookie-echo :cookie cookie}
             out-packet {:src-port (:dst-port packet)
@@ -97,13 +97,13 @@
                    (assoc :state :cookie-echoed)
                    (update :timers dissoc :sctp/t1-init)
                    (assoc-in [:timers :sctp/t1-cookie] {:expires-at (+ now-ms 3000)
-                                                   :delay 3000
-                                                   :retries 0
-                                                   :packet out-packet})
+                                                        :delay 3000
+                                                        :retries 0
+                                                        :packet out-packet})
                    (update :pending-control-chunks conj cookie-echo-chunk))]
         {:next-state s2 :next-events []})
       (let [s2 (assoc state :state :closed
-                            :remote-ver-tag (:init-tag chunk))
+                      :remote-ver-tag (:init-tag chunk))
             abort-chunk {:type :abort}
             s3 (update s2 :pending-control-chunks conj abort-chunk)]
         {:next-state s3 :next-events [{:type :on-error :cause :protocol-violation}]}))))

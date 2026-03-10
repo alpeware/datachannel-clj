@@ -163,13 +163,13 @@
               (when (> (.remaining temp-app) 0)
                 (.write app-data-out (buffer->bytes temp-app) 0 (.remaining temp-app)))
               (condp = (.getStatus res)
-                  SSLEngineResult$Status/BUFFER_UNDERFLOW
-                  {:status (.getHandshakeStatus engine)
-                   :packets (vec packets)
-                   :app-data (.toByteArray app-data-out)}
-                  SSLEngineResult$Status/CLOSED
-                  (throw (Exception. "SSLEngine closed during handshake"))
-                  (recur (inc loops))))))))))
+                SSLEngineResult$Status/BUFFER_UNDERFLOW
+                {:status (.getHandshakeStatus engine)
+                 :packets (vec packets)
+                 :app-data (.toByteArray app-data-out)}
+                SSLEngineResult$Status/CLOSED
+                (throw (Exception. "SSLEngine closed during handshake"))
+                (recur (inc loops))))))))))
 
 (defn send-app-data
   "Encrypts and sends application data. Should only be called after handshake is complete.

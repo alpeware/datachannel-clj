@@ -23,7 +23,6 @@
 (defn handle-timeout [state timer-id now-ms & [engine]]
   (handlers/handle-timeout state timer-id now-ms engine))
 
-
 (defn reassemble [state app-events]
   (reassemble/reassemble state app-events))
 

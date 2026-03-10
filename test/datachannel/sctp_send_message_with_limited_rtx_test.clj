@@ -29,5 +29,4 @@
       (is (= 1 (count net-out)) "Should send a packet")
       (is (= :forward-tsn (:type (first (:chunks (first net-out))))) "Should send a FORWARD-TSN chunk")
       (is (= 1000 (:new-cumulative-tsn (first (:chunks (first net-out))))) "FORWARD-TSN should advance TSN")
-      (is (= [{:stream-id 0 :stream-sequence 0}] (:streams (first (:chunks (first net-out))))) "FORWARD-TSN should correctly populate streams")
-      )))
+      (is (= [{:stream-id 0 :stream-sequence 0}] (:streams (first (:chunks (first net-out))))) "FORWARD-TSN should correctly populate streams"))))

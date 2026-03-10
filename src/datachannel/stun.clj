@@ -82,36 +82,36 @@
     ;; Update Header Length for MI (FINGERPRINT comes after, but length in header for MI should only include MI)
     (let [len-before-mi (- (.position buf) 20)
           len-with-mi (+ len-before-mi 24)]
-       (.putShort buf 2 (unchecked-short len-with-mi)))
+      (.putShort buf 2 (unchecked-short len-with-mi)))
 
     ;; MESSAGE-INTEGRITY
     (let [len-to-sign (.position buf)
           data-to-sign (byte-array len-to-sign)]
-       (.position buf 0)
-       (.get buf data-to-sign)
-       (.position buf len-to-sign)
+      (.position buf 0)
+      (.get buf data-to-sign)
+      (.position buf len-to-sign)
 
-       (let [hmac (compute-hmac-sha1 remote-pwd data-to-sign)]
-          (put-unsigned-short buf ATTR_MESSAGE_INTEGRITY)
-          (put-unsigned-short buf 20)
-          (.put buf hmac)))
+      (let [hmac (compute-hmac-sha1 remote-pwd data-to-sign)]
+        (put-unsigned-short buf ATTR_MESSAGE_INTEGRITY)
+        (put-unsigned-short buf 20)
+        (.put buf hmac)))
 
     ;; FINGERPRINT
     ;; Update Header Length to include FINGERPRINT
     (let [len-before-fp (- (.position buf) 20)
           total-len (+ len-before-fp 8)]
-       (.putShort buf 2 (unchecked-short total-len)))
+      (.putShort buf 2 (unchecked-short total-len)))
 
     (let [len-to-crc (.position buf)
           data-to-crc (byte-array len-to-crc)]
-       (.position buf 0)
-       (.get buf data-to-crc)
-       (.position buf len-to-crc)
+      (.position buf 0)
+      (.get buf data-to-crc)
+      (.position buf len-to-crc)
 
-       (let [crc (compute-crc32 data-to-crc)]
-          (put-unsigned-short buf ATTR_FINGERPRINT)
-          (put-unsigned-short buf 4)
-          (.putInt buf (unchecked-int crc))))
+      (let [crc (compute-crc32 data-to-crc)]
+        (put-unsigned-short buf ATTR_FINGERPRINT)
+        (put-unsigned-short buf 4)
+        (.putInt buf (unchecked-int crc))))
 
     (.flip buf)
     buf))
@@ -147,9 +147,9 @@
               _ (.flip cookie-bytes)
               magic-bytes (.array cookie-bytes)
               decoded-addr (byte-array 4)]
-           (dotimes [i 4]
-              (aset decoded-addr i (byte (bit-xor (aget addr-bytes i) (aget magic-bytes i)))))
-           {:family family :port xport :address (java.net.InetAddress/getByAddress decoded-addr)}))
+          (dotimes [i 4]
+            (aset decoded-addr i (byte (bit-xor (aget addr-bytes i) (aget magic-bytes i)))))
+          {:family family :port xport :address (java.net.InetAddress/getByAddress decoded-addr)}))
       (throw (ex-info "Only IPv4 supported for now" {:family family})))))
 
 (defn parse-packet [^ByteBuffer buf]
@@ -161,19 +161,19 @@
     (.get buf tx-id)
     ;; Loop through attributes
     (loop [attrs {}]
-       (if (< (.position buf) (.limit buf))
-         (let [attr-type (get-unsigned-short buf)
-               attr-len (get-unsigned-short buf)
+      (if (< (.position buf) (.limit buf))
+        (let [attr-type (get-unsigned-short buf)
+              attr-len (get-unsigned-short buf)
                ;; Read value
-               val-bytes (byte-array attr-len)
-               _ (.get buf val-bytes)
+              val-bytes (byte-array attr-len)
+              _ (.get buf val-bytes)
                ;; Handle padding
-               padding (mod attr-len 4)
-               _ (when (and (> padding 0) (< padding 4))
-                   (let [pad-len (- 4 padding)]
-                      (dotimes [_ pad-len] (.get buf))))]
-             (recur (assoc attrs attr-type val-bytes)))
-         {:type msg-type :length msg-len :cookie cookie :tx-id tx-id :attributes attrs}))))
+              padding (mod attr-len 4)
+              _ (when (and (> padding 0) (< padding 4))
+                  (let [pad-len (- 4 padding)]
+                    (dotimes [_ pad-len] (.get buf))))]
+          (recur (assoc attrs attr-type val-bytes)))
+        {:type msg-type :length msg-len :cookie cookie :tx-id tx-id :attributes attrs}))))
 
 (defn make-binding-response [password tx-id ^InetSocketAddress peer-addr]
   (let [resp-buf (ByteBuffer/allocate 1024)

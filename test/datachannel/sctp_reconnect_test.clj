@@ -11,9 +11,9 @@
       ;; 1. Establish connection between A and Z
           state-a1 (merge state-a {:state :cookie-wait :init-tag 1111})
           init-packet {:src-port 5000 :dst-port 5001 :verification-tag 0
-                         :chunks [{:type :init :init-tag 1111 :a-rwnd 100000
-                                   :outbound-streams 10 :inbound-streams 10
-                                   :initial-tsn 100 :params {}}]}
+                       :chunks [{:type :init :init-tag 1111 :a-rwnd 100000
+                                 :outbound-streams 10 :inbound-streams 10
+                                 :initial-tsn 100 :params {}}]}
 
           res-z1 (@#'core/handle-sctp-packet state-z init-packet now)
           state-z1 (:new-state res-z1)
@@ -39,9 +39,9 @@
 
         ;; A2 sends a new INIT to Z
             init-packet2 {:src-port 5000 :dst-port 5001 :verification-tag 0
-                            :chunks [{:type :init :init-tag 3333 :a-rwnd 100000
-                                      :outbound-streams 10 :inbound-streams 10
-                                      :initial-tsn 300 :params {}}]}
+                          :chunks [{:type :init :init-tag 3333 :a-rwnd 100000
+                                    :outbound-streams 10 :inbound-streams 10
+                                    :initial-tsn 300 :params {}}]}
             res-z3 (@#'core/handle-sctp-packet state-z2 init-packet2 now)
             state-z3 (:new-state res-z3)
             init-ack-packet2 (first (:network-out res-z3))]

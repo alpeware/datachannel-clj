@@ -175,13 +175,11 @@
                       (update :timers dissoc :sctp/t-heartbeat-rtx))
        :app-events []})))
 
-
 (defmethod handle-timeout-timer :stun/keepalive [state _timer-id now-ms]
   (let [req (stun/make-simple-binding-request)]
     {:new-state (assoc-in state [:timers :stun/keepalive] {:expires-at (+ now-ms 15000)})
      :network-out [req]
      :app-events []}))
-
 
 (defmethod handle-timeout-timer :dtls/flight-timeout [state _timer-id now-ms]
   (if-let [^javax.net.ssl.SSLEngine engine (:dtls/engine state)]

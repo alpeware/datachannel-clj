@@ -102,11 +102,11 @@
           (.get buf val-bytes)
           ;; Skip padding
           (let [padding (pad len)]
-             (if (< (.remaining buf) padding)
-               params
-               (do
-                 (.position buf (+ (.position buf) padding))
-                 (recur (assoc params type-key val-bytes))))))))))
+            (if (< (.remaining buf) padding)
+              params
+              (do
+                (.position buf (+ (.position buf) padding))
+                (recur (assoc params type-key val-bytes))))))))))
 
 (defn- set-length-and-padding [^ByteBuffer buf start-pos]
   (let [end-pos (.position buf)
@@ -279,8 +279,8 @@
 
         (let [padding (pad len)]
           (if (<= (+ (.position buf) padding) (.limit buf))
-             (.position buf (+ (.position buf) padding))
-             (.position buf (.limit buf))))
+            (.position buf (+ (.position buf) padding))
+            (.position buf (.limit buf))))
 
         parsed-data))))
 

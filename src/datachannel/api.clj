@@ -73,11 +73,11 @@
 
         ;; Initialize pure connection state
         conn-state (dc/create-connection
-                     (merge (:opts node)
-                            {:cert-data (:cert-data node)
-                             :ice-ufrag (:ufrag (:ice-creds node))
-                             :ice-pwd (:pwd (:ice-creds node))})
-                     client-mode?)
+                    (merge (:opts node)
+                           {:cert-data (:cert-data node)
+                            :ice-ufrag (:ufrag (:ice-creds node))
+                            :ice-pwd (:pwd (:ice-creds node))})
+                    client-mode?)
 
         ;; Set up networking
         ^DatagramChannel channel (nio/create-non-blocking-channel local-port)

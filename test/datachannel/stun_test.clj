@@ -37,4 +37,4 @@
 (deftest test-decode-xor-mapped-address-unsupported-family
   (let [val-bytes (byte-array [0 0x02 0 0 0 0 0 0])] ;; Family 0x02 (IPv6)
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Only IPv4 supported for now"
-          (stun/decode-xor-mapped-address val-bytes stun/magic-cookie)))))
+                          (stun/decode-xor-mapped-address val-bytes stun/magic-cookie)))))
