@@ -27,6 +27,6 @@
               state3 (:new-state res3)]
 
           (is (= :closed (:state state3)) "Should close connection after one failed retransmission")
-          (is (= 1 (count (:app-events res3))) "Should emit app event")
+          (is (= 2 (count (:app-events res3))) "Should emit app event")
           (is (= :on-error (:type (first (:app-events res3)))) "App event should be on-error")
           (is (= :max-retransmissions (:cause (first (:app-events res3)))) "App event cause should be max-retransmissions"))))))

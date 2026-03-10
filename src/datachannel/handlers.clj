@@ -16,7 +16,7 @@
                             (assoc :state :closed)
                             (update :timers dissoc :sctp/t2-shutdown)
                             (update :pending-control-chunks conj abort-chunk))
-             :app-events [{:type :on-error :cause :max-retransmissions}]})
+             :app-events [{:type :on-error :cause :max-retransmissions} {:type :on-close}]})
           (let [new-delay (* (:delay timer) 2)
                 new-delay (min new-delay 60000)
                 packet (:packet timer)]
@@ -36,7 +36,7 @@
       {:new-state (-> state
                       (assoc :state :closed)
                       (update :timers dissoc :sctp/t1-init))
-       :app-events [{:type :on-error :cause :max-retransmissions}]}
+       :app-events [{:type :on-error :cause :max-retransmissions} {:type :on-close}]}
       (let [new-delay (* (:delay timer) 2)
             new-delay (min new-delay 60000) ;; Cap delay
             packet (:packet timer)]
@@ -56,7 +56,7 @@
       {:new-state (-> state
                       (assoc :state :closed)
                       (update :timers dissoc :sctp/t1-cookie))
-       :app-events [{:type :on-error :cause :max-retransmissions}]}
+       :app-events [{:type :on-error :cause :max-retransmissions} {:type :on-close}]}
       (let [new-delay (* (:delay timer) 2)
             new-delay (min new-delay 60000) ;; Cap delay
             packet (:packet timer)]
@@ -112,15 +112,22 @@
                          (update :pending-control-chunks conj forward-tsn-chunk))
                   s2 (if (empty? new-q)
                        (update s1 :timers dissoc :sctp/t3-rtx)
-                       s1)]
-              {:new-state s2 :app-events []})
+                       s1)
+
+                  old-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q))
+                  new-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) new-q))
+                  low-threshold (get state :buffered-amount-low-threshold 0)
+                  app-events (if (and (> old-buffered low-threshold) (<= new-buffered low-threshold))
+                               [{:type :on-buffered-amount-low :stream-id stream-id}]
+                               [])]
+              {:new-state s2 :app-events app-events})
             ;; Standard SCTP: abort connection
             (let [abort-chunk {:type :abort}]
               {:new-state (-> state
                               (assoc :state :closed)
                               (update :timers dissoc :sctp/t3-rtx)
                               (update :pending-control-chunks conj abort-chunk))
-               :app-events [{:type :on-error :cause :max-retransmissions}]}))
+               :app-events [{:type :on-error :cause :max-retransmissions} {:type :on-close}]}))
           (let [new-delay (* (:delay timer) 2)
                 new-delay (min new-delay 60000)
                 ;; Mark sent? false so packetize will re-transmit it
@@ -169,7 +176,7 @@
                         (assoc :state :closed)
                         (update :timers dissoc :sctp/t-heartbeat :sctp/t-heartbeat-rtx)
                         (update :pending-control-chunks conj abort-chunk))
-         :app-events [{:type :on-error :cause :max-retransmissions}]})
+         :app-events [{:type :on-error :cause :max-retransmissions} {:type :on-close}]})
       {:new-state (-> state
                       (assoc :heartbeat-error-count new-errors)
                       (update :timers dissoc :sctp/t-heartbeat-rtx))
@@ -245,8 +252,8 @@
                           (assoc :state :shutdown-sent)
                           (assoc-in [:timers :sctp/t2-shutdown] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet shutdown-packet})
                           (update :pending-control-chunks conj shutdown-chunk))]
-        {:new-state new-state :app-events []})
-      {:new-state (assoc state :state :shutdown-pending) :app-events []})
+        {:new-state new-state :app-events [{:type :on-closing}]})
+      {:new-state (assoc state :state :shutdown-pending) :app-events [{:type :on-closing}]})
     {:new-state state :app-events []}))
 
 (defmethod handle-event-type :default [state _event _now-ms]

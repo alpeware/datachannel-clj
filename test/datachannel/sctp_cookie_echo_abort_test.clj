@@ -84,7 +84,7 @@
                     expired-now (:expires-at timer)
                     result (core/handle-timeout @client-state :sctp/t1-cookie expired-now)]
                 (reset! client-state (:new-state result))
-                (is (= 1 (count (:app-events result))))
+                (is (= 2 (count (:app-events result))))
                 (let [effect (first (:app-events result))]
                   (is (= :on-error (:type effect)))
                   (is (= :max-retransmissions (:cause effect)))

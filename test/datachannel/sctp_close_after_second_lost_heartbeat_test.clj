@@ -59,7 +59,7 @@
             (is (= :closed (:state new-state4)) "Connection should be closed")
             (is (= 1 (count network-out4)) "Should send an abort packet")
             (is (= :abort (-> network-out4 first :chunks first :type)) "Packet should be abort")
-            (is (= 1 (count app-events4)) "Should generate an app event")
+            (is (= 2 (count app-events4)) "Should generate an app event")
             (is (= :on-error (:type (first app-events4))) "App event should be on-error")
             (is (= :max-retransmissions (:cause (first app-events4))) "Cause should be max-retransmissions")
             (is (nil? (get-in new-state4 [:timers :sctp/t-heartbeat])) "Heartbeat timer should be removed")

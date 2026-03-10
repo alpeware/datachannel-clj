@@ -51,5 +51,5 @@
       (is (= 12345678 (get-in (first net-out) [:verification-tag])))
 
       ;; Must emit a protocol-violation error event
-      (is (= 1 (count events)))
+      (is (= 2 (count events)))
       (is (= {:type :on-error :cause :protocol-violation} (first events))))))

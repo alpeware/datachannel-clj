@@ -42,6 +42,6 @@
                 {:keys [new-state app-events _network-out]} (core/handle-timeout state :sctp/t1-init expired-time)]
             (is (= :closed (:state new-state)) "State should transition to closed")
             (is (nil? (get-in new-state [:timers :sctp/t1-init])) "Timer should be removed")
-            (is (= 1 (count app-events)) "Should generate one event for abort")
+            (is (= 2 (count app-events)) "Should generate one event for abort")
             (is (= :on-error (:type (first app-events))) "Event should be on-error")
             (is (= :max-retransmissions (:cause (first app-events))) "Error cause should be max-retransmissions")))))))

@@ -106,7 +106,7 @@
                       :remote-ver-tag (:init-tag chunk))
             abort-chunk {:type :abort}
             s3 (update s2 :pending-control-chunks conj abort-chunk)]
-        {:next-state s3 :next-events [{:type :on-error :cause :protocol-violation}]}))))
+        {:next-state s3 :next-events [{:type :on-error :cause :protocol-violation} {:type :on-close}]}))))
 
 (defmethod process-chunk :cookie-echo [state _chunk _packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
@@ -194,6 +194,7 @@
         res (reduce-kv
              (fn [acc k v]
                (let [q (:send-queue v)
+                     old-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q))
                      acked-items (filter (fn [{:keys [tsn sent?]}]
                                            (and sent? (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack)))))))
                                          q)
@@ -201,14 +202,19 @@
                                                    (+ 16 (if payload (alength ^bytes payload) 0))) acked-items))
                      new-q (vec (remove (fn [{:keys [tsn]}]
                                           (not (pos? (unchecked-int (unchecked-subtract (unchecked-int tsn) (unchecked-int cum-tsn-ack))))))
-                                        q))]
+                                        q))
+                     new-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) new-q))
+                     low-threshold (get state :buffered-amount-low-threshold 0)
+                     evt (when (and (> old-buffered low-threshold) (<= new-buffered low-threshold))
+                           {:type :on-buffered-amount-low :stream-id k})]
                  (-> acc
                      (update :acked-bytes + acked-bytes)
                      (update :new-streams (fn [m]
                                             (if (empty? new-q)
                                               (assoc m k (dissoc v :send-queue))
-                                              (assoc m k (assoc v :send-queue new-q))))))))
-             {:acked-bytes 0 :new-streams {}}
+                                              (assoc m k (assoc v :send-queue new-q)))))
+                     (cond-> evt (update :app-events conj evt)))))
+             {:acked-bytes 0 :new-streams {} :app-events []}
              streams)
         acked-bytes (:acked-bytes res)
         new-streams (:new-streams res)
@@ -249,7 +255,7 @@
         s2 (if all-empty?
              (update s1 :timers dissoc :sctp/t3-rtx)
              s1)]
-    {:next-state s2 :next-events []}))
+    {:next-state s2 :next-events (:app-events res)}))
 
 (defmethod process-chunk :heartbeat-ack [state _chunk _packet _now-ms]
   (let [s1 (-> state
@@ -258,7 +264,8 @@
     {:next-state s1 :next-events []}))
 
 (defmethod process-chunk :shutdown [state _chunk packet now-ms]
-  (let [s1 (assoc state :state :shutdown-ack-sent)
+  (let [was-established? (= (:state state) :established)
+        s1 (assoc state :state :shutdown-ack-sent)
         shutdown-ack-chunk {:type :shutdown-ack}
         out-packet {:src-port (:dst-port packet)
                     :dst-port (:src-port packet)
@@ -270,15 +277,16 @@
                           :delay 3000
                           :retries 0
                           :packet out-packet})
-               (update :pending-control-chunks conj shutdown-ack-chunk))]
-    {:next-state s2 :next-events []}))
+               (update :pending-control-chunks conj shutdown-ack-chunk))
+        evts (if was-established? [{:type :on-closing}] [])]
+    {:next-state s2 :next-events evts}))
 
 (defmethod process-chunk :shutdown-ack [state _chunk _packet _now-ms]
   (let [s1 (update state :timers dissoc :sctp/t2-shutdown)
         s2 (assoc s1 :state :closed)
         shutdown-complete-chunk {:type :shutdown-complete}
         s3 (update s2 :pending-control-chunks conj shutdown-complete-chunk)]
-    {:next-state s3 :next-events []}))
+    {:next-state s3 :next-events [{:type :on-close}]}))
 
 (defmethod process-chunk :shutdown-complete [state _chunk _packet _now-ms]
   (let [s1 (update state :timers dissoc :sctp/t2-shutdown)
@@ -289,7 +297,8 @@
   {:next-state state :next-events [{:type :on-error :causes (:causes chunk)}]})
 
 (defmethod process-chunk :abort [state _chunk _packet _now-ms]
-  {:next-state state :next-events [{:type :on-close}]})
+  (let [s1 (assoc state :state :closed)]
+    {:next-state s1 :next-events [{:type :on-close}]}))
 
 (defmethod process-chunk :default [state chunk _packet _now-ms]
   (let [type-val (:type chunk)]
