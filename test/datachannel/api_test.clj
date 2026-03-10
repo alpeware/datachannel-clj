@@ -30,9 +30,9 @@
           a-msgs (atom [])
           b-msgs (atom [])
 
-          cb-a {:on-open #(reset! a-open? true)
+          cb-a {:on-open (fn [evt] (when-not (:channel-id evt) (reset! a-open? true)))
                 :on-message #(swap! a-msgs conj %)}
-          cb-b {:on-open #(reset! b-open? true)
+          cb-b {:on-open (fn [evt] (when-not (:channel-id evt) (reset! b-open? true)))
                 :on-message #(swap! b-msgs conj %)}]
 
       (try
