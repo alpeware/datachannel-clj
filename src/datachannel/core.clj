@@ -165,7 +165,7 @@
      :dtls/engine engine}))
 
 (defn set-max-message-size [state max-size]
-  (assoc state :max-message-size max-size))
+  (assoc state :new-state (assoc state :max-message-size max-size)))
 
 (defn send-data [state ^bytes payload stream-id protocol now-ms]
   (let [len (alength payload)

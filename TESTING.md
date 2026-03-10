@@ -74,13 +74,13 @@
     - [x] Send Many Fragmented Messages With Limited Rtx
     - [x] Receiving Unknown Chunk Responds With Error
     - [x] Receiving Error Chunk Reports As Callback
-    - [ ] Set Max Message Size
+    - [x] Set Max Message Size
     - [ ] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
     - [ ] Discards Messages With Low Lifetime If Must Buffer
     - [ ] Respects Per Stream Queue Limit
     - [x] Cannot Send Empty Messages
-    - [ ] Cannot Send Too Large Message
+    - [x] Cannot Send Too Large Message
     - [ ] Has Reasonable Buffered Amount Values
     - [ ] Has Default On Buffered Amount Low Value Zero
     - [ ] Triggers On Buffered Amount Low With Default Value Zero
