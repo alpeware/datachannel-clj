@@ -5,7 +5,8 @@
                              "--add-exports=java.base/sun.security.x509=ALL-UNNAMED"]
                   :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                                dev.onvoid.webrtc/webrtc-java {:mvn/version "0.14.0"}}}
-           :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}}
+           :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}
+                                 org.clojure/test.check {:mvn/version "1.1.1"}}
                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "test"]}
            :format {:replace-deps {dev.weavejester/cljfmt {:mvn/version "0.16.1"}}
                     :main-opts ["-m" "cljfmt.main" "fix" "src" "test"]}}}
