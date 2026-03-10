@@ -86,6 +86,24 @@ Here is a concise, elegant example of how a consumer uses `datachannel.api` to e
                                             (String. ^bytes (:payload evt) "UTF-8"))
                                    (println "Received binary data on stream" (:stream-id evt))))
 
+                   :on-buffered-amount-high (fn [evt]
+                                              (println "High water mark reached on stream" (:stream-id evt) "... Pausing sends!"))
+
+                   :on-buffered-amount-low (fn [evt]
+                                             (println "Buffer cleared on stream" (:stream-id evt) "... Resuming sends!"))
+
+                   :on-ice-candidate (fn [evt]
+                                       (println "New ICE Candidate discovered:" (:candidate evt)))
+
+                   :on-ice-gathering-state-change (fn [evt]
+                                                    (println "ICE Gathering State:" (:gathering-state evt)))
+
+                   :on-ice-connection-state-change (fn [evt]
+                                                     (println "ICE Connection State:" (:connection-state evt)))
+
+                   :on-closing (fn [_]
+                                 (println "Connection is closing..."))
+
                    :on-error (fn [evt]
                                (println "Connection error:" (:cause evt)))
 
