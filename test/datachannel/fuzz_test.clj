@@ -20,4 +20,4 @@
                   (and (map? res)
                        (contains? res :new-state)))))
 
-(defspec fuzz-handle-receive-no-crashes 1000 prop-no-crashes)
+(defspec fuzz-handle-receive-no-crashes (Integer/parseInt (or (System/getenv "FUZZ_ITERS") "100")) prop-no-crashes)

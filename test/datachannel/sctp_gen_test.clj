@@ -108,4 +108,4 @@
                           false
                           (recur next-state (rest ops) next-now))))))))
 
-(defspec test-sctp-state-machine-invariants 100 prop-sctp-state-machine-invariants)
+(defspec test-sctp-state-machine-invariants (Integer/parseInt (or (System/getenv "FUZZ_ITERS") "100")) prop-sctp-state-machine-invariants)
