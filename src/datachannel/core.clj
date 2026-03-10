@@ -183,11 +183,11 @@
                           frags
                           (let [frag-len (min max-payload-per-chunk (- len offset))
                                 frag (java.util.Arrays/copyOfRange payload offset (+ offset frag-len))]
-                            (recur (+ offset frag-len) (conj frags frag))))))]
-      (let [old-q (get-in state [:streams stream-id :send-queue] [])
-            old-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) old-q))
-            result (loop [remaining-frags fragments
-                          current-state state
+                            (recur (+ offset frag-len) (conj frags frag))))))
+          old-q (get-in state [:streams stream-id :send-queue] [])
+          old-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) old-q))
+          result (loop [remaining-frags fragments
+                        current-state state
                           current-tsn (or (:next-tsn state) 0)
                           idx 0]
                      (if (empty? remaining-frags)
@@ -236,10 +236,10 @@
                              new-state (assoc-in current-state [:streams stream-id :send-queue]
                                                  (conj (get-in current-state [:streams stream-id :send-queue] []) queue-item))]
                          (recur (rest remaining-frags) new-state (inc current-tsn) (inc idx)))))
-            new-q (get-in (:new-state result) [:streams stream-id :send-queue] [])
-            new-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) new-q))
-            high-threshold (get state :buffered-amount-high-threshold 1048576)
-            app-events (if (and (<= old-buffered high-threshold) (> new-buffered high-threshold))
-                         (conj (:app-events result []) {:type :on-buffered-amount-high :stream-id stream-id})
-                         (:app-events result []))]
-        (assoc result :app-events app-events)))))
+          new-q (get-in (:new-state result) [:streams stream-id :send-queue] [])
+          new-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) new-q))
+          high-threshold (get state :buffered-amount-high-threshold 1048576)
+          app-events (if (and (<= old-buffered high-threshold) (> new-buffered high-threshold))
+                       (conj (:app-events result []) {:type :on-buffered-amount-high :stream-id stream-id})
+                       (:app-events result []))]
+      (assoc result :app-events app-events))))
