@@ -66,6 +66,12 @@
                                   (cb evt))
         :on-buffered-amount-high (when-let [cb (:on-buffered-amount-high callbacks)]
                                    (cb evt))
+        :on-ice-candidate (when-let [cb (:on-ice-candidate callbacks)]
+                            (cb evt))
+        :on-ice-connection-state-change (when-let [cb (:on-ice-connection-state-change callbacks)]
+                                          (cb evt))
+        :on-ice-gathering-state-change (when-let [cb (:on-ice-gathering-state-change callbacks)]
+                                         (cb evt))
         nil))
     (when should-notify-open?
       (when-let [cb (:on-open callbacks)]

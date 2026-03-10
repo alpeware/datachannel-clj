@@ -237,15 +237,34 @@
           _ (.order buf ByteOrder/BIG_ENDIAN)
           msg-type (get-unsigned-short buf)
           msg-len (get-unsigned-short buf)
-          _cookie (.getInt buf)
+          cookie (.getInt buf)
           tx-id (byte-array 12)
           _ (.get buf tx-id)
-          res (if (= msg-type 0x0001) ;; Binding Request
+          res (cond
+                ;; Binding Request
+                (= msg-type 0x0001)
                 (if-let [password (:ice-pwd connection)]
-                  (make-binding-response password tx-id peer-addr)
-                  nil)
-                nil)]
+                  (if-let [resp (make-binding-response password tx-id peer-addr)]
+                    {:response resp}
+                    {})
+                  {})
+
+                ;; Binding Response
+                (= msg-type 0x0101)
+                (do
+                  ;; Rewind to start-pos to parse the packet fully including header
+                  (.position buf start-pos)
+                  (let [parsed (parse-packet buf)
+                        xor-addr-bytes (get (:attributes parsed) ATTR_XOR_MAPPED_ADDRESS)]
+                    (if xor-addr-bytes
+                      (let [decoded (decode-xor-mapped-address xor-addr-bytes cookie)
+                            candidate-str (str (.getHostAddress ^java.net.InetAddress (:address decoded)) ":" (:port decoded))]
+                        {:candidate candidate-str})
+                      {})))
+
+                :else
+                {})]
       (.position buf (min (.limit buf) (+ start-pos 20 msg-len)))
       res)
     (catch Exception _
-      nil)))
+      {})))
