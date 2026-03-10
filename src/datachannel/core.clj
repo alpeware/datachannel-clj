@@ -107,26 +107,32 @@
             (if (or (= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
                     (= hs-status SSLEngineResult$HandshakeStatus/FINISHED))
               ;; Application data
-              (let [in-buf (ByteBuffer/wrap network-bytes)
-                    out-buf (ByteBuffer/allocateDirect 65536)
-                    {:keys [_status bytes]} (dtls/receive-app-data engine in-buf out-buf)]
-                (if (and bytes (pos? (alength bytes)))
-                  (let [sctp-buf (ByteBuffer/wrap bytes)
-                        packet (sctp/decode-packet sctp-buf)]
-                    (handle-sctp-packet state packet now-ms))
+              (try
+                (let [in-buf (ByteBuffer/wrap network-bytes)
+                      out-buf (ByteBuffer/allocateDirect 65536)
+                      {:keys [_status bytes]} (dtls/receive-app-data engine in-buf out-buf)]
+                  (if (and bytes (pos? (alength bytes)))
+                    (let [sctp-buf (ByteBuffer/wrap bytes)
+                          packet (sctp/decode-packet sctp-buf)]
+                      (handle-sctp-packet state packet now-ms))
+                    {:new-state state :network-out [] :app-events []}))
+                (catch Exception _
                   {:new-state state :network-out [] :app-events []}))
               ;; Handshake
-              (let [in-buf (ByteBuffer/wrap network-bytes)
-                    out-buf (ByteBuffer/allocateDirect 65536)
-                    {:keys [_status packets app-data]} (dtls/handshake engine in-buf out-buf)]
-                (if (and app-data (pos? (alength app-data)))
-                  (let [sctp-buf (ByteBuffer/wrap app-data)
-                        packet (sctp/decode-packet sctp-buf)
-                        sctp-res (handle-sctp-packet state packet now-ms)]
-                    (-> sctp-res
-                        (update :network-out (fn [no] (into (vec packets) no)))
-                        (update :app-events conj {:type :dtls-handshake-progress})))
-                  {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]})))))
+              (try
+                (let [in-buf (ByteBuffer/wrap network-bytes)
+                      out-buf (ByteBuffer/allocateDirect 65536)
+                      {:keys [_status packets app-data]} (dtls/handshake engine in-buf out-buf)]
+                  (if (and app-data (pos? (alength app-data)))
+                    (let [sctp-buf (ByteBuffer/wrap app-data)
+                          packet (sctp/decode-packet sctp-buf)
+                          sctp-res (handle-sctp-packet state packet now-ms)]
+                      (-> sctp-res
+                          (update :network-out (fn [no] (into (vec packets) no)))
+                          (update :app-events conj {:type :dtls-handshake-progress})))
+                    {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]}))
+                (catch Exception _
+                  {:new-state state :network-out [] :app-events []})))))
 
         ;; SCTP (Default, raw)
         :else
