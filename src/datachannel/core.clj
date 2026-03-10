@@ -83,10 +83,21 @@
         ;; STUN
         (and (>= first-byte 0) (<= first-byte 3))
         (let [buf (ByteBuffer/wrap network-bytes)
-              stun-res (stun/handle-packet buf remote-addr state)]
-          (if (instance? ByteBuffer stun-res)
-            {:new-state state :network-out [stun-res] :app-events [{:type :stun-packet :payload network-bytes}]}
-            {:new-state state :network-out [] :app-events [{:type :stun-packet :payload network-bytes}]}))
+              stun-res (stun/handle-packet buf remote-addr state)
+              response (:response stun-res)
+              candidate (:candidate stun-res)
+              new-candidate? (and candidate (not (contains? (:seen-candidates state) candidate)))
+              became-connected? (and (not= (:ice-connection-state state) :connected)
+                                     (or response candidate))
+              new-state (-> state
+                            (assoc :last-stun-received now-ms)
+                            (cond-> new-candidate? (update :seen-candidates (fnil conj #{}) candidate))
+                            (cond-> became-connected? (assoc :ice-connection-state :connected)))
+              app-events (cond-> [{:type :stun-packet :payload network-bytes}]
+                           new-candidate? (conj {:type :on-ice-candidate :candidate candidate})
+                           became-connected? (conj {:type :on-ice-connection-state-change :state :connected}))
+              network-out (if response [response] [])]
+          {:new-state new-state :network-out network-out :app-events app-events})
 
         ;; DTLS
         (and (>= first-byte 20) (<= first-byte 63))
@@ -158,6 +169,9 @@
      :cert-data cert-data
      :ice-ufrag (:ice-ufrag options)
      :ice-pwd (:ice-pwd options)
+     :ice-gathering-state :new
+     :ice-connection-state :new
+     :seen-candidates #{}
      :dtls/engine engine}))
 
 (defn set-max-message-size [state max-size]

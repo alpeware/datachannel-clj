@@ -183,10 +183,21 @@
        :app-events []})))
 
 (defmethod handle-timeout-timer :stun/keepalive [state _timer-id now-ms]
-  (let [req (stun/make-simple-binding-request)]
-    {:new-state (assoc-in state [:timers :stun/keepalive] {:expires-at (+ now-ms 15000)})
+  (let [req (stun/make-simple-binding-request)
+        gathering-complete? (= (:ice-gathering-state state) :complete)
+        last-rcv (get state :last-stun-received now-ms)
+        disconnected? (and (= (:ice-connection-state state) :connected)
+                           (> (- now-ms last-rcv) 30000))
+        new-state (-> state
+                      (assoc-in [:timers :stun/keepalive] {:expires-at (+ now-ms 15000)})
+                      (cond-> (not gathering-complete?) (assoc :ice-gathering-state :complete))
+                      (cond-> disconnected? (assoc :ice-connection-state :disconnected)))
+        app-events (cond-> []
+                     (not gathering-complete?) (conj {:type :on-ice-gathering-state-change :state :complete})
+                     disconnected? (conj {:type :on-ice-connection-state-change :state :disconnected}))]
+    {:new-state new-state
      :network-out [req]
-     :app-events []}))
+     :app-events app-events}))
 
 (defmethod handle-timeout-timer :dtls/flight-timeout [state _timer-id now-ms]
   (if-let [^javax.net.ssl.SSLEngine engine (:dtls/engine state)]
