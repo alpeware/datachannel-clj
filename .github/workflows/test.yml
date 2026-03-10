@@ -35,6 +35,14 @@ jobs:
     - name: Install native dependencies
       run: sudo apt-get update && sudo apt-get install -y libpulse0
 
+    - name: Run Linter
+      run: clojure -M:lint
+
+    - name: Check Formatting
+      run: |
+        clojure -M:format
+        git diff --exit-code || (echo "Formatting check failed. Code is not properly formatted." && exit 1)
+        
     - name: Run tests
       run: clojure -J--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED -J--add-exports=java.base/sun.security.x509=ALL-UNNAMED -M:test -m datachannel.test-runner
 
