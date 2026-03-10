@@ -58,74 +58,45 @@ Every function returns a standardized map:
  :app-events  [...]}       ;; A vector of events (e.g. :on-open, :on-message) to be handled by your application
 ```
 
-### Example: "Bring Your Own Loop"
+### Example: High-Level API
 
-Here is a realistic example of how you might wrap the pure core inside a Java NIO polling loop using our `datachannel.nio` helpers:
+Here is a concise, elegant example of how a consumer uses `datachannel.api` to establish a connection.
 
 ```clojure
-(require '[datachannel.core :as dc]
-         '[datachannel.nio :as nio])
-(import '[java.nio ByteBuffer])
+(require '[datachannel.api :as api])
 
-(defn run-event-loop [port remote-host remote-port]
-  ;; 1. Initialize NIO resources
-  (let [channel  (nio/create-non-blocking-channel port)
-        selector (nio/create-selector)]
-    (nio/connect-channel channel remote-host remote-port)
-    (nio/register-for-read channel selector)
+(defn start-peer []
+  ;; 1. Prepare the node
+  (let [node (api/create-node {:port 5000 :setup "active"})
 
-    ;; 2. Initialize the pure data state
-    (let [initial-state (dc/create-connection {:heartbeat-interval 30000} false)
-          conn-state (atom (:connection initial-state))
-          buffer (ByteBuffer/allocate 2048)]
+        ;; Example remote connection info (would typically come from signaling)
+        remote-sdp {:ip "127.0.0.1" :port 5001}
 
-      (while true
-        (let [now-ms (System/currentTimeMillis)]
+        ;; Callbacks definition
+        callbacks {:on-open (fn []
+                              (println "Connection established!")
+                              ;; Send data over default stream 0
+                              (api/send! node "Hello, WebRTC!")
+                              ;; Multiplex data over stream 1
+                              (api/send! node "Data on stream 1" 1))
 
-          ;; 3. Handle pending timers
-          (let [timers (:timers @conn-state)]
-            (doseq [[timer-id timer] timers]
-              (when (>= now-ms (:expires-at timer))
-                (let [raw-result (dc/handle-timeout @conn-state timer-id now-ms)
-                      result (dc/serialize-network-out raw-result buffer)]
-                  (reset! conn-state (:new-state result))
-                  ;; Note: In a real app you'd store the remote-addr for the peer
-                  (process-effects! channel result (java.net.InetSocketAddress. remote-host remote-port))))))
+                   :on-message (fn [evt]
+                                 (if (:is-string? evt)
+                                   (println "Received string on stream" (:stream-id evt) ":"
+                                            (String. ^bytes (:payload evt) "UTF-8"))
+                                   (println "Received binary data on stream" (:stream-id evt))))
 
-          ;; 4. Poll Network I/O
-          (.select selector 10) ;; Wait up to 10ms
-          (let [keys (.selectedKeys selector)
-                key-iter (.iterator keys)]
-            (while (.hasNext key-iter)
-              (let [key (.next key-iter)]
-                (.remove key-iter)
-                (when (.isReadable key)
-                  (.clear buffer)
-                  (when-let [remote-addr (.receive channel buffer)]
-                    (.flip buffer)
-                    (let [bytes-read (.remaining buffer)
-                          payload (byte-array bytes-read)]
-                      (.get buffer payload)
-                      ;; Pass bytes to the pure core
-                      (let [raw-result (dc/handle-receive @conn-state payload now-ms remote-addr)
-                            result (dc/serialize-network-out raw-result buffer)]
-                        (reset! conn-state (:new-state result))
-                        (process-effects! channel result remote-addr)))))))))))))
+                   :on-error (fn [evt]
+                               (println "Connection error:" (:cause evt)))
 
-(defn- process-effects! [channel {:keys [network-out-bytes app-events]} remote-addr]
-  ;; Transmit outgoing bytes
-  (doseq [packet network-out-bytes]
-    (.send channel packet remote-addr))
+                   :on-close (fn [_]
+                               (println "Connection closed."))}]
 
-  ;; React to state changes
-  (doseq [event app-events]
-    (case (:type event)
-      :on-open    (println "Connection established!")
-      :on-message (println "Received message:" (String. (:payload event)))
-      :on-error   (println "Connection error:" (:cause event))
-      :on-close   (println "Connection closed.")
-      nil)))
+    ;; 2. Start the connection loop
+    (api/start! node remote-sdp callbacks)))
 ```
+
+*Note: While this high-level API handles the NIO background loop and state synchronization for you, the underlying `datachannel.core` that powers it remains completely purely functional and strictly BYOL (Bring Your Own Loop).*
 
 ## Use Cases
 

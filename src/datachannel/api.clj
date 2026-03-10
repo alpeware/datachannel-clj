@@ -55,9 +55,17 @@
     (doseq [evt app-events]
       (case (:type evt)
         :on-message (when-let [cb (:on-message callbacks)]
-                      (cb evt))
+                      (cb (assoc evt :is-string? (= (:protocol evt) :webrtc/string))))
         :on-error   (when-let [cb (:on-error callbacks)]
                       (cb evt))
+        :on-closing (when-let [cb (:on-closing callbacks)]
+                      (cb evt))
+        :on-close   (when-let [cb (:on-close callbacks)]
+                      (cb evt))
+        :on-buffered-amount-low (when-let [cb (:on-buffered-amount-low callbacks)]
+                                  (cb evt))
+        :on-buffered-amount-high (when-let [cb (:on-buffered-amount-high callbacks)]
+                                   (cb evt))
         nil))
     (when should-notify-open?
       (when-let [cb (:on-open callbacks)]
@@ -156,6 +164,26 @@
                          callbacks)))
       node)))
 
+(defn get-buffered-amount
+  "Returns the current size (in bytes) of the send queue for a given stream."
+  [node stream-id]
+  (let [state @(:state-atom node)
+        q (get-in state [:streams stream-id :send-queue] [])]
+    (reduce + (map (fn [item]
+                     (let [payload (get-in item [:chunk :payload])]
+                       (if payload (alength ^bytes payload) 0)))
+                   q))))
+
+(defn get-state
+  "Returns the current state of the connection (e.g., :established, :closed)."
+  [node]
+  (:state @(:state-atom node)))
+
+(defn get-stats
+  "Returns the :metrics map from the state atom."
+  [node]
+  (:metrics @(:state-atom node)))
+
 (defn set-max-message-size!
   "Sets the maximum message size that can be sent over the connection."
   [node max-size]
@@ -165,16 +193,18 @@
                  {}))
 
 (defn send!
-  "Sends a message (string or byte array) to the connected peer."
-  [node message]
-  (let [payload (if (string? message)
-                  (.getBytes ^String message "UTF-8")
-                  message)
-        protocol (if (string? message) :webrtc/string :webrtc/binary)]
-    (apply-action! node
-                   (fn [st]
-                     (dc/send-data st payload 0 protocol (System/currentTimeMillis)))
-                   {})))
+  "Sends a message (string or byte array) to the connected peer over the given stream-id (default 0)."
+  ([node message]
+   (send! node message 0))
+  ([node message stream-id]
+   (let [payload (if (string? message)
+                   (.getBytes ^String message "UTF-8")
+                   message)
+         protocol (if (string? message) :webrtc/string :webrtc/binary)]
+     (apply-action! node
+                    (fn [st]
+                      (dc/send-data st payload stream-id protocol (System/currentTimeMillis)))
+                    {}))))
 
 (defn close!
   "Gracefully shuts down the background loop, the socket, and the selector."
