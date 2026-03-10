@@ -83,10 +83,10 @@
     - [x] Cannot Send Too Large Message
     - [x] Has Reasonable Buffered Amount Values
     - [x] Has Default On Buffered Amount Low Value Zero
-    - [ ] Triggers On Buffered Amount Low With Default Value Zero
+    - [x] Triggers On Buffered Amount Low With Default Value Zero
     - [x] Doesnt Trigger On Buffered Amount Low If Below Threshold
-    - [ ] Triggers On Buffered Amount Multiple Times
-    - [ ] Triggers On Buffered Amount Low Only When Crossing Threshold
+    - [x] Triggers On Buffered Amount Multiple Times
+    - [x] Triggers On Buffered Amount Low Only When Crossing Threshold
     - [ ] Doesnt Trigger On Total Buffer Amount Low When Below
     - [ ] Triggers On Total Buffer Amount Low When Crossing Threshold
     - [x] Initial Metrics Are Unset
