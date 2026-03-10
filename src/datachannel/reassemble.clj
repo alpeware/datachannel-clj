@@ -1,4 +1,5 @@
-(ns datachannel.reassemble)
+(ns datachannel.reassemble
+  (:require [datachannel.dcep :as dcep]))
 
 (defn assemble-payload [chunks]
   (let [total-len (reduce + (map #(alength ^bytes (:payload %)) chunks))
@@ -123,37 +124,48 @@
               stream-data (get-in current-state [:streams stream-id])
               {:keys [new-stream app-events] :as _res} (reassemble-stream stream-data)
               app-events-stream app-events
-              events-with-dcep (reduce (fn [acc event]
-                                         (if (= (:protocol event) :webrtc/dcep)
-                                           ;; DCEP handling should ideally happen earlier or generate next-state
-                                           ;; but to keep it simple we emit :dcep-message and handle it in wrapper
-                                           ;; Let's inline DCEP ack response here to state
-                                           acc
-                                           (conj acc event)))
-                                       []
-                                       app-events-stream)
               dcep-events (filter #(= (:protocol %) :webrtc/dcep) app-events-stream)
-              state-with-dcep-acks (reduce (fn [st evt]
-                                             (let [payload (:payload evt)
-                                                   msg-type (bit-and (aget ^bytes payload 0) 0xff)]
-                                               (if (= msg-type 3) ;; OPEN
-                                                 (let [ack-tsn (:next-tsn st)
-                                                       s2 (update st :next-tsn inc)
-                                                       ack-ssn (:ssn s2)
-                                                       s3 (update s2 :ssn inc)
-                                                       ack-chunk {:type :data
-                                                                  :flags 3 ;; B and E bits
-                                                                  :tsn ack-tsn
-                                                                  :stream-id (:stream-id evt)
-                                                                  :seq-num ack-ssn
-                                                                  :protocol :webrtc/dcep
-                                                                  :payload (byte-array [(byte 2)])}]
-                                                   (assoc-in s3 [:streams (:stream-id evt) :send-queue]
-                                                             (conj (get-in s3 [:streams (:stream-id evt) :send-queue] [])
-                                                                   {:tsn ack-tsn :chunk ack-chunk :sent-at 0 :retries 0 :sent? false})))
-                                                 st)))
-                                           (assoc-in current-state [:streams stream-id] new-stream)
-                                           dcep-events)]
+              non-dcep-events (filter #(not= (:protocol %) :webrtc/dcep) app-events-stream)
+
+              dcep-results (reduce (fn [acc evt]
+                                     (let [st (:state acc)
+                                           events (:events acc)
+                                           payload (:payload evt)
+                                           decoded (dcep/decode-message payload)]
+                                       (if (= (:type decoded) :open)
+                                         (let [ack-tsn (:next-tsn st)
+                                               s2 (update st :next-tsn inc)
+                                               ack-ssn (:ssn s2)
+                                               s3 (update s2 :ssn inc)
+                                               ack-chunk {:type :data
+                                                          :flags 3 ;; B and E bits
+                                                          :tsn ack-tsn
+                                                          :stream-id (:stream-id evt)
+                                                          :seq-num ack-ssn
+                                                          :protocol :webrtc/dcep
+                                                          :payload (dcep/encode-message {:type :ack})}
+                                               s4 (assoc-in s3 [:streams (:stream-id evt) :send-queue]
+                                                            (conj (get-in s3 [:streams (:stream-id evt) :send-queue] [])
+                                                                  {:tsn ack-tsn :chunk ack-chunk :sent-at 0 :retries 0 :sent? false}))
+                                               channel-opts {:ordered (:ordered decoded)
+                                                             :max-retransmits (:max-retransmits decoded)
+                                                             :max-packet-life-time (:max-packet-life-time decoded)
+                                                             :protocol (:protocol decoded)
+                                                             :negotiated false
+                                                             :label (:label decoded)
+                                                             :state :open}
+                                               s5 (assoc-in s4 [:data-channels (:stream-id evt)] channel-opts)
+                                               new-evt {:type :on-data-channel
+                                                        :channel (assoc channel-opts :id (:stream-id evt))}]
+                                           {:state s5 :events (conj events new-evt)})
+                                         (if (= (:type decoded) :ack)
+                                           (let [s2 (assoc-in st [:data-channels (:stream-id evt) :state] :open)
+                                                 new-evt {:type :on-open :channel-id (:stream-id evt)}]
+                                             {:state s2 :events (conj events new-evt)})
+                                           acc))))
+                                   {:state (assoc-in current-state [:streams stream-id] new-stream)
+                                    :events []}
+                                   dcep-events)]
           (recur (rest stream-ids)
-                 state-with-dcep-acks
-                 (into current-events events-with-dcep)))))))
+                 (:state dcep-results)
+                 (into current-events (concat non-dcep-events (:events dcep-results)))))))))

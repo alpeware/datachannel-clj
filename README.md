@@ -73,12 +73,18 @@ Here is a concise, elegant example of how a consumer uses `datachannel.api` to e
         remote-sdp {:ip "127.0.0.1" :port 5001}
 
         ;; Callbacks definition
-        callbacks {:on-open (fn []
-                              (println "Connection established!")
-                              ;; Create a data channel compliant with the W3C spec
-                              (let [channel-id (api/create-data-channel! node "gossip" {:ordered false :max-retransmits 0})]
-                                ;; Send data over the newly created channel
-                                (api/send! node "Hello, WebRTC!" channel-id)))
+        callbacks {:on-open (fn [evt]
+                              (if (:channel-id evt)
+                                (println "Data channel" (:channel-id evt) "is open!")
+                                (do
+                                  (println "Connection established!")
+                                  ;; Create a data channel compliant with the W3C spec
+                                  (let [channel-id (api/create-data-channel! node "gossip" {:ordered false :max-retransmits 0})]
+                                    ;; Send data over the newly created channel
+                                    (api/send! node "Hello, WebRTC!" channel-id)))))
+
+                   :on-data-channel (fn [evt]
+                                      (println "Peer opened new channel:" (:channel evt)))
 
                    :on-message (fn [evt]
                                  (if (:is-string? evt)

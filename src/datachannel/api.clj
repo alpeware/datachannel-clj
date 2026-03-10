@@ -62,6 +62,11 @@
                       (cb evt))
         :on-close   (when-let [cb (:on-close callbacks)]
                       (cb evt))
+        :on-data-channel (when-let [cb (:on-data-channel callbacks)]
+                           (cb evt))
+        :on-open    (when-let [cb (:on-open callbacks)]
+                      (when (:channel-id evt)
+                        (cb evt)))
         :on-buffered-amount-low (when-let [cb (:on-buffered-amount-low callbacks)]
                                   (cb evt))
         :on-buffered-amount-high (when-let [cb (:on-buffered-amount-high callbacks)]
@@ -75,7 +80,7 @@
         nil))
     (when should-notify-open?
       (when-let [cb (:on-open callbacks)]
-        (cb)))))
+        (cb {})))))
 
 (defn start!
   "Ignites the node. Connects via NIO, starts the loop, and triggers callbacks.

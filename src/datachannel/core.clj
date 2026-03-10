@@ -5,7 +5,8 @@
             [datachannel.packetize :as packetize]
             [datachannel.reassemble :as reassemble]
             [datachannel.handlers :as handlers]
-            [datachannel.chunks :as chunks])
+            [datachannel.chunks :as chunks]
+            [datachannel.dcep :as dcep])
   (:import [java.nio ByteBuffer]
            [javax.net.ssl SSLEngineResult$HandshakeStatus]
            [java.security SecureRandom]))
@@ -189,6 +190,8 @@
      :client-mode? client-mode?
      :dtls/engine engine}))
 
+(declare send-data)
+
 (defn create-data-channel [state label options]
   (let [opts (merge {:ordered true
                      :max-packet-life-time nil
@@ -204,11 +207,24 @@
                (if (contains? (:data-channels state) potential-id)
                  (recur (+ potential-id 2))
                  potential-id)))
-        new-state (assoc-in state [:data-channels id] (assoc opts :label label))]
-    {:new-state new-state
-     :channel-id id
-     :network-out []
-     :app-events []}))
+        negotiated? (:negotiated opts)
+        channel-state (if negotiated? :open :connecting)
+        new-state (assoc-in state [:data-channels id] (assoc opts :label label :state channel-state))]
+    (if negotiated?
+      {:new-state new-state
+       :channel-id id
+       :network-out []
+       :app-events []}
+      (let [open-msg {:type :open
+                      :label label
+                      :protocol (:protocol opts)
+                      :ordered (:ordered opts)
+                      :max-retransmits (:max-retransmits opts)
+                      :max-packet-life-time (:max-packet-life-time opts)}
+            payload (dcep/encode-message open-msg)
+            now-ms (System/currentTimeMillis)
+            res (send-data new-state payload id :webrtc/dcep now-ms)]
+        (assoc res :channel-id id)))))
 
 (defn set-max-message-size [state max-size]
   (assoc state :new-state (assoc state :max-message-size max-size)))
