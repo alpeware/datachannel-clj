@@ -81,10 +81,10 @@
     - [ ] Respects Per Stream Queue Limit
     - [x] Cannot Send Empty Messages
     - [x] Cannot Send Too Large Message
-    - [ ] Has Reasonable Buffered Amount Values
-    - [ ] Has Default On Buffered Amount Low Value Zero
+    - [x] Has Reasonable Buffered Amount Values
+    - [x] Has Default On Buffered Amount Low Value Zero
     - [ ] Triggers On Buffered Amount Low With Default Value Zero
-    - [ ] Doesnt Trigger On Buffered Amount Low If Below Threshold
+    - [x] Doesnt Trigger On Buffered Amount Low If Below Threshold
     - [ ] Triggers On Buffered Amount Multiple Times
     - [ ] Triggers On Buffered Amount Low Only When Crossing Threshold
     - [ ] Doesnt Trigger On Total Buffer Amount Low When Below
