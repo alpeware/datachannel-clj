@@ -1,5 +1,5 @@
 (ns datachannel.sctp-shutdown-connection-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest shutdown-connection-without-pending-data-test

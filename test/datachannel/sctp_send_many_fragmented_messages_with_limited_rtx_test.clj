@@ -1,5 +1,5 @@
 (ns datachannel.sctp-send-many-fragmented-messages-with-limited-rtx-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest send-many-fragmented-messages-with-limited-rtx-test

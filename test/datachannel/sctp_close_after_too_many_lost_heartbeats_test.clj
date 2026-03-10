@@ -1,5 +1,5 @@
 (ns datachannel.sctp-close-after-too-many-lost-heartbeats-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest close-connection-after-too-many-lost-heartbeats-test
@@ -41,4 +41,5 @@
                 (is (= :abort (-> res2 :network-out first :chunks first :type)))
                 (is (= 1 (count (:app-events res2))))
                 (is (= :on-error (-> res2 :app-events first :type)))
-                (is (= :max-retransmissions (-> res2 :app-events first :cause)))))))))))
+                (is (= :max-retransmissions (-> res2 :app-events first :cause))))))
+          nil)))))

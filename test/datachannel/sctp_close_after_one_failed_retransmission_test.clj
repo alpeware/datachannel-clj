@@ -1,5 +1,5 @@
 (ns datachannel.sctp-close-after-one-failed-retransmission-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest close-connection-after-one-failed-retransmission-test

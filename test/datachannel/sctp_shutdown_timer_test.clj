@@ -1,5 +1,5 @@
 (ns datachannel.sctp-shutdown-timer-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest shutdown-timer-expires-too-many-time-closes-connection-test
@@ -31,22 +31,21 @@
                   (is (seq network-out) "Should output retransmitted packet")
                   (is (= :shutdown (:type (first (:chunks (first network-out))))))
                   (recur new-state (inc i)))
-                current-state))]
+                current-state))
 
-        ;; 9th expiry should close
-        (let [timer (get-in state-after-8-expiries [:timers :sctp/t2-shutdown])
-              next-now (:expires-at timer)
-              {:keys [new-state network-out app-events]} (core/handle-timeout state-after-8-expiries :sctp/t2-shutdown next-now)]
+            ;; 9th expiry should close
+            timer (get-in state-after-8-expiries [:timers :sctp/t2-shutdown])
+            next-now (:expires-at timer)
+            {:keys [new-state network-out app-events]} (core/handle-timeout state-after-8-expiries :sctp/t2-shutdown next-now)
+            _ (is (= :closed (:state new-state)) "Connection should be closed after 9th expiry")
+            _ (is (not (contains? (:timers new-state) :sctp/t2-shutdown)) "t2-shutdown timer should be removed")
 
-          (is (= :closed (:state new-state)) "Connection should be closed after 9th expiry")
-          (is (not (contains? (:timers new-state) :sctp/t2-shutdown)) "t2-shutdown timer should be removed")
+            ;; Check if it sent an ABORT chunk
+            abort-pkt (first network-out)
+            _ (is abort-pkt "Should output abort packet")
+            _ (is (= :abort (:type (first (:chunks abort-pkt)))) "Packet should contain ABORT chunk")
 
-          ;; Check if it sent an ABORT chunk
-          (let [abort-pkt (first network-out)]
-            (is abort-pkt "Should output abort packet")
-            (is (= :abort (:type (first (:chunks abort-pkt)))) "Packet should contain ABORT chunk"))
-
-          ;; Check if it fired an on-error event
-          (let [error-event (first (filter #(= :on-error (:type %)) app-events))]
-            (is error-event "Should output on-error app event")
-            (is (= :max-retransmissions (:cause error-event)) "Error cause should be :max-retransmissions")))))))
+            ;; Check if it fired an on-error event
+            error-event (first (filter #(= :on-error (:type %)) app-events))]
+        (is error-event "Should output on-error app event")
+        (is (= :max-retransmissions (:cause error-event)) "Error cause should be :max-retransmissions")))))

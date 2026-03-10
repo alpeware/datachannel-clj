@@ -1,8 +1,8 @@
 (ns datachannel.rehandshake-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.dtls :as dtls])
   (:import [java.nio ByteBuffer]
-           [javax.net.ssl SSLEngineResult$HandshakeStatus SSLEngineResult SSLEngineResult$Status]))
+           [javax.net.ssl SSLEngineResult$HandshakeStatus]))
 
 (defn- run-handshake-loop [client-engine server-engine]
   (let [client-out (ByteBuffer/allocate 65536)
@@ -24,22 +24,21 @@
                    (not (.hasRemaining client-in))
                    (not (.hasRemaining server-in)))
             :success
-            (do
-              ;; Run client step
-              (let [res-c (dtls/handshake client-engine client-in client-out)
-                    packets-c (:packets res-c)]
-                (.compact server-in)
-                (doseq [p packets-c]
-                  (.put server-in (ByteBuffer/wrap p)))
-                (.flip server-in))
+            ;; Run client step
+            (let [res-c (dtls/handshake client-engine client-in client-out)
+                  packets-c (:packets res-c)]
+              (.compact server-in)
+              (doseq [p packets-c]
+                (.put server-in (ByteBuffer/wrap p)))
+              (.flip server-in)
               ;; Run server step
               (let [res-s (dtls/handshake server-engine server-in server-out)
                     packets-s (:packets res-s)]
                 (.compact client-in)
                 (doseq [p packets-s]
                   (.put client-in (ByteBuffer/wrap p)))
-                (.flip client-in))
-              (recur (inc i)))))))))
+                (.flip client-in)
+                (recur (inc i))))))))))
 
 (defn- run-handshake-if-needed [client-engine server-engine]
   (when (or (not= (.getHandshakeStatus client-engine) SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
@@ -49,21 +48,21 @@
 (defn- exchange-data [client-engine server-engine msg]
   (let [client-net-out (ByteBuffer/allocate 65536)
         server-app-out (ByteBuffer/allocate 65536)
-        client-app-in (ByteBuffer/wrap (.getBytes msg))]
-    (let [res-send (dtls/send-app-data client-engine client-app-in client-net-out)
-          server-net-in (ByteBuffer/wrap (:bytes res-send))]
-      ;; Try to run handshake loop in case sending app data triggered a re-handshake
+        client-app-in (ByteBuffer/wrap (.getBytes msg))
+        res-send (dtls/send-app-data client-engine client-app-in client-net-out)
+        server-net-in (ByteBuffer/wrap (:bytes res-send))]
+    ;; Try to run handshake loop in case sending app data triggered a re-handshake
+    (run-handshake-if-needed client-engine server-engine)
+    (let [res-recv (dtls/receive-app-data server-engine server-net-in server-app-out)]
+      ;; Process any pending handshake
       (run-handshake-if-needed client-engine server-engine)
-      (let [res-recv (dtls/receive-app-data server-engine server-net-in server-app-out)]
-        ;; Process any pending handshake
-        (run-handshake-if-needed client-engine server-engine)
-        ;; Rehandshake testing is flaky, sometimes DTLS expects us to retry the send
-        (if (zero? (alength (:bytes res-recv)))
-          (let [retry-send (dtls/send-app-data client-engine client-app-in client-net-out)
-                retry-net-in (ByteBuffer/wrap (:bytes retry-send))
-                retry-recv (dtls/receive-app-data server-engine retry-net-in server-app-out)]
-            (String. (:bytes retry-recv)))
-          (String. (:bytes res-recv)))))))
+      ;; Rehandshake testing is flaky, sometimes DTLS expects us to retry the send
+      (if (zero? (alength (:bytes res-recv)))
+        (let [retry-send (dtls/send-app-data client-engine client-app-in client-net-out)
+              retry-net-in (ByteBuffer/wrap (:bytes retry-send))
+              retry-recv (dtls/receive-app-data server-engine retry-net-in server-app-out)]
+          (String. (:bytes retry-recv)))
+        (String. (:bytes res-recv))))))
 
 (deftest test-rehandshake
   (testing "Testing DTLS engines re-handshaking (DTLSRehandshakeTest)"
@@ -106,7 +105,7 @@
                                          (not (.contains ^String % "_NULL_"))
                                          (not (.contains ^String % "_anon_"))
                                          (not (.contains ^String % "_DES_"))
-                                         (or (.contains ^String % "_RSA_")))
+                                         (.contains ^String % "_RSA_"))
                                    supported-suites))]
       (when (>= (count test-suites) 2)
         (let [cipher1 (test-suites 0)

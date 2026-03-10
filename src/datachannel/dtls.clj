@@ -1,12 +1,10 @@
 (ns datachannel.dtls
-  (:require [clojure.string :as string]
-            [clojure.java.io :as io])
   (:import
    [java.nio ByteBuffer]
-   [java.security KeyStore SecureRandom MessageDigest PrivateKey]
-   [javax.net.ssl SSLContext SSLEngine SSLParameters SSLEngineResult SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager X509ExtendedKeyManager]
+   [java.security KeyStore MessageDigest]
+   [javax.net.ssl SSLContext SSLEngine SSLEngineResult$HandshakeStatus SSLEngineResult$Status KeyManagerFactory TrustManagerFactory X509TrustManager]
    [java.security.cert X509Certificate]
-   [java.io File FileInputStream ByteArrayOutputStream]
+   [java.io ByteArrayOutputStream]
    [sun.security.tools.keytool CertAndKeyGen]
    [sun.security.x509 X500Name]
    [java.util Date ArrayList]))
@@ -47,8 +45,8 @@
 
     ;; Create a trust manager that accepts the peer's certificate (for WebRTC DTLS-SRTP, we verify via fingerprint in SDP)
     (let [tm (reify X509TrustManager
-               (checkClientTrusted [_ chain auth-type])
-               (checkServerTrusted [_ chain auth-type])
+               (checkClientTrusted [_ _chain _auth-type])
+               (checkServerTrusted [_ _chain _auth-type])
                (getAcceptedIssuers [_] (make-array X509Certificate 0)))]
       (.init ctx (.getKeyManagers kmf) (into-array [tm]) nil))
     ctx))

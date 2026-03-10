@@ -34,8 +34,9 @@
 (defn- apply-action!
   "Applies a pure action function to the state atom sequentially using a lock, extracts effects, and executes them."
   [node action-fn callbacks]
-  (let [effects (locking (:state-atom node)
-                  (let [st @(:state-atom node)
+  (let [state-atom (:state-atom node)
+        effects (locking state-atom
+                  (let [st @state-atom
                         res (action-fn st)
                         res-ser (dc/serialize-network-out res)
                         new-st (:new-state res-ser)
@@ -43,24 +44,24 @@
                         is-established? (= (:state new-st) :established)
                         should-notify? (and is-established? (not was-established?))
                         final-st (if should-notify? (assoc new-st :established-notified? true) new-st)]
-                    (reset! (:state-atom node) final-st)
-                    (assoc res-ser :should-notify-open? should-notify?)))]
-    (let [{:keys [network-out-bytes app-events should-notify-open?]} effects
-          channel @(:channel node)
-          remote-addr @(:remote-addr node)]
-      (when (and channel remote-addr)
-        (doseq [^ByteBuffer buf network-out-bytes]
-          (.send channel buf remote-addr)))
-      (doseq [evt app-events]
-        (case (:type evt)
-          :on-message (when-let [cb (:on-message callbacks)]
-                        (cb evt))
-          :on-error   (when-let [cb (:on-error callbacks)]
-                        (cb evt))
-          nil))
-      (when should-notify-open?
-        (when-let [cb (:on-open callbacks)]
-          (cb))))))
+                    (reset! state-atom final-st)
+                    (assoc res-ser :should-notify-open? should-notify?)))
+        {:keys [network-out-bytes app-events should-notify-open?]} effects
+        channel @(:channel node)
+        remote-addr @(:remote-addr node)]
+    (when (and channel remote-addr)
+      (doseq [^ByteBuffer buf network-out-bytes]
+        (.send channel buf remote-addr)))
+    (doseq [evt app-events]
+      (case (:type evt)
+        :on-message (when-let [cb (:on-message callbacks)]
+                      (cb evt))
+        :on-error   (when-let [cb (:on-error callbacks)]
+                      (cb evt))
+        nil))
+    (when should-notify-open?
+      (when-let [cb (:on-open callbacks)]
+        (cb)))))
 
 (defn start!
   "Ignites the node. Connects via NIO, starts the loop, and triggers callbacks.

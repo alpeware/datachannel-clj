@@ -27,9 +27,6 @@
 (defn- put-unsigned-short [^ByteBuffer buf val]
   (.putShort buf (unchecked-short val)))
 
-(defn- put-unsigned-int [^ByteBuffer buf val]
-  (.putInt buf (unchecked-int val)))
-
 (defn- get-unsigned-short [^ByteBuffer buf]
   (bit-and (.getShort buf) 0xffff))
 
@@ -240,16 +237,15 @@
           _ (.order buf ByteOrder/BIG_ENDIAN)
           msg-type (get-unsigned-short buf)
           msg-len (get-unsigned-short buf)
-          cookie (.getInt buf)
+          _cookie (.getInt buf)
           tx-id (byte-array 12)
-          _ (.get buf tx-id)]
-
-      (let [res (if (= msg-type 0x0001) ;; Binding Request
-                  (if-let [password (:ice-pwd connection)]
-                    (make-binding-response password tx-id peer-addr)
-                    nil)
-                  nil)]
-        (.position buf (min (.limit buf) (+ start-pos 20 msg-len)))
-        res))
+          _ (.get buf tx-id)
+          res (if (= msg-type 0x0001) ;; Binding Request
+                (if-let [password (:ice-pwd connection)]
+                  (make-binding-response password tx-id peer-addr)
+                  nil)
+                nil)]
+      (.position buf (min (.limit buf) (+ start-pos 20 msg-len)))
+      res)
     (catch Exception _
       nil)))

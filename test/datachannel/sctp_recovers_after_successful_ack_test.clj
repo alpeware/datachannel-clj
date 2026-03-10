@@ -1,5 +1,5 @@
 (ns datachannel.sctp-recovers-after-successful-ack-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest recovers-after-a-successful-ack-test

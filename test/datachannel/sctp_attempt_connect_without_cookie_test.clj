@@ -1,5 +1,5 @@
 (ns datachannel.sctp-attempt-connect-without-cookie-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest attempt-connect-without-cookie-test
@@ -9,7 +9,7 @@
           ;; Initialize client state and trigger connect
           client-opts {:heartbeat-interval 30000 :max-retransmissions 10}
           client-state (core/create-connection client-opts true)
-          client-ver-tag (:local-ver-tag client-state)
+          _client-ver-tag (:local-ver-tag client-state)
 
           connect-event {:type :connect}
           res1 (core/handle-event client-state connect-event now-ms)

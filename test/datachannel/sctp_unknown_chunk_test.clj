@@ -1,7 +1,6 @@
 (ns datachannel.sctp-unknown-chunk-test
-  (:require [clojure.test :refer :all]
-            [datachannel.core :as core]
-            [datachannel.sctp :as sctp]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [datachannel.core :as core]))
 
 (deftest receiving-unknown-chunk-responds-with-error-test
   (testing "Receiving Unknown Chunk Responds With Error (upper bits 01)"
@@ -21,14 +20,14 @@
                   :verification-tag 0
                   :chunks [unknown-chunk]}
           res (core/handle-sctp-packet initial-state packet (System/currentTimeMillis))
-          network-out (:network-out res)]
+          network-out (:network-out res)
 
-      (let [error-packet (first network-out)]
-        (is error-packet "Connection should send an ERROR packet in response to unknown chunk with 01 upper bits")
-        (when error-packet
-          (let [error-chunk (first (:chunks error-packet))]
-            (is (= :error (:type error-chunk)))
-            (is (= 1 (count (:causes error-chunk))))
-            (let [cause (first (:causes error-chunk))]
-              (is (= 6 (:cause-code cause)) "Cause code should be 6 (Unrecognized Chunk Type)")
-              (is (= (seq [1 2 3 4]) (seq (:chunk-data cause))) "Cause should contain the original chunk data"))))))))
+          error-packet (first network-out)]
+      (is error-packet "Connection should send an ERROR packet in response to unknown chunk with 01 upper bits")
+      (when error-packet
+        (let [error-chunk (first (:chunks error-packet))]
+          (is (= :error (:type error-chunk)))
+          (is (= 1 (count (:causes error-chunk))))
+          (let [cause (first (:causes error-chunk))]
+            (is (= 6 (:cause-code cause)) "Cause code should be 6 (Unrecognized Chunk Type)")
+            (is (= (seq [1 2 3 4]) (seq (:chunk-data cause))) "Cause should contain the original chunk data")))))))

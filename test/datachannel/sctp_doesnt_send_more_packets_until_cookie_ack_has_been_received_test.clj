@@ -1,5 +1,5 @@
 (ns datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest doesnt-send-more-packets-until-cookie-ack-has-been-received-test
@@ -43,7 +43,7 @@
 
             ;; Server receives COOKIE-ECHO, sends COOKIE-ACK
             (let [res-s2 (@#'core/handle-sctp-packet server-state-ia cookie-echo-packet now)
-                  server-state-ca (:new-state res-s2)
+                  _server-state-ca (:new-state res-s2)
                   cookie-ack-packet (first (:network-out res-s2))]
               (is cookie-ack-packet "Server should send COOKIE-ACK")
 

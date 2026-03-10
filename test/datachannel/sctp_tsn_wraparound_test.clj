@@ -1,5 +1,5 @@
 (ns datachannel.sctp-tsn-wraparound-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest tsn-wraparound-test

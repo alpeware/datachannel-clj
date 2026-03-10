@@ -1,5 +1,5 @@
 (ns datachannel.stun-webrtc-integration-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is]]
             [datachannel.core :as dc]
             [datachannel.stun :as stun]
             [datachannel.dtls :as dtls]
@@ -63,19 +63,19 @@
           local-ip (get-local-ip)
           port (+ 25000 (rand-int 5000))
           ice-ufrag "testufrag"
-          ice-pwd "testpwd"]
+          ice-pwd "testpwd"
 
-        (let [channel (nio/create-non-blocking-channel port local-ip)
-              selector (nio/create-selector)
-              _ (nio/register-for-read channel selector)
-              cert-data (dtls/generate-cert)
-              server-cert-fingerprint (:fingerprint cert-data)
-              running (atom true)
-              buffer (ByteBuffer/allocateDirect 65536)
-              loop-future
-              (future
-                (try
-                  (while @running
+          channel (nio/create-non-blocking-channel port local-ip)
+          selector (nio/create-selector)
+          _ (nio/register-for-read channel selector)
+          cert-data (dtls/generate-cert)
+          server-cert-fingerprint (:fingerprint cert-data)
+          running (atom true)
+          buffer (ByteBuffer/allocateDirect 65536)
+          _loop-future
+          (future
+            (try
+              (while @running
                     (when (> (.select selector 100) 0)
                       (let [keys (.selectedKeys selector)
                             iter (.iterator keys)]
@@ -99,8 +99,8 @@
                                     (let [serialized (dc/serialize-network-out result nil nil)]
                                       (doseq [out-buf (:network-out-bytes serialized)]
                                         (.send channel out-buf remote-addr))))))))))))
-                  (catch Exception e
-                    (println "Error in UDP loop:" e))))
+                  (catch Exception _e
+                    (println "Error in UDP loop:" _e))))
 
               observer (reify PeerConnectionObserver
                          (onIceCandidate [_ candidate]
@@ -111,19 +111,19 @@
                                      addr (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info)))]
                                  (when (or (.isLoopbackAddress (.getAddress addr)) (.isSiteLocalAddress (.getAddress addr)))
                                    (.send channel req addr)))
-                               (catch Exception e))))
-                         (onIceConnectionChange [_ state])
-                         (onConnectionChange [_ state])
-                         (onSignalingChange [_ state])
-                         (onIceGatheringChange [_ state])
-                         (onIceCandidatesRemoved [_ candidates])
-                         (onAddStream [_ stream])
-                         (onRemoveStream [_ stream])
-                         (onDataChannel [_ channel])
+                               (catch Exception _e))))
+                         (onIceConnectionChange [_ _state])
+                         (onConnectionChange [_ _state])
+                         (onSignalingChange [_ _state])
+                         (onIceGatheringChange [_ _state])
+                         (onIceCandidatesRemoved [_ _candidates])
+                         (onAddStream [_ _stream])
+                         (onRemoveStream [_ _stream])
+                         (onDataChannel [_ _channel])
                          (onRenegotiationNeeded [_])
-                         (onAddTrack [_ receiver streams])
-                         (onTrack [_ transceiver])
-                         (onIceCandidateError [_ event]))
+                         (onAddTrack [_ _receiver _streams])
+                         (onTrack [_ _transceiver])
+                         (onIceCandidateError [_ _event]))
 
               pc (.createPeerConnection factory config observer)
               dc-init (dev.onvoid.webrtc.RTCDataChannelInit.)
@@ -169,4 +169,4 @@
               (try (.close selector) (catch Exception _))
               (.close pc)
               (.dispose factory)
-              (.dispose adm)))))))
+              (.dispose adm))))))

@@ -1,7 +1,6 @@
 (ns datachannel.pure-p2p-integration-test
-  (:require [clojure.test :refer :all]
-            [datachannel.core :as dc]
-            [datachannel.sctp :as sctp])
+  (:require [clojure.test :refer [deftest is testing]]
+            [datachannel.core :as dc])
   (:import [java.nio ByteBuffer]))
 
 (defn- bb->bytes [^ByteBuffer bb]
@@ -112,9 +111,9 @@
                             (update :network-out-bytes into (:network-out-bytes send-res-a [])))
 
             ;; Pump network again until B receives a message
-            [final-a final-b] (pump-network a-with-send conn-b
-                                            (fn [a b] (not-any? #(= :on-message (:type %)) (:app-events b)))
-                                            50)]
+            [_final-a final-b] (pump-network a-with-send conn-b
+                                             (fn [_a b] (not-any? #(= :on-message (:type %)) (:app-events b)))
+                                             50)]
         (is (some #(= :on-message (:type %)) (:app-events final-b)) "Peer B should have received the message")
         (let [msg-event (first (filter #(= :on-message (:type %)) (:app-events final-b)))]
           (is (= "Hello P2P!" (String. (:payload msg-event) "UTF-8")) "Message content should match"))))))

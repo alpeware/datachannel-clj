@@ -3,7 +3,7 @@
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(defmulti process-chunk (fn [state chunk packet now-ms] (:type chunk)))
+(defmulti process-chunk (fn [_state chunk _packet _now-ms] (:type chunk)))
 
 (defn- compute-gap-blocks [remote-tsn out-of-order-tsns]
   (if (empty? out-of-order-tsns)
@@ -21,8 +21,8 @@
               (recur (rest remaining) current-start offset blocks)
               (recur (rest remaining) offset offset (conj blocks [current-start current-end])))))))))
 
-(defmethod process-chunk :data [state chunk packet now-ms]
-  (let [proto (:protocol chunk)
+(defmethod process-chunk :data [state chunk _packet _now-ms]
+  (let [_proto (:protocol chunk)
         tsn (:tsn chunk)
         remote-tsn (get state :remote-tsn -1)
         ooo-tsns (get state :out-of-order-tsns (sorted-set))
@@ -67,7 +67,7 @@
             s3 (assoc-in s2 [:streams stream-id :recv-queue] new-recv-q)]
         {:next-state s3 :next-events []}))))
 
-(defmethod process-chunk :init [state chunk packet now-ms]
+(defmethod process-chunk :init [state chunk _packet _now-ms]
   (let [s1 (-> state
                (assoc :remote-ver-tag (:init-tag chunk)
                       :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1)
@@ -108,7 +108,7 @@
             s3 (update s2 :pending-control-chunks conj abort-chunk)]
         {:next-state s3 :next-events [{:type :on-error :cause :protocol-violation}]}))))
 
-(defmethod process-chunk :cookie-echo [state chunk packet now-ms]
+(defmethod process-chunk :cookie-echo [state _chunk _packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
         s1 (-> state
                (assoc :state :established)
@@ -137,7 +137,7 @@
              s4)]
     {:next-state s5 :next-events [{:type :on-open}]}))
 
-(defmethod process-chunk :cookie-ack [state chunk packet now-ms]
+(defmethod process-chunk :cookie-ack [state _chunk packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
         s1 (-> state
                (update :timers dissoc :sctp/t1-init)
@@ -180,12 +180,12 @@
              s5)]
     {:next-state s6 :next-events [{:type :on-open}]}))
 
-(defmethod process-chunk :heartbeat [state chunk packet now-ms]
+(defmethod process-chunk :heartbeat [state chunk _packet _now-ms]
   (let [heartbeat-ack-chunk {:type :heartbeat-ack :params (:params chunk)}
         s1 (update state :pending-control-chunks conj heartbeat-ack-chunk)]
     {:next-state s1 :next-events []}))
 
-(defmethod process-chunk :sack [state chunk packet now-ms]
+(defmethod process-chunk :sack [state chunk _packet _now-ms]
   (let [cum-tsn-ack (:cum-tsn-ack chunk)
         streams (:streams state)
         mtu (get state :mtu 1200)
@@ -251,13 +251,13 @@
              s1)]
     {:next-state s2 :next-events []}))
 
-(defmethod process-chunk :heartbeat-ack [state chunk packet now-ms]
+(defmethod process-chunk :heartbeat-ack [state _chunk _packet _now-ms]
   (let [s1 (-> state
                (assoc :heartbeat-error-count 0)
                (update :timers dissoc :sctp/t-heartbeat-rtx))]
     {:next-state s1 :next-events []}))
 
-(defmethod process-chunk :shutdown [state chunk packet now-ms]
+(defmethod process-chunk :shutdown [state _chunk packet now-ms]
   (let [s1 (assoc state :state :shutdown-ack-sent)
         shutdown-ack-chunk {:type :shutdown-ack}
         out-packet {:src-port (:dst-port packet)
@@ -273,25 +273,25 @@
                (update :pending-control-chunks conj shutdown-ack-chunk))]
     {:next-state s2 :next-events []}))
 
-(defmethod process-chunk :shutdown-ack [state chunk packet now-ms]
+(defmethod process-chunk :shutdown-ack [state _chunk _packet _now-ms]
   (let [s1 (update state :timers dissoc :sctp/t2-shutdown)
         s2 (assoc s1 :state :closed)
         shutdown-complete-chunk {:type :shutdown-complete}
         s3 (update s2 :pending-control-chunks conj shutdown-complete-chunk)]
     {:next-state s3 :next-events []}))
 
-(defmethod process-chunk :shutdown-complete [state chunk packet now-ms]
+(defmethod process-chunk :shutdown-complete [state _chunk _packet _now-ms]
   (let [s1 (update state :timers dissoc :sctp/t2-shutdown)
         s2 (assoc s1 :state :closed)]
     {:next-state s2 :next-events [{:type :on-close}]}))
 
-(defmethod process-chunk :error [state chunk packet now-ms]
+(defmethod process-chunk :error [state chunk _packet _now-ms]
   {:next-state state :next-events [{:type :on-error :causes (:causes chunk)}]})
 
-(defmethod process-chunk :abort [state chunk packet now-ms]
+(defmethod process-chunk :abort [state _chunk _packet _now-ms]
   {:next-state state :next-events [{:type :on-close}]})
 
-(defmethod process-chunk :default [state chunk packet now-ms]
+(defmethod process-chunk :default [state chunk _packet _now-ms]
   (let [type-val (:type chunk)]
     (if (number? type-val)
       (let [upper-bits (bit-shift-right (bit-and type-val 0xC0) 6)]

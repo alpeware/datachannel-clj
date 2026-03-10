@@ -31,6 +31,8 @@ Individual test namespaces can be run as follows:
 clojure -M:test -e "(require 'datachannel.sctp-test) (clojure.test/run-tests 'datachannel.sctp-test)"
 ```
 
+Agents MUST run `clojure -M:lint` and fix all linting errors before they are allowed to open a Pull Request.
+
 ## WebRTC Implementation Details
 
 - This is a pure Clojure implementation of WebRTC Data Channels.

@@ -1,5 +1,5 @@
 (ns datachannel.sctp-zero-checksum-metrics-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest zero-checksum-metrics-are-set-test

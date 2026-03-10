@@ -1,5 +1,5 @@
 (ns datachannel.sctp-cookie-echo-abort-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest resending-cookie-echo-too-many-times-aborts-test
@@ -68,7 +68,7 @@
         ;; Simulate timeout expirations repeatedly until max-retransmissions is reached (8 retries)
         (let [now (System/currentTimeMillis)]
           (loop [retries 0
-                 current-now now]
+                 _current-now now]
             (if (< retries 8)
               (let [timer (get-in @client-state [:timers :sctp/t1-cookie])
                     ;; Fast forward time

@@ -1,5 +1,5 @@
 (ns datachannel.sctp-establish-connection-while-sending-data-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest establish-connection-while-sending-data-test
@@ -53,7 +53,7 @@
                 ;; 7. Server handles the DATA packet, replies with SACK and triggers app event
                 (let [data-packet (first data-packets)
                       res-s3 (@#'core/handle-sctp-packet server-est data-packet now)
-                      server-est2 (:new-state res-s3)
+                      _server-est2 (:new-state res-s3)
                       sack-packet (first (:network-out res-s3))
                       events (:app-events res-s3)]
                   (is sack-packet "Server emits SACK")

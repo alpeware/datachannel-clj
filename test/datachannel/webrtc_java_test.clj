@@ -1,10 +1,8 @@
 (ns datachannel.webrtc-java-test
-  (:require [clojure.test :refer :all])
-  (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCDataChannelObserver RTCDataChannelInit RTCDataChannelBuffer RTCOfferOptions RTCSdpType RTCSessionDescription RTCIceCandidate]
+  (:require [clojure.test :refer [deftest is]])
+  (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCDataChannelObserver RTCDataChannelInit RTCDataChannelBuffer RTCOfferOptions]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
-           [java.nio ByteBuffer]
-           [java.util ArrayList Collections]
-           [java.util.concurrent CountDownLatch TimeUnit]))
+           [java.nio ByteBuffer]))
 
 (defonce factory (PeerConnectionFactory. (HeadlessAudioDeviceModule.)))
 
@@ -54,8 +52,8 @@
                             ;; Pass candidate to callee
                             (when-let [callee @callee-atom]
                               (.addIceCandidate callee candidate)))
-                          (onIceConnectionChange [_ state] )
-                          (onConnectionChange [_ state] )
+                          (onIceConnectionChange [_ _state] )
+                          (onConnectionChange [_ _state] )
                           (onSignalingChange [_ _]) (onIceGatheringChange [_ _]) (onIceCandidatesRemoved [_ _])
                           (onAddStream [_ _]) (onRemoveStream [_ _]) (onRenegotiationNeeded [_])
                           (onAddTrack [_ _ _]) (onTrack [_ _]) (onIceCandidateError [_ _])
@@ -66,8 +64,8 @@
                             ;; Pass candidate to caller
                             (when-let [caller @caller-atom]
                               (.addIceCandidate caller candidate)))
-                          (onIceConnectionChange [_ state] )
-                          (onConnectionChange [_ state] )
+                          (onIceConnectionChange [_ _state] )
+                          (onConnectionChange [_ _state] )
                           (onSignalingChange [_ _]) (onIceGatheringChange [_ _]) (onIceCandidatesRemoved [_ _])
                           (onAddStream [_ _]) (onRemoveStream [_ _]) (onRenegotiationNeeded [_])
                           (onAddTrack [_ _ _]) (onTrack [_ _]) (onIceCandidateError [_ _])

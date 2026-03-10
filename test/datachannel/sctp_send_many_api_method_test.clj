@@ -1,5 +1,5 @@
 (ns datachannel.sctp-send-many-api-method-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.core :as core]))
 
 (deftest send-many-api-method-test
@@ -32,32 +32,32 @@
 
           ;; A receives COOKIE-ACK
           res-a2 (@#'core/handle-sctp-packet state-a2 cookie-ack-packet now-ms)
-          state-a3 (:new-state res-a2)]
+          state-a3 (:new-state res-a2)
 
-      ;; Now both A and Z are in the :established state.
+          ;; Now both A and Z are in the :established state.
 
-      ;; A sends two messages sequentially to different streams
-      (let [payload1 (.getBytes "hello" "UTF-8")
-            payload2 (.getBytes "world" "UTF-8")
-            res-a3 (core/send-data state-a3 payload1 1 :webrtc/string now-ms)
-            state-a4 (:new-state res-a3)
-            data-packets-1 (:network-out res-a3)
-            res-a4 (core/send-data state-a4 payload2 2 :webrtc/string now-ms)
-            state-a5 (:new-state res-a4)
-            data-packets-2 (:network-out res-a4)
-            all-data-packets (concat data-packets-1 data-packets-2)]
+          ;; A sends two messages sequentially to different streams
+          payload1 (.getBytes "hello" "UTF-8")
+          payload2 (.getBytes "world" "UTF-8")
+          res-a3-send (core/send-data state-a3 payload1 1 :webrtc/string now-ms)
+          state-a4 (:new-state res-a3-send)
+          data-packets-1 (:network-out res-a3-send)
+          res-a4-send (core/send-data state-a4 payload2 2 :webrtc/string now-ms)
+          _state-a5 (:new-state res-a4-send)
+          data-packets-2 (:network-out res-a4-send)
+          _all-data-packets (concat data-packets-1 data-packets-2)
 
-        ;; Z receives the DATA messages sequentially to simulate packet arrivals
-        ;; NOTE: we handle them manually and collect app events
-        (let [res-z3-1 (@#'core/handle-sctp-packet state-z2 (first data-packets-1) now-ms)
-              res-z3-2 (@#'core/handle-sctp-packet (:new-state res-z3-1) (first data-packets-2) now-ms)
-              app-events (concat (:app-events res-z3-1) (:app-events res-z3-2))]
+          ;; Z receives the DATA messages sequentially to simulate packet arrivals
+          ;; NOTE: we handle them manually and collect app events
+          res-z3-1 (@#'core/handle-sctp-packet state-z2 (first data-packets-1) now-ms)
+          res-z3-2 (@#'core/handle-sctp-packet (:new-state res-z3-1) (first data-packets-2) now-ms)
+          app-events (concat (:app-events res-z3-1) (:app-events res-z3-2))
 
           ;; Z should have emitted two :on-message events
-          (let [messages (filter #(= :on-message (:type %)) app-events)]
-            (is (= 2 (count messages)) "Z should have received two messages")
-            (when (= 2 (count messages))
-              (is (= "hello" (String. ^bytes (:payload (first messages)) "UTF-8")))
-              (is (= 1 (:stream-id (first messages))))
-              (is (= "world" (String. ^bytes (:payload (second messages)) "UTF-8")))
-              (is (= 2 (:stream-id (second messages)))))))))))
+          messages (filter #(= :on-message (:type %)) app-events)]
+      (is (= 2 (count messages)) "Z should have received two messages")
+      (when (= 2 (count messages))
+        (is (= "hello" (String. ^bytes (:payload (first messages)) "UTF-8")))
+        (is (= 1 (:stream-id (first messages))))
+        (is (= "world" (String. ^bytes (:payload (second messages)) "UTF-8")))
+        (is (= 2 (:stream-id (second messages))))))))

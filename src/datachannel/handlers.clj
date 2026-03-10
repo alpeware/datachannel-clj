@@ -1,9 +1,11 @@
 (ns datachannel.handlers
-  (:require [datachannel.packetize :as packetize]))
+  (:require [datachannel.packetize :as packetize]
+            [datachannel.stun :as stun]
+            [datachannel.dtls :as dtls]))
 
-(defmulti handle-timeout-timer (fn [state timer-id now-ms] timer-id))
+(defmulti handle-timeout-timer (fn [_state timer-id _now-ms] timer-id))
 
-(defmethod handle-timeout-timer :sctp/t2-shutdown [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t2-shutdown [state _timer-id now-ms]
   (let [timer (get-in state [:timers :sctp/t2-shutdown])]
     (if-not timer
       {:new-state state :app-events []}
@@ -27,7 +29,7 @@
                             (update :pending-control-chunks into (:chunks packet)))
              :app-events []}))))))
 
-(defmethod handle-timeout-timer :sctp/t1-init [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t1-init [state _timer-id now-ms]
   (let [timer (get-in state [:timers :sctp/t1-init])
         retries (:retries timer)]
     (if (>= retries 8)
@@ -47,7 +49,7 @@
                         (update :pending-control-chunks into (:chunks packet)))
          :app-events []}))))
 
-(defmethod handle-timeout-timer :sctp/t1-cookie [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t1-cookie [state _timer-id now-ms]
   (let [timer (get-in state [:timers :sctp/t1-cookie])
         retries (:retries timer)]
     (if (>= retries 8)
@@ -67,7 +69,7 @@
                         (update :pending-control-chunks into (:chunks packet)))
          :app-events []}))))
 
-(defmethod handle-timeout-timer :sctp/t3-rtx [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t3-rtx [state _timer-id now-ms]
   (let [timer (get-in state [:timers :sctp/t3-rtx])
         active-streams (filter #(seq (:send-queue (val %))) (:streams state))]
     (if (empty? active-streams)
@@ -146,7 +148,7 @@
                             (assoc :flight-size flight-size))
              :app-events []}))))))
 
-(defmethod handle-timeout-timer :sctp/t-heartbeat [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t-heartbeat [state _timer-id now-ms]
   (let [interval (get state :heartbeat-interval 30000)
         rto (get state :rto-initial 1000)
         hb-chunk {:type :heartbeat
@@ -157,7 +159,7 @@
                     (update :pending-control-chunks conj hb-chunk))
      :app-events []}))
 
-(defmethod handle-timeout-timer :sctp/t-heartbeat-rtx [state timer-id now-ms]
+(defmethod handle-timeout-timer :sctp/t-heartbeat-rtx [state _timer-id _now-ms]
   (let [errors (get state :heartbeat-error-count 0)
         max-retries (get state :max-retransmissions 10)
         new-errors (inc errors)]
@@ -174,14 +176,14 @@
        :app-events []})))
 
 
-(defmethod handle-timeout-timer :stun/keepalive [state timer-id now-ms]
-  (let [req (datachannel.stun/make-simple-binding-request)]
+(defmethod handle-timeout-timer :stun/keepalive [state _timer-id now-ms]
+  (let [req (stun/make-simple-binding-request)]
     {:new-state (assoc-in state [:timers :stun/keepalive] {:expires-at (+ now-ms 15000)})
      :network-out [req]
      :app-events []}))
 
 
-(defmethod handle-timeout-timer :dtls/flight-timeout [state timer-id now-ms]
+(defmethod handle-timeout-timer :dtls/flight-timeout [state _timer-id now-ms]
   (if-let [^javax.net.ssl.SSLEngine engine (:dtls/engine state)]
     (let [hs-status (.getHandshakeStatus engine)]
       (if (or (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/FINISHED)
@@ -191,7 +193,7 @@
          :app-events []}
         (let [out-buf (java.nio.ByteBuffer/allocateDirect 65536)
               empty-in (java.nio.ByteBuffer/allocateDirect 0)
-              {:keys [packets]} (datachannel.dtls/handshake engine empty-in out-buf)]
+              {:keys [packets]} (dtls/handshake engine empty-in out-buf)]
           {:new-state (assoc-in state [:timers :dtls/flight-timeout] {:expires-at (+ now-ms 1000)})
            :network-out (vec packets)
            :app-events []})))
@@ -199,7 +201,7 @@
      :network-out []
      :app-events []}))
 
-(defmethod handle-timeout-timer :default [state timer-id now-ms]
+(defmethod handle-timeout-timer :default [state _timer-id _now-ms]
   {:new-state state :app-events []})
 
 (defn handle-timeout [state timer-id now-ms & [^javax.net.ssl.SSLEngine _engine]]
@@ -209,9 +211,9 @@
       (packetize/packetize (:new-state res) (:app-events res))
       res)))
 
-(defmulti handle-event-type (fn [state event now-ms] (:type event)))
+(defmulti handle-event-type (fn [_state event _now-ms] (:type event)))
 
-(defmethod handle-event-type :connect [state event now-ms]
+(defmethod handle-event-type :connect [state _event now-ms]
   (let [{:keys [local-ver-tag initial-tsn next-tsn]} state
         init-tsn (or initial-tsn next-tsn 0)
         init-chunk {:type :init
@@ -233,7 +235,7 @@
                     (update-in [:metrics :tx-packets] (fnil inc 0)))
      :app-events []}))
 
-(defmethod handle-event-type :shutdown [state event now-ms]
+(defmethod handle-event-type :shutdown [state _event now-ms]
   (if (= (:state state) :established)
     (if (every? empty? (map :send-queue (vals (:streams state))))
       (let [shutdown-chunk {:type :shutdown}
@@ -249,7 +251,7 @@
       {:new-state (assoc state :state :shutdown-pending) :app-events []})
     {:new-state state :app-events []}))
 
-(defmethod handle-event-type :default [state event now-ms]
+(defmethod handle-event-type :default [state _event _now-ms]
   {:new-state state :app-events []})
 
 (defn handle-event [state event now-ms]

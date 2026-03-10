@@ -121,7 +121,7 @@
         {:new-state current-state :app-events current-events}
         (let [stream-id (first stream-ids)
               stream-data (get-in current-state [:streams stream-id])
-              {:keys [new-stream app-events] :as res} (reassemble-stream stream-data)
+              {:keys [new-stream app-events] :as _res} (reassemble-stream stream-data)
               app-events-stream app-events
               events-with-dcep (reduce (fn [acc event]
                                          (if (= (:protocol event) :webrtc/dcep)
