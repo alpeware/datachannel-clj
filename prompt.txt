@@ -13,8 +13,11 @@ If the CI is green, expand the generative testing capabilities in `test/datachan
 1. Review the unchecked items in `TESTING.md`.
 2. Expand our operational generators (e.g., generate valid sequences of `[:advance-time ms]`, `[:receive-packet p]`, `[:send-data payload]`).
 3. Write a `reduce` loop that applies these random operations sequentially to the state machine.
-4. Define strong invariants that must hold true after *every* operation (e.g., `:flight-size >= 0`, `:cwnd > 0`, queues match metric counts).
-5. Implement the missing core logic required to make the property hold true for the unchecked `TESTING.md` items.
+4. Define strong invariants that must hold true after *every* operation.
+5. NO HALLUCINATIONS / STRICT TDD: You may ONLY check an item off in `TESTING.md` if your PR includes BOTH:
+   - An explicit, newly written `assert` or condition in the generative invariant loop that specifically tests that feature.
+   - The corresponding logic implemented in `datachannel.core` or `datachannel.sctp` that makes that assertion pass.
+6. NO FORCED STATE: Do not blindly `assoc` keys (like `:state :established`) onto a fresh connection to bypass the handshake. Instead, write a generator that produces a valid sequence of network operations to legally transition the state machine into the required state before  fuzzing.
 
 CRITICAL WORKFLOW DIRECTIVE:
 - Work in small, isolated PRs.
