@@ -3,6 +3,19 @@
             [datachannel.api :as api]
             [datachannel.sdp :as sdp]))
 
+(deftest set-max-message-size-api-test
+  (testing "Calling set-max-message-size! successfully mutates the state"
+    (let [node (api/create-node {})
+          started-node (api/start! node {:ip "127.0.0.1" :port 5002} {})]
+      (try
+        (let [st @(:state-atom started-node)]
+          (is (not (:max-message-size st)))
+          (api/set-max-message-size! started-node 1000)
+          (let [st2 @(:state-atom started-node)]
+            (is (= 1000 (:max-message-size st2)))))
+        (finally
+          (api/close! started-node))))))
+
 (deftest api-shell-test
   (testing "Shell completely abstracts the BYOL loop for two nodes"
     (let [node-a (api/create-node {:port 5001 :setup "active"})

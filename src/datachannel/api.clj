@@ -155,6 +155,14 @@
                          callbacks)))
       node)))
 
+(defn set-max-message-size!
+  "Sets the maximum message size that can be sent over the connection."
+  [node max-size]
+  (apply-action! node
+                 (fn [st]
+                   (dc/set-max-message-size st max-size))
+                 {}))
+
 (defn send!
   "Sends a message (string or byte array) to the connected peer."
   [node message]

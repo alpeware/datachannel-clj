@@ -53,6 +53,8 @@
             [datachannel.pure-p2p-integration-test]
             [datachannel.webrtc-integration-test]
             [datachannel.api-test]
+            [datachannel.sctp-set-max-message-size-test]
+            [datachannel.sctp-cannot-send-too-large-message-test]
             ))
 
 (defn -main [& args]
@@ -111,5 +113,7 @@
          'datachannel.pure-p2p-integration-test
          'datachannel.webrtc-integration-test
          'datachannel.api-test
+         'datachannel.sctp-set-max-message-size-test
+         'datachannel.sctp-cannot-send-too-large-message-test
          )]
     (System/exit (+ fail error))))
