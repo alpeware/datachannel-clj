@@ -6,13 +6,13 @@
             [datachannel.dtls-test]
             [datachannel.handshake-test]
             [datachannel.rehandshake-test]
-                        [datachannel.stun-test]
+            [datachannel.stun-test]
             [datachannel.stun-integration-test]
             [datachannel.stun-webrtc-integration-test]
-                        [datachannel.sctp-state-machine-test]
+            [datachannel.sctp-state-machine-test]
             [datachannel.sctp-establish-simultaneous-connection-test]
-                        [datachannel.sctp-error-chunk-test]
-                        [datachannel.sctp-checksum-test]
+            [datachannel.sctp-error-chunk-test]
+            [datachannel.sctp-checksum-test]
             [datachannel.sctp-cookie-echo-abort-test]
             [datachannel.sctp-error-counter-reset-test]
             [datachannel.sctp-sending-heartbeat-answers-with-ack-test]
@@ -54,25 +54,24 @@
             [datachannel.webrtc-integration-test]
             [datachannel.api-test]
             [datachannel.sctp-set-max-message-size-test]
-            [datachannel.sctp-cannot-send-too-large-message-test]
-            ))
+            [datachannel.sctp-cannot-send-too-large-message-test]))
 
 (defn -main [& _args]
   (let [{:keys [fail error]}
         (run-tests
-                  'datachannel.sctp-test
+         'datachannel.sctp-test
          'datachannel.sctp-send-message-with-limited-rtx-test
          'datachannel.sctp-send-many-fragmented-messages-with-limited-rtx-test
          'datachannel.dtls-test
          'datachannel.handshake-test
          'datachannel.rehandshake-test
-                  'datachannel.stun-test
+         'datachannel.stun-test
          'datachannel.stun-integration-test
          'datachannel.stun-webrtc-integration-test
-                  'datachannel.sctp-state-machine-test
-                  'datachannel.sctp-establish-simultaneous-connection-test
-                  'datachannel.sctp-error-chunk-test
-                  'datachannel.sctp-checksum-test
+         'datachannel.sctp-state-machine-test
+         'datachannel.sctp-establish-simultaneous-connection-test
+         'datachannel.sctp-error-chunk-test
+         'datachannel.sctp-checksum-test
          'datachannel.sctp-cookie-echo-abort-test
          'datachannel.sctp-error-counter-reset-test
          'datachannel.sctp-sending-heartbeat-answers-with-ack-test
@@ -114,6 +113,5 @@
          'datachannel.webrtc-integration-test
          'datachannel.api-test
          'datachannel.sctp-set-max-message-size-test
-         'datachannel.sctp-cannot-send-too-large-message-test
-         )]
+         'datachannel.sctp-cannot-send-too-large-message-test)]
     (System/exit (+ fail error))))

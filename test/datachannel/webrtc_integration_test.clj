@@ -108,34 +108,34 @@
                                       (.send channel out-buf @java-peer-addr)))
 
                                 ;; Parse events and deliver promises
-                                (doseq [ev (:app-events result)]
-                                  (cond
-                                    (= (:type ev) :stun-packet)
-                                    (let [parsed (stun/parse-packet (ByteBuffer/wrap (:payload ev)))]
-                                      (println "Got STUN: " (:type parsed))
-                                      (when (or (= (:type parsed) 0x0001) (= (:type parsed) 0x0101))
-                                        (when-not (realized? stun-bound)
-                                          (deliver stun-bound true))))
+                                  (doseq [ev (:app-events result)]
+                                    (cond
+                                      (= (:type ev) :stun-packet)
+                                      (let [parsed (stun/parse-packet (ByteBuffer/wrap (:payload ev)))]
+                                        (println "Got STUN: " (:type parsed))
+                                        (when (or (= (:type parsed) 0x0001) (= (:type parsed) 0x0101))
+                                          (when-not (realized? stun-bound)
+                                            (deliver stun-bound true))))
 
-                                    (or (= (:type ev) :dtls-packet) (= (:type ev) :dtls-handshake-progress))
-                                    (let [hs-status (.getHandshakeStatus engine)]
-                                      (println "Got DTLS. Status: " hs-status)
-                                      (when (or (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
-                                                (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/FINISHED))
-                                        (when (realized? stun-bound)
-                                          (when-not (realized? dtls-handshake-done)
-                                            (deliver dtls-handshake-done true)))))
+                                      (or (= (:type ev) :dtls-packet) (= (:type ev) :dtls-handshake-progress))
+                                      (let [hs-status (.getHandshakeStatus engine)]
+                                        (println "Got DTLS. Status: " hs-status)
+                                        (when (or (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                                                  (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/FINISHED))
+                                          (when (realized? stun-bound)
+                                            (when-not (realized? dtls-handshake-done)
+                                              (deliver dtls-handshake-done true)))))
 
-                                    (= (:type ev) :on-state-change)
-                                    (when (= (:state ev) :established)
-                                      (when-not (realized? sctp-connected)
-                                        (deliver sctp-connected true)))
+                                      (= (:type ev) :on-state-change)
+                                      (when (= (:state ev) :established)
+                                        (when-not (realized? sctp-connected)
+                                          (deliver sctp-connected true)))
 
-                                    (= (:type ev) :on-message)
-                                    (deliver msg-received (String. ^bytes (:payload ev) "UTF-8")))))))))))))
-              (catch Exception e
-                (println "Error in UDP loop:" e)
-                (.printStackTrace e))))))
+                                      (= (:type ev) :on-message)
+                                      (deliver msg-received (String. ^bytes (:payload ev) "UTF-8")))))))))))))
+                (catch Exception e
+                  (println "Error in UDP loop:" e)
+                  (.printStackTrace e))))))
 
         ;; Setup Observer and PC
         (let [java-dc (atom nil)

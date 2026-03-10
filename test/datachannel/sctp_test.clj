@@ -95,47 +95,47 @@
 (def chunk-gen
   (tc-gen/one-of
    [(tc-gen/hash-map :type (tc-gen/return :init)
-                  :init-tag uint32-gen
-                  :a-rwnd uint32-gen
-                  :outbound-streams (tc-gen/choose 0 65535)
-                  :inbound-streams (tc-gen/choose 0 65535)
-                  :initial-tsn uint32-gen
-                  :params (tc-gen/return {}))
+                     :init-tag uint32-gen
+                     :a-rwnd uint32-gen
+                     :outbound-streams (tc-gen/choose 0 65535)
+                     :inbound-streams (tc-gen/choose 0 65535)
+                     :initial-tsn uint32-gen
+                     :params (tc-gen/return {}))
     (tc-gen/hash-map :type (tc-gen/return :init-ack)
-                  :init-tag uint32-gen
-                  :a-rwnd uint32-gen
-                  :outbound-streams (tc-gen/choose 0 65535)
-                  :inbound-streams (tc-gen/choose 0 65535)
-                  :initial-tsn uint32-gen
-                  :params (tc-gen/return {}))
+                     :init-tag uint32-gen
+                     :a-rwnd uint32-gen
+                     :outbound-streams (tc-gen/choose 0 65535)
+                     :inbound-streams (tc-gen/choose 0 65535)
+                     :initial-tsn uint32-gen
+                     :params (tc-gen/return {}))
     (tc-gen/hash-map :type (tc-gen/return :cookie-echo)
-                  :cookie byte-array-gen)
+                     :cookie byte-array-gen)
     (tc-gen/hash-map :type (tc-gen/return :cookie-ack))
     (tc-gen/fmap (fn [data] (assoc data :flags (data-flags data)))
-              (tc-gen/hash-map :type (tc-gen/return :data)
-                            :tsn uint32-gen
-                            :stream-id (tc-gen/choose 0 65535)
-                            :seq-num (tc-gen/choose 0 65535)
-                            :protocol (tc-gen/elements [:webrtc/string :webrtc/binary])
-                            :payload byte-array-gen
-                            :unordered tc-gen/boolean
-                            :beginning tc-gen/boolean
-                            :ending tc-gen/boolean))
+                 (tc-gen/hash-map :type (tc-gen/return :data)
+                                  :tsn uint32-gen
+                                  :stream-id (tc-gen/choose 0 65535)
+                                  :seq-num (tc-gen/choose 0 65535)
+                                  :protocol (tc-gen/elements [:webrtc/string :webrtc/binary])
+                                  :payload byte-array-gen
+                                  :unordered tc-gen/boolean
+                                  :beginning tc-gen/boolean
+                                  :ending tc-gen/boolean))
     (tc-gen/hash-map :type (tc-gen/return :sack)
-                  :cum-tsn-ack uint32-gen
-                  :a-rwnd uint32-gen
-                  :gap-blocks (tc-gen/vector (tc-gen/tuple (tc-gen/choose 0 65535) (tc-gen/choose 0 65535)))
-                  :duplicate-tsns (tc-gen/vector uint32-gen))
+                     :cum-tsn-ack uint32-gen
+                     :a-rwnd uint32-gen
+                     :gap-blocks (tc-gen/vector (tc-gen/tuple (tc-gen/choose 0 65535) (tc-gen/choose 0 65535)))
+                     :duplicate-tsns (tc-gen/vector uint32-gen))
     (tc-gen/hash-map :type (tc-gen/return :heartbeat)
-                  :params (tc-gen/return {}))
+                     :params (tc-gen/return {}))
     (tc-gen/hash-map :type (tc-gen/return :heartbeat-ack)
-                  :params (tc-gen/return {}))]))
+                     :params (tc-gen/return {}))]))
 
 (def packet-gen
   (tc-gen/hash-map :src-port (tc-gen/choose 0 65535)
-                :dst-port (tc-gen/choose 0 65535)
-                :verification-tag uint32-gen
-                :chunks (tc-gen/vector chunk-gen)))
+                   :dst-port (tc-gen/choose 0 65535)
+                   :verification-tag uint32-gen
+                   :chunks (tc-gen/vector chunk-gen)))
 
 ;; Tests
 
@@ -165,8 +165,8 @@
 (tc-ct/defspec test-packet-encoding-decoding
   100
   (prop/for-all [packet packet-gen]
-    (let [decoded (round-trip packet)]
-      (packet= packet decoded))))
+                (let [decoded (round-trip packet)]
+                  (packet= packet decoded))))
 
 (deftest manual-data-chunk-test
   (let [data-chunk {:type :data

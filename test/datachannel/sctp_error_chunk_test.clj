@@ -9,10 +9,9 @@
           error-called (atom false)
           received-causes (atom nil)
           _on-error (atom (fn [causes]
-                           (reset! error-called true)
-                           (reset! received-causes causes)))
-          _conn {:state state-atom :sctp-out out-queue }
-
+                            (reset! error-called true)
+                            (reset! received-causes causes)))
+          _conn {:state state-atom :sctp-out out-queue}
 
           error-packet {:src-port 5000 :dst-port 5001 :verification-tag 0
                         :chunks [{:type :error

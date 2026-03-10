@@ -34,11 +34,11 @@
           app-events2 (:app-events res2)]
 
         ;; Since max-retransmissions is 0, the first error count increment (to 1) should exceed it and close the connection.
-        (is (= :closed (:state new-state2)) "Connection should be closed")
-        (is (= 1 (count network-out2)) "Should send an abort packet")
-        (is (= :abort (-> network-out2 first :chunks first :type)) "Packet should be abort")
-        (is (= 1 (count app-events2)) "Should generate an app event")
-        (is (= :on-error (:type (first app-events2))) "App event should be on-error")
-        (is (= :max-retransmissions (:cause (first app-events2))) "Cause should be max-retransmissions")
-        (is (nil? (get-in new-state2 [:timers :sctp/t-heartbeat])) "Heartbeat timer should be removed")
-        (is (nil? (get-in new-state2 [:timers :sctp/t-heartbeat-rtx])) "Heartbeat RTX timer should be removed"))))
+      (is (= :closed (:state new-state2)) "Connection should be closed")
+      (is (= 1 (count network-out2)) "Should send an abort packet")
+      (is (= :abort (-> network-out2 first :chunks first :type)) "Packet should be abort")
+      (is (= 1 (count app-events2)) "Should generate an app event")
+      (is (= :on-error (:type (first app-events2))) "App event should be on-error")
+      (is (= :max-retransmissions (:cause (first app-events2))) "Cause should be max-retransmissions")
+      (is (nil? (get-in new-state2 [:timers :sctp/t-heartbeat])) "Heartbeat timer should be removed")
+      (is (nil? (get-in new-state2 [:timers :sctp/t-heartbeat-rtx])) "Heartbeat RTX timer should be removed"))))

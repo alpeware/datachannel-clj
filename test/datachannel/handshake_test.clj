@@ -187,7 +187,6 @@
       (is (= :success (run-handshake-loop-with-reordering client-engine server-engine)))
       (is (= "Hello Reordered" (exchange-data client-engine server-engine "Hello Reordered"))))))
 
-
 (deftest test-not-enabled-rc4
   (testing "DTLS engines do not enable RC4 ciphers by default"
     (let [cert-data (dtls/generate-cert)
@@ -232,19 +231,19 @@
                               supported-suites)]
       (doseq [suite test-suites]
         (let [client-engine (dtls/create-engine ctx true)
-                    server-engine (dtls/create-engine ctx false)
+              server-engine (dtls/create-engine ctx false)
                     ;; Set the client to only support this specific suite
-                    _ (.setEnabledCipherSuites client-engine (into-array String [suite]))
+              _ (.setEnabledCipherSuites client-engine (into-array String [suite]))
 
                     ;; Ensure server supports it
-                    server-suites (into #{} (.getEnabledCipherSuites server-engine))]
-                (when (server-suites suite)
-                  (.beginHandshake client-engine)
-                  (.beginHandshake server-engine)
-                  (is (= :success (run-handshake-loop client-engine server-engine))
-                      (str "Handshake failed for cipher suite: " suite))
-                  (is (= "Cipher OK" (exchange-data client-engine server-engine "Cipher OK"))
-                      (str "Data exchange failed for cipher suite: " suite))))))))
+              server-suites (into #{} (.getEnabledCipherSuites server-engine))]
+          (when (server-suites suite)
+            (.beginHandshake client-engine)
+            (.beginHandshake server-engine)
+            (is (= :success (run-handshake-loop client-engine server-engine))
+                (str "Handshake failed for cipher suite: " suite))
+            (is (= "Cipher OK" (exchange-data client-engine server-engine "Cipher OK"))
+                (str "Data exchange failed for cipher suite: " suite))))))))
 
 (deftest test-client-auth
   (testing "DTLS client authentication requirement"
@@ -514,11 +513,11 @@
                                             (= (aget % 0) (unchecked-byte 0x16))
                                             (= (aget % 13) (unchecked-byte 0x03)))
                                       packets-s)]
-                  (.compact client-in)
-                  (doseq [p mutated-packets]
-                    (.put client-in (ByteBuffer/wrap p)))
-                  (.flip client-in)
-                  (recur (inc i) (or invalidated-cookie has-mutated))))))))))
+                (.compact client-in)
+                (doseq [p mutated-packets]
+                  (.put client-in (ByteBuffer/wrap p)))
+                (.flip client-in)
+                (recur (inc i) (or invalidated-cookie has-mutated))))))))))
 
 (defn- run-handshake-loop-invalid-records [client-engine server-engine]
   (let [client-out (ByteBuffer/allocate 65536)
@@ -545,27 +544,27 @@
             (let [res-c (dtls/handshake client-engine client-in client-out)
                   packets-c (:packets res-c)
                   mutated-packets
-                    (map (fn [^bytes p]
-                           (if (and (not invalidated-records)
-                                    (>= (alength p) 60)
-                                    (= (aget p 0) (unchecked-byte 0x16))
-                                    (= (aget p 13) (unchecked-byte 0x01))
-                                    (= (aget p 0x3B) (unchecked-byte 0x00))
-                                    (> (aget p 0x3C) 0))
-                             (do
-                               (let [last-idx (dec (alength p))
-                                     last-byte (aget p last-idx)]
-                                 (if (= last-byte (unchecked-byte 0xFF))
-                                   (aset p last-idx (unchecked-byte 0xFE))
-                                   (aset p last-idx (unchecked-byte 0xFF))))
-                               p)
-                             p))
-                         packets-c)
-                    has-mutated (some #(and (>= (alength %) 60)
-                                            (= (aget % 0) (unchecked-byte 0x16))
-                                            (= (aget % 13) (unchecked-byte 0x01))
-                                            (= (aget % 0x3B) (unchecked-byte 0x00))
-                                            (> (aget % 0x3C) 0))
+                  (map (fn [^bytes p]
+                         (if (and (not invalidated-records)
+                                  (>= (alength p) 60)
+                                  (= (aget p 0) (unchecked-byte 0x16))
+                                  (= (aget p 13) (unchecked-byte 0x01))
+                                  (= (aget p 0x3B) (unchecked-byte 0x00))
+                                  (> (aget p 0x3C) 0))
+                           (do
+                             (let [last-idx (dec (alength p))
+                                   last-byte (aget p last-idx)]
+                               (if (= last-byte (unchecked-byte 0xFF))
+                                 (aset p last-idx (unchecked-byte 0xFE))
+                                 (aset p last-idx (unchecked-byte 0xFF))))
+                             p)
+                           p))
+                       packets-c)
+                  has-mutated (some #(and (>= (alength %) 60)
+                                          (= (aget % 0) (unchecked-byte 0x16))
+                                          (= (aget % 13) (unchecked-byte 0x01))
+                                          (= (aget % 0x3B) (unchecked-byte 0x00))
+                                          (> (aget % 0x3C) 0))
                                     packets-c)]
               (.compact server-in)
               (doseq [p mutated-packets]
@@ -602,7 +601,7 @@
       (.beginHandshake server-engine)
       (is (thrown? javax.net.ssl.SSLHandshakeException
                    (run-handshake-loop-invalid-records client-engine server-engine))))))
-           
+
 (defn- run-handshake-loop-invalid-initial-client-hello [client-engine server-engine]
   (let [client-out (ByteBuffer/allocate 65536)
         server-out (ByteBuffer/allocate 65536)
@@ -836,7 +835,6 @@
 
       (check-buffer-underflow-on-unwrap server-engine client-engine "Server" "Client")
       (check-buffer-underflow-on-unwrap client-engine server-engine "Client" "Server"))))
-
 
 (defn- run-handshake-loop-retransmission [client-engine server-engine]
   (let [client-out (ByteBuffer/allocate 65536)
