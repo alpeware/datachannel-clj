@@ -188,54 +188,54 @@
           old-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) old-q))
           result (loop [remaining-frags fragments
                         current-state state
-                          current-tsn (or (:next-tsn state) 0)
-                          idx 0]
-                     (if (empty? remaining-frags)
-                       (let [s1 (-> current-state
-                                    (assoc :next-tsn current-tsn)
-                                    (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
-                             interval (get s1 :heartbeat-interval 30000)
-                             s2 (if (and (pos? interval) (contains? (:timers s1) :sctp/t-heartbeat))
-                                  (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
-                                  s1)
-                             s3 (-> s2
-                                    (update-in [:metrics :unacked-data] (fnil + 0) (count fragments))
-                                    (cond-> is-established?
-                                      (-> (update-in [:metrics :tx-packets] (fnil + 0) (count fragments))
-                                          (update-in [:metrics :tx-bytes] (fnil + 0) len))))
-                             s4 (if (and is-established? (nil? (get-in s3 [:timers :sctp/t3-rtx])))
-                                  (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-                                  s3)]
-                         (if is-established?
-                           (loop [current-state s4
-                                  all-pkts []
-                                  passes 0]
-                             (if (> passes 100)
-                               {:new-state current-state :network-out all-pkts :app-events []}
-                               (let [pack-res (packetize current-state [])
-                                     pkts (:network-out pack-res)]
-                                 (if (empty? pkts)
-                                   {:new-state current-state :network-out all-pkts :app-events []}
-                                   (recur (:new-state pack-res) (into all-pkts pkts) (inc passes))))))
-                           {:new-state s4 :network-out [] :app-events []}))
-                       (let [frag (first remaining-frags)
-                             total-frags (count fragments)
-                             flags (if (= total-frags 1) 3
-                                       (cond
-                                         (= idx 0) 2
-                                         (= idx (dec total-frags)) 1
-                                         :else 0))
-                             data-chunk {:type :data
-                                         :flags flags
-                                         :tsn current-tsn
-                                         :stream-id stream-id
-                                         :seq-num ssn
-                                         :protocol protocol
-                                         :payload frag}
-                             queue-item {:tsn current-tsn :chunk data-chunk :sent-at now-ms :retries 0 :sent? false}
-                             new-state (assoc-in current-state [:streams stream-id :send-queue]
-                                                 (conj (get-in current-state [:streams stream-id :send-queue] []) queue-item))]
-                         (recur (rest remaining-frags) new-state (inc current-tsn) (inc idx)))))
+                        current-tsn (or (:next-tsn state) 0)
+                        idx 0]
+                   (if (empty? remaining-frags)
+                     (let [s1 (-> current-state
+                                  (assoc :next-tsn current-tsn)
+                                  (assoc-in [:streams stream-id :next-ssn] (inc ssn)))
+                           interval (get s1 :heartbeat-interval 30000)
+                           s2 (if (and (pos? interval) (contains? (:timers s1) :sctp/t-heartbeat))
+                                (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
+                                s1)
+                           s3 (-> s2
+                                  (update-in [:metrics :unacked-data] (fnil + 0) (count fragments))
+                                  (cond-> is-established?
+                                    (-> (update-in [:metrics :tx-packets] (fnil + 0) (count fragments))
+                                        (update-in [:metrics :tx-bytes] (fnil + 0) len))))
+                           s4 (if (and is-established? (nil? (get-in s3 [:timers :sctp/t3-rtx])))
+                                (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+                                s3)]
+                       (if is-established?
+                         (loop [current-state s4
+                                all-pkts []
+                                passes 0]
+                           (if (> passes 100)
+                             {:new-state current-state :network-out all-pkts :app-events []}
+                             (let [pack-res (packetize current-state [])
+                                   pkts (:network-out pack-res)]
+                               (if (empty? pkts)
+                                 {:new-state current-state :network-out all-pkts :app-events []}
+                                 (recur (:new-state pack-res) (into all-pkts pkts) (inc passes))))))
+                         {:new-state s4 :network-out [] :app-events []}))
+                     (let [frag (first remaining-frags)
+                           total-frags (count fragments)
+                           flags (if (= total-frags 1) 3
+                                     (cond
+                                       (= idx 0) 2
+                                       (= idx (dec total-frags)) 1
+                                       :else 0))
+                           data-chunk {:type :data
+                                       :flags flags
+                                       :tsn current-tsn
+                                       :stream-id stream-id
+                                       :seq-num ssn
+                                       :protocol protocol
+                                       :payload frag}
+                           queue-item {:tsn current-tsn :chunk data-chunk :sent-at now-ms :retries 0 :sent? false}
+                           new-state (assoc-in current-state [:streams stream-id :send-queue]
+                                               (conj (get-in current-state [:streams stream-id :send-queue] []) queue-item))]
+                       (recur (rest remaining-frags) new-state (inc current-tsn) (inc idx)))))
           new-q (get-in (:new-state result) [:streams stream-id :send-queue] [])
           new-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) new-q))
           high-threshold (get state :buffered-amount-high-threshold 1048576)
