@@ -173,12 +173,8 @@
 (defn get-buffered-amount
   "Returns the current size (in bytes) of the send queue for a given stream."
   [node stream-id]
-  (let [state @(:state-atom node)
-        q (get-in state [:streams stream-id :send-queue] [])]
-    (reduce + (map (fn [item]
-                     (let [payload (get-in item [:chunk :payload])]
-                       (if payload (alength ^bytes payload) 0)))
-                   q))))
+  (let [state @(:state-atom node)]
+    (dc/get-buffered-amount state stream-id)))
 
 (defn get-state
   "Returns the current state of the connection (e.g., :established, :closed)."

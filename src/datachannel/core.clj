@@ -14,6 +14,13 @@
 
 (def buffer-size 65536)
 
+(defn get-buffered-amount [state stream-id]
+  (let [q (get-in state [:streams stream-id :send-queue] [])]
+    (reduce + (map (fn [item]
+                     (let [payload (get-in item [:chunk :payload])]
+                       (if payload (alength ^bytes payload) 0)))
+                   q))))
+
 (defn packetize [state app-events]
   (packetize/packetize state app-events))
 
