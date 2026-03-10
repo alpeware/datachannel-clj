@@ -186,6 +186,19 @@
   [node]
   (:metrics @(:state-atom node)))
 
+(defn create-data-channel!
+  "Creates a new data channel matching the W3C RTCDataChannel specification.
+  Returns the assigned channel id."
+  [node label options]
+  (let [id-box (atom nil)]
+    (apply-action! node
+                   (fn [st]
+                     (let [res (dc/create-data-channel st label options)]
+                       (reset! id-box (:channel-id res))
+                       res))
+                   {})
+    @id-box))
+
 (defn set-max-message-size!
   "Sets the maximum message size that can be sent over the connection."
   [node max-size]
@@ -195,18 +208,16 @@
                  {}))
 
 (defn send!
-  "Sends a message (string or byte array) to the connected peer over the given stream-id (default 0)."
-  ([node message]
-   (send! node message 0))
-  ([node message stream-id]
-   (let [payload (if (string? message)
-                   (.getBytes ^String message "UTF-8")
-                   message)
-         protocol (if (string? message) :webrtc/string :webrtc/binary)]
-     (apply-action! node
-                    (fn [st]
-                      (dc/send-data st payload stream-id protocol (System/currentTimeMillis)))
-                    {}))))
+  "Sends a message (string or byte array) to the connected peer over the given channel-id."
+  [node message channel-id]
+  (let [payload (if (string? message)
+                  (.getBytes ^String message "UTF-8")
+                  message)
+        protocol (if (string? message) :webrtc/string :webrtc/binary)]
+    (apply-action! node
+                   (fn [st]
+                     (dc/send-data st payload channel-id protocol (System/currentTimeMillis)))
+                   {})))
 
 (defn close!
   "Gracefully shuts down the background loop, the socket, and the selector."

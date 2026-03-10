@@ -75,16 +75,16 @@ Here is a concise, elegant example of how a consumer uses `datachannel.api` to e
         ;; Callbacks definition
         callbacks {:on-open (fn []
                               (println "Connection established!")
-                              ;; Send data over default stream 0
-                              (api/send! node "Hello, WebRTC!")
-                              ;; Multiplex data over stream 1
-                              (api/send! node "Data on stream 1" 1))
+                              ;; Create a data channel compliant with the W3C spec
+                              (let [channel-id (api/create-data-channel! node "gossip" {:ordered false :max-retransmits 0})]
+                                ;; Send data over the newly created channel
+                                (api/send! node "Hello, WebRTC!" channel-id)))
 
                    :on-message (fn [evt]
                                  (if (:is-string? evt)
-                                   (println "Received string on stream" (:stream-id evt) ":"
+                                   (println "Received string on channel" (:stream-id evt) ":"
                                             (String. ^bytes (:payload evt) "UTF-8"))
-                                   (println "Received binary data on stream" (:stream-id evt))))
+                                   (println "Received binary data on channel" (:stream-id evt))))
 
                    :on-buffered-amount-high (fn [evt]
                                               (println "High water mark reached on stream" (:stream-id evt) "... Pausing sends!"))
