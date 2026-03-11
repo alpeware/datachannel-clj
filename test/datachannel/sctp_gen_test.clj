@@ -17,6 +17,38 @@
 (defn queue-size [q]
   (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q)))
 
+(defn valid-congestion-metrics? [state]
+  (and (>= (get state :flight-size 0) 0)
+       (>= (get state :cwnd 0) 0)))
+
+(defn valid-buffer-amounts? [state]
+  (every? (fn [s]
+            (= (dc/get-buffered-amount state s)
+               (queue-size (get-in state [:streams s :send-queue] []))))
+          (keys (:streams state))))
+
+(defn valid-buffered-amount-low-events? [old-buffered new-buffered threshold app-events]
+  (every? (fn [s]
+            (let [o (get old-buffered s 0)
+                  n (get new-buffered s 0)
+                  crossed? (and (> o threshold) (<= n threshold))
+                  evt-present? (some #(and (= (:type %) :on-buffered-amount-low)
+                                           (= (:stream-id %) s))
+                                     app-events)]
+              (= crossed? (boolean evt-present?))))
+          (keys new-buffered)))
+
+(defn valid-total-buffered-low-events? [old-total new-total threshold app-events]
+  (let [crossed-total? (and (> old-total threshold) (<= new-total threshold))
+        total-evt-present? (some #(= (:type %) :on-total-buffered-amount-low) app-events)]
+    (= crossed-total? (boolean total-evt-present?))))
+
+(defn valid-no-spurious-ack? [op-type timers-triggered? next-network-out]
+  (let [spurious-ack? (and (= op-type :advance-time)
+                           (not timers-triggered?)
+                           (seq next-network-out))]
+    (not spurious-ack?)))
+
 (defn setup-established-state []
   (let [init-state (dc/create-connection {} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
@@ -60,7 +92,7 @@
                              (>= cwnd 0)))
                       (let [[op-type arg1 arg2 arg3] (first ops)
                             old-buffered (into {} (map (fn [s] [s (dc/get-buffered-amount state s)]) (keys (:streams state))))
-                            [next-state next-now app-events]
+                            [next-state next-now app-events next-network-out]
                             (case op-type
                               :advance-time
                               (let [new-now (+ now-ms arg1)
@@ -68,50 +100,45 @@
                                                   (if (<= (:expires-at t) new-now)
                                                     (let [r (dc/handle-timeout (:s acc) timer-id new-now)]
                                                       {:s (:new-state r)
-                                                       :evts (into (:evts acc) (:app-events r []))})
+                                                       :evts (into (:evts acc) (:app-events r []))
+                                                       :network-out (into (:network-out acc) (:network-out r []))})
                                                     acc))
-                                                {:s state :evts []}
+                                                {:s state :evts [] :network-out []}
                                                 (:timers state))]
-                                [(:s res) new-now (:evts res)])
+                                [(:s res) new-now (:evts res) (:network-out res)])
                               :receive-packet
                               (let [res (dc/handle-receive state arg1 now-ms nil)]
-                                [(:new-state res) now-ms (:app-events res)])
+                                [(:new-state res) now-ms (:app-events res) (:network-out res)])
                               :send-data
                               (try
                                 (let [res (dc/send-data state arg1 arg2 arg3 now-ms)]
-                                  [(:new-state res) now-ms (:app-events res)])
+                                  [(:new-state res) now-ms (:app-events res) (:network-out res)])
                                 (catch clojure.lang.ExceptionInfo e
                                   ;; Expect too large or empty message exceptions
                                   (if (or (= (:type (ex-data e)) :empty-payload)
                                           (= (:type (ex-data e)) :too-large))
-                                    [state now-ms []]
+                                    [state now-ms [] []]
                                     (throw e)))))
 
                             new-buffered (into {} (map (fn [s] [s (dc/get-buffered-amount next-state s)]) (keys (:streams next-state))))
                             low-threshold (get next-state :buffered-amount-low-threshold 0)
                             old-total (reduce + (vals old-buffered))
                             new-total (reduce + (vals new-buffered))
-                            total-low-threshold (get next-state :total-buffered-amount-low-threshold 0)]
-                        (if (or (< (get next-state :flight-size 0) 0)
-                                (< (get next-state :cwnd 0) 0)
-                                (not (every? (fn [s]
-                                               (= (dc/get-buffered-amount next-state s)
-                                                  (queue-size (get-in next-state [:streams s :send-queue] []))))
-                                             (keys (:streams next-state))))
-                                ;; Check buffered-amount-low events
-                                (not (every? (fn [s]
-                                               (let [o (get old-buffered s 0)
-                                                     n (get new-buffered s 0)
-                                                     crossed? (and (> o low-threshold) (<= n low-threshold))
-                                                     evt-present? (some #(and (= (:type %) :on-buffered-amount-low)
-                                                                              (= (:stream-id %) s))
-                                                                        app-events)]
-                                                 (= crossed? (boolean evt-present?))))
-                                             (keys new-buffered)))
-                                ;; Check total-buffered-amount-low events
-                                (not (let [crossed-total? (and (> old-total total-low-threshold) (<= new-total total-low-threshold))
-                                           total-evt-present? (some #(= (:type %) :on-total-buffered-amount-low) app-events)]
-                                       (= crossed-total? (boolean total-evt-present?)))))
+                            total-low-threshold (get next-state :total-buffered-amount-low-threshold 0)
+
+                            ;; Invariant: Advance Time Does Not Trigger Spurious Ack
+                            ;; Spurious ack here means: if we just advance time and NO timers were triggered (or if it's purely advancing time with no timers at all),
+                            ;; we shouldn't be randomly spitting out network packets like SACKs or anything else.
+                            timers-triggered? (if (= op-type :advance-time)
+                                                (some (fn [[_ t]] (<= (:expires-at t) (+ now-ms arg1))) (:timers state))
+                                                true)
+
+                            valid? (and (valid-congestion-metrics? next-state)
+                                        (valid-buffer-amounts? next-state)
+                                        (valid-buffered-amount-low-events? old-buffered new-buffered low-threshold app-events)
+                                        (valid-total-buffered-low-events? old-total new-total total-low-threshold app-events)
+                                        (valid-no-spurious-ack? op-type timers-triggered? next-network-out))]
+                        (if-not valid?
                           false
                           (recur next-state (rest ops) next-now))))))))
 
