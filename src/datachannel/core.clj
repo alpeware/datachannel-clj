@@ -188,6 +188,8 @@
      :seen-candidates #{}
      :data-channels {}
      :client-mode? client-mode?
+     :local-outbound-streams (get options :local-outbound-streams 65535)
+     :local-inbound-streams (get options :local-inbound-streams 65535)
      :max-queue-size (get options :max-queue-size)
      :dtls/engine engine}))
 

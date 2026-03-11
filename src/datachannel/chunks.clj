@@ -85,25 +85,41 @@
         {:next-state s3 :next-events []}))))
 
 (defmethod process-chunk :init [state chunk _packet _now-ms]
-  (let [s1 (-> state
+  (let [local-out (get state :local-outbound-streams 65535)
+        local-in (get state :local-inbound-streams 65535)
+        remote-out (:outbound-streams chunk 65535)
+        remote-in (:inbound-streams chunk 65535)
+        negotiated-out (min local-out remote-in)
+        negotiated-in (min local-in remote-out)
+        s1 (-> state
                (assoc :remote-ver-tag (:init-tag chunk)
                       :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1)
                       :ssn 0
+                      :negotiated-outbound-streams negotiated-out
+                      :negotiated-inbound-streams negotiated-in
                       :state :cookie-wait))
         cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
         init-ack-chunk {:type :init-ack
                         :init-tag (:local-ver-tag s1)
                         :a-rwnd 100000
-                        :outbound-streams (:inbound-streams chunk)
-                        :inbound-streams (:outbound-streams chunk)
+                        :outbound-streams negotiated-out
+                        :inbound-streams negotiated-in
                         :initial-tsn (:next-tsn s1)
                         :params {:cookie cookie-bytes}}
         s2 (update s1 :pending-control-chunks conj init-ack-chunk)]
     {:next-state s2 :next-events []}))
 
 (defmethod process-chunk :init-ack [state chunk packet now-ms]
-  (let [s1 (assoc state :remote-ver-tag (:init-tag chunk)
-                  :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1))]
+  (let [local-out (get state :local-outbound-streams 65535)
+        local-in (get state :local-inbound-streams 65535)
+        remote-out (:outbound-streams chunk 65535)
+        remote-in (:inbound-streams chunk 65535)
+        negotiated-out (min local-out remote-in)
+        negotiated-in (min local-in remote-out)
+        s1 (assoc state :remote-ver-tag (:init-tag chunk)
+                  :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1)
+                  :negotiated-outbound-streams negotiated-out
+                  :negotiated-inbound-streams negotiated-in)]
     (if-let [cookie (get-in chunk [:params :cookie])]
       (let [cookie-echo-chunk {:type :cookie-echo :cookie cookie}
             out-packet {:src-port (:dst-port packet)
