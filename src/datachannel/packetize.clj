@@ -81,33 +81,11 @@
                     bundled-chunks
                     current-size
                     new-flight-size
-                    new-app-events]}))
-        (let [chunk-size (+ 16 (if (:payload data-chunk) (alength ^bytes (:payload data-chunk)) 0))
-              cwnd (get state :cwnd 1000000)]
-          (if (and (> current-flight-size 0) (> (+ current-flight-size chunk-size) cwnd))
+                    new-app-events]})
+          (let [chunk-size (+ 16 (if (:payload data-chunk) (alength ^bytes (:payload data-chunk)) 0))
+                cwnd (get state :cwnd 1000000)]
+            (if (and (> current-flight-size 0) (> (+ current-flight-size chunk-size) cwnd))
               ;; Congestion window full
-            (let [net-out (build-network-out state bundled-chunks)
-                  new-state (-> state
-                                (assoc :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
-                                (cond-> (seq net-out) (update-in [:metrics :tx-packets] (fnil + 0) (count net-out))))]
-              {:action :return
-               :result {:new-state new-state
-                        :network-out net-out
-                        :app-events app-events}})
-            (if (or (empty? bundled-chunks) (<= (+ current-size chunk-size) max-payload-size))
-              (let [new-q (assoc q data-idx (assoc data-item :sent? true))
-                    new-streams (assoc-in current-streams [stream-id :send-queue] new-q)
-                    new-flight-size (if (= (:retries data-item) 0)
-                                      (+ current-flight-size chunk-size)
-                                      current-flight-size)]
-                {:action :recur
-                 :args [remaining-ctrl
-                        new-streams
-                        (conj bundled-chunks data-chunk)
-                        (+ current-size chunk-size)
-                        new-flight-size
-                        app-events]})
-                ;; Halting when MTU is reached
               (let [net-out (build-network-out state bundled-chunks)
                     new-state (-> state
                                   (assoc :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
@@ -115,7 +93,29 @@
                 {:action :return
                  :result {:new-state new-state
                           :network-out net-out
-                          :app-events app-events}})))))
+                          :app-events app-events}})
+              (if (or (empty? bundled-chunks) (<= (+ current-size chunk-size) max-payload-size))
+                (let [new-q (assoc q data-idx (assoc data-item :sent? true))
+                      new-streams (assoc-in current-streams [stream-id :send-queue] new-q)
+                      new-flight-size (if (= (:retries data-item) 0)
+                                        (+ current-flight-size chunk-size)
+                                        current-flight-size)]
+                  {:action :recur
+                   :args [remaining-ctrl
+                          new-streams
+                          (conj bundled-chunks data-chunk)
+                          (+ current-size chunk-size)
+                          new-flight-size
+                          app-events]})
+                ;; Halting when MTU is reached
+                (let [net-out (build-network-out state bundled-chunks)
+                      new-state (-> state
+                                    (assoc :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
+                                    (cond-> (seq net-out) (update-in [:metrics :tx-packets] (fnil + 0) (count net-out))))]
+                  {:action :return
+                   :result {:new-state new-state
+                            :network-out net-out
+                            :app-events app-events}}))))))
       ;; No more data in streams
       (let [net-out (build-network-out state bundled-chunks)
             new-state (-> state
