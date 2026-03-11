@@ -145,35 +145,16 @@
             ;; Wait for remote candidate info from Java
             (println "Waiting for Java ICE candidate...")
             (loop [i 0]
-              (if (or (and @remote-candidate-ip @remote-candidate-port) (> i 50))
+              (if (or (and @remote-candidate-ip @remote-candidate-port) (> i 100))
                 nil
                 (do (Thread/sleep 100) (recur (inc i)))))
 
-            (future
-              (loop [i 0]
-                (if (or (realized? sctp-connected) (> i 50))
-                  nil
-                  (do
-                    ;; actively knock java side to unlock its STUN/ICE state
-                    (when-let [creds @remote-creds]
-                      (try
-                        (let [req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
-                              remote-cand (first (.getIceCandidates pc))
-                              addr (if remote-cand
-                                     (let [cand-info (sdp/parse-candidate (.sdp remote-cand))]
-                                       (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info))))
-                                     (InetSocketAddress. ^String local-ip (int port)))]
-                          (when-let [channel @(:channel node)]
-                            (try (.send channel req addr)
-                                 (catch Exception _))))
-                        (catch Exception _e)))
-                    (Thread/sleep 100)
-                    (recur (inc i))))))
-
-            ;; Start Clojure API node
+;; Start Clojure API node
             (api/start! node
                         {:ip (or @remote-candidate-ip local-ip)
-                         :port (or @remote-candidate-port port)}
+                         :port (or @remote-candidate-port port)
+                         :remote-ice-ufrag (:ufrag @remote-creds)
+                         :remote-ice-pwd (:pwd @remote-creds)}
                         callbacks)
 
             (println "Waiting for ICE Connected state in Clojure...")

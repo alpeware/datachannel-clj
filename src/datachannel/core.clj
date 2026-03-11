@@ -139,7 +139,8 @@
                           (update :network-out (fn [no] (into (vec packets) no)))
                           (update :app-events conj {:type :dtls-handshake-progress})))
                     {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]}))
-                (catch Exception _
+                (catch Exception e
+                  (println "DTLS HANDSHAKE EXCEPTION" (.getMessage e))
                   {:new-state state :network-out [] :app-events []})))))
 
         ;; SCTP (Default, raw)
@@ -157,7 +158,7 @@
      :local-ver-tag local-ver-tag
      :next-tsn 0
      :ssn 0
-     :timers {}
+     :timers (if (seq (get options :remote-candidates [])) {:stun/check-candidates {:expires-at 0}} {})
      :heartbeat-interval (get options :heartbeat-interval 30000)
      :heartbeat-error-count 0
      :rto-initial (get options :rto-initial 1000)
