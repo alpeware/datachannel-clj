@@ -98,8 +98,6 @@
     - [x] Doesnt Send More Than Max Burst Packets
     - [ ] Is Ready For Handover When Established
     - [ ] Send Messages After Handover
-    - [ ] Can Detect Dcsctp Implementation
-    - [ ] Both Can Detect Dcsctp Implementation
     - [ ] Can Lose First Ordered Message
     - [ ] Close Two Streams At The Same Time
     - [ ] Close Three Streams At The Same Time
