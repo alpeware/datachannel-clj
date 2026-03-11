@@ -32,6 +32,7 @@
             [datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test]
             [datachannel.sctp-resend-init-and-establish-connection-test]
             [datachannel.sctp-resend-cookie-echo-and-establish-connection-test]
+            [datachannel.sctp-exposes-the-number-of-negotiated-streams-test]
             [datachannel.sctp-shutdown-timer-test]
             [datachannel.sctp-establish-connection-lost-cookie-ack-test]
             [datachannel.sctp-attempt-connect-without-cookie-test]
@@ -98,6 +99,7 @@
 
    ;; Group 4: Pure/Stateless tests part 3
    ['datachannel.sctp-tsn-wraparound-test
+    'datachannel.sctp-exposes-the-number-of-negotiated-streams-test
     'datachannel.sctp-zero-checksum-metrics-test
     'datachannel.sctp-doesnt-send-more-packets-until-cookie-ack-has-been-received-test
     'datachannel.sctp-resend-init-and-establish-connection-test

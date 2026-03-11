@@ -85,6 +85,12 @@
         data-pkts (count (filter (fn [pkt] (and (map? pkt) (some #(= (:type %) :data) (:chunks pkt)))) next-network-out))]
     (<= data-pkts max-burst)))
 
+(defn valid-negotiated-streams? [state]
+  (if (= (:state state) :established)
+    (and (number? (:negotiated-outbound-streams state))
+         (number? (:negotiated-inbound-streams state)))
+    true))
+
 (defn setup-established-state []
   (let [init-state (dc/create-connection {:max-queue-size 50000} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
@@ -101,7 +107,7 @@
                                    :outbound-streams 10
                                    :inbound-streams 10
                                    :initial-tsn 2000
-                                   :params {}}]}
+                                   :params {:cookie (byte-array 32)}}]}
         res-init-ack (@#'dc/handle-sctp-packet state1 init-ack-packet 0)
         state2 (:new-state res-init-ack)
         cookie-echo-packet (first (:network-out res-init-ack))
@@ -179,7 +185,8 @@
                                         (valid-no-spurious-ack? op-type timers-triggered? next-network-out)
                                         (valid-metrics-increase? op-type next-network-out state next-state)
                                         (valid-max-burst? next-state next-network-out)
-                                        (valid-delayed-sack-state? next-state))]
+                                        (valid-delayed-sack-state? next-state)
+                                        (valid-negotiated-streams? next-state))]
                         (if-not valid?
                           false
                           (recur next-state (rest ops) next-now))))))))

@@ -244,13 +244,13 @@
 (defmulti handle-event-type (fn [_state event _now-ms] (:type event)))
 
 (defmethod handle-event-type :connect [state _event now-ms]
-  (let [{:keys [local-ver-tag initial-tsn next-tsn]} state
+  (let [{:keys [local-ver-tag initial-tsn next-tsn local-outbound-streams local-inbound-streams]} state
         init-tsn (or initial-tsn next-tsn 0)
         init-chunk {:type :init
                     :init-tag local-ver-tag
                     :a-rwnd 100000
-                    :outbound-streams 10
-                    :inbound-streams 10
+                    :outbound-streams (or local-outbound-streams 65535)
+                    :inbound-streams (or local-inbound-streams 65535)
                     :initial-tsn init-tsn
                     :params {}}
         init-packet {:src-port 5000
