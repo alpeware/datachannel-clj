@@ -76,8 +76,8 @@
     - [x] Receiving Error Chunk Reports As Callback
     - [x] Set Max Message Size
     - [ ] Send Many Messages
-    - [ ] Sends Messages With Low Lifetime
-    - [ ] Discards Messages With Low Lifetime If Must Buffer
+    - [x] Sends Messages With Low Lifetime
+    - [x] Discards Messages With Low Lifetime If Must Buffer
     - [x] Respects Per Stream Queue Limit
     - [x] Cannot Send Empty Messages
     - [x] Cannot Send Too Large Message

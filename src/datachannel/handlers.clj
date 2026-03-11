@@ -238,7 +238,7 @@
   (let [res (handle-timeout-timer state timer-id now-ms)]
     (if (or (seq (:pending-control-chunks (:new-state res)))
             (= "sctp" (namespace timer-id)))
-      (packetize/packetize (:new-state res) (:app-events res))
+      (packetize/packetize (:new-state res) (:app-events res) now-ms)
       res)))
 
 (defmulti handle-event-type (fn [_state event _now-ms] (:type event)))
@@ -285,4 +285,4 @@
 
 (defn handle-event [state event now-ms]
   (let [res (handle-event-type state event now-ms)]
-    (packetize/packetize (:new-state res) (:app-events res))))
+    (packetize/packetize (:new-state res) (:app-events res) now-ms)))

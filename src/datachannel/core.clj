@@ -22,8 +22,8 @@
                        (if payload (alength ^bytes payload) 0)))
                    q))))
 
-(defn packetize [state app-events]
-  (packetize/packetize state app-events))
+(defn packetize [state app-events now-ms]
+  (packetize/packetize state app-events now-ms))
 
 (defn handle-event [state event now-ms]
   (handlers/handle-event state event now-ms))
@@ -53,7 +53,7 @@
                          (rest remaining-chunks)
                          (into app-events next-events)))))
         reassembled (reassemble (:new-state res) (:app-events res))]
-    (packetize (:new-state reassembled) (:app-events reassembled))))
+    (packetize (:new-state reassembled) (:app-events reassembled) now-ms)))
 
 (defn serialize-network-out
   "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
@@ -282,7 +282,7 @@
                                 (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                                 s3)]
                        (if is-established?
-                         (packetize s4 [])
+                         (packetize s4 [] now-ms)
                          {:new-state s4 :network-out [] :app-events []}))
                      (let [frag (first remaining-frags)
                            total-frags (count fragments)
@@ -299,7 +299,13 @@
                                        :seq-num ssn
                                        :protocol protocol
                                        :payload frag}
-                           queue-item {:tsn current-tsn :chunk data-chunk :sent-at now-ms :retries 0 :sent? false}
+                           queue-item {:tsn current-tsn
+                                       :chunk data-chunk
+                                       :sent-at now-ms
+                                       :retries 0
+                                       :sent? false
+                                       :max-packet-life-time (:max-packet-life-time channel-opts)
+                                       :max-retransmits (:max-retransmits channel-opts)}
                            new-state (assoc-in current-state [:streams stream-id :send-queue]
                                                (conj (get-in current-state [:streams stream-id :send-queue] []) queue-item))]
                        (recur (rest remaining-frags) new-state (inc current-tsn) (inc idx)))))
