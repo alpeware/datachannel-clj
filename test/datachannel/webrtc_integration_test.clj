@@ -1,6 +1,6 @@
 (ns datachannel.webrtc-integration-test
   (:require [clojure.test :refer [deftest is]]
-            [datachannel.core :as dc]
+            [datachannel.api :as api]
             [datachannel.stun :as stun]
             [datachannel.nio :as nio]
             [datachannel.sdp :as sdp])
@@ -52,102 +52,48 @@
       (.add ice-servers ice-server))
     (set! (.iceServers config) ice-servers)
 
-    (let [stun-bound (promise)
-          dtls-handshake-done (promise)
+    (let [ice-candidate-received (promise)
+          ice-connected (promise)
           sctp-connected (promise)
           msg-received (promise)
           remote-creds (atom nil)
           local-ip (get-local-ip)
           port (+ 35000 (rand-int 5000))
-          ice-creds (sdp/generate-ice-credentials)
-          ice-ufrag (:ufrag ice-creds)
-          ice-pwd (:pwd ice-creds)
 
-          channel (nio/create-non-blocking-channel port local-ip)
-          selector (nio/create-selector)
-          _ (nio/register-for-read channel selector)
-          clj-conn (dc/create-connection {:ice-ufrag ice-ufrag
-                                          :ice-pwd ice-pwd
-                                          :mtu 1200} false)
-          cert-data (:cert-data clj-conn)
-          server-cert-fingerprint (:fingerprint cert-data)
-          engine (:dtls/engine clj-conn)
-          state-atom (atom clj-conn)
-          running (atom true)]
+          node (api/create-node {:port port :setup "passive"})
+          ice-ufrag (:ufrag (:ice-creds node))
+          ice-pwd (:pwd (:ice-creds node))
+          server-cert-fingerprint (:fingerprint (:cert-data node))
+
+          callbacks {:on-ice-candidate (fn [evt]
+                                         (println "Clojure got ICE candidate:" evt)
+                                         (when-not (realized? ice-candidate-received)
+                                           (deliver ice-candidate-received true)))
+                     :on-ice-connection-state-change (fn [evt]
+                                                       (println "Clojure ICE connection state change:" (:state evt))
+                                                       (when (= (:state evt) :connected)
+                                                         (when-not (realized? ice-connected)
+                                                           (deliver ice-connected true))))
+                     :on-open (fn [evt]
+                                (println "Clojure SCTP data channel open:" evt)
+                                (when-not (realized? sctp-connected)
+                                  (deliver sctp-connected true)))
+                     :on-message (fn [evt]
+                                   (println "Clojure received message!")
+                                   (deliver msg-received (String. ^bytes (:payload evt) "UTF-8")))}]
 
       (try
-        ;; Start NIO processing loop
-        (let [java-peer-addr (atom nil)]
-          (future
-            (let [buffer (ByteBuffer/allocateDirect 65536)]
-              (try
-                (while @running
-                  (when (> (.select selector 10) 0)
-                    (let [keys (.selectedKeys selector)
-                          iter (.iterator keys)]
-                      (while (.hasNext iter)
-                        (let [k (.next iter)]
-                          (.remove iter)
-                          (when (.isReadable k)
-                            (.clear buffer)
-                            (when-let [remote-addr (.receive channel buffer)]
-                              (.flip buffer)
-                              (when-not @java-peer-addr
-                                (reset! java-peer-addr remote-addr))
-                              (let [len (.remaining buffer)
-                                    bytes (byte-array len)]
-                                (.get buffer bytes)
-                                ;; Let dc/handle-receive do STUN and DTLS decryption/handshake
-                                (let [state @state-atom
-                                      result (dc/handle-receive state bytes (System/currentTimeMillis) remote-addr)]
-                                  (reset! state-atom (:new-state result))
-
-                                  ;; Emit outbound bytes
-                                  (let [serialized (dc/serialize-network-out result)]
-                                    (doseq [out-buf (:network-out-bytes serialized)]
-                                      (.send channel out-buf @java-peer-addr)))
-
-                                ;; Parse events and deliver promises
-                                  (doseq [ev (:app-events result)]
-                                    (cond
-                                      (= (:type ev) :stun-packet)
-                                      (let [parsed (stun/parse-packet (ByteBuffer/wrap (:payload ev)))]
-                                        (println "Got STUN: " (:type parsed))
-                                        (when (or (= (:type parsed) 0x0001) (= (:type parsed) 0x0101))
-                                          (when-not (realized? stun-bound)
-                                            (deliver stun-bound true))))
-
-                                      (or (= (:type ev) :dtls-packet) (= (:type ev) :dtls-handshake-progress))
-                                      (let [hs-status (.getHandshakeStatus engine)]
-                                        (println "Got DTLS. Status: " hs-status)
-                                        (when (or (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
-                                                  (= hs-status javax.net.ssl.SSLEngineResult$HandshakeStatus/FINISHED))
-                                          (when (realized? stun-bound)
-                                            (when-not (realized? dtls-handshake-done)
-                                              (deliver dtls-handshake-done true)))))
-
-                                      (= (:type ev) :on-state-change)
-                                      (when (= (:state ev) :established)
-                                        (when-not (realized? sctp-connected)
-                                          (deliver sctp-connected true)))
-
-                                      (= (:type ev) :on-message)
-                                      (deliver msg-received (String. ^bytes (:payload ev) "UTF-8")))))))))))))
-                (catch Exception e
-                  (println "Error in UDP loop:" e)
-                  (.printStackTrace e))))))
-
         ;; Setup Observer and PC
         (let [java-dc (atom nil)
+              remote-candidate-ip (atom nil)
+              remote-candidate-port (atom nil)
               observer (reify PeerConnectionObserver
                          (onIceCandidate [_ candidate]
-                           (when-let [creds @remote-creds]
-                             (try
-                               (let [cand-info (sdp/parse-candidate (.sdp candidate))
-                                     req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
-                                     addr (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info)))]
-                                 (.send channel req addr))
-                               (catch Exception _e))))
+                           (try
+                             (let [cand-info (sdp/parse-candidate (.sdp candidate))]
+                               (reset! remote-candidate-ip (:ip cand-info))
+                               (reset! remote-candidate-port (:port cand-info)))
+                             (catch Exception _e)))
                          (onIceConnectionChange [_ state]
                            (println "Java ICE State:" state))
                          (onConnectionChange [_ state]
@@ -197,37 +143,46 @@
               (let [candidate-str (str "candidate:1 1 UDP 2130706431 " local-ip " " port " typ host")]
                 (.addIceCandidate pc (RTCIceCandidate. "0" 0 candidate-str))))
 
-            (println "Waiting for STUN binding...")
+            ;; Wait for remote candidate info from Java
+            (println "Waiting for Java ICE candidate...")
             (loop [i 0]
-              (if (or (realized? stun-bound) (> i 50))
-                nil
-                (do
-                  ;; actively knock java side to unlock its STUN/ICE state
-                  (when-let [creds @remote-creds]
-                    (try
-                      (let [req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
-                            remote-cand (first (.getIceCandidates pc))
-                            addr (if remote-cand
-                                   (let [cand-info (sdp/parse-candidate (.sdp remote-cand))]
-                                     (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info))))
-                                   (InetSocketAddress. ^String local-ip (int port)))]
-                        (.send channel req addr))
-                      (catch Exception _e)))
-                  (Thread/sleep 100)
-                  (recur (inc i)))))
-            (let [v (deref stun-bound 100 :timeout)]
-              (is (= v true) "STUN binding should complete"))
-
-            (println "Waiting for DTLS handshake...")
-            (loop [i 0]
-              (if (or (realized? dtls-handshake-done) (> i 100))
+              (if (or (and @remote-candidate-ip @remote-candidate-port) (> i 50))
                 nil
                 (do (Thread/sleep 100) (recur (inc i)))))
-            (let [v (deref dtls-handshake-done 10000 :timeout)]
-              (is (= v true) "DTLS handshake should complete"))
+
+            (future
+              (loop [i 0]
+                (if (or (realized? sctp-connected) (> i 50))
+                  nil
+                  (do
+                    ;; actively knock java side to unlock its STUN/ICE state
+                    (when-let [creds @remote-creds]
+                      (try
+                        (let [req (stun/make-binding-request ice-ufrag (:ufrag creds) (:pwd creds))
+                              remote-cand (first (.getIceCandidates pc))
+                              addr (if remote-cand
+                                     (let [cand-info (sdp/parse-candidate (.sdp remote-cand))]
+                                       (InetSocketAddress. ^String (:ip cand-info) (int (:port cand-info))))
+                                     (InetSocketAddress. ^String local-ip (int port)))]
+                          (when-let [channel @(:channel node)]
+                            (try (.send channel req addr)
+                                 (catch Exception _))))
+                        (catch Exception _e)))
+                    (Thread/sleep 100)
+                    (recur (inc i))))))
+
+            ;; Start Clojure API node
+            (api/start! node
+                        {:ip (or @remote-candidate-ip local-ip)
+                         :port (or @remote-candidate-port port)}
+                        callbacks)
+
+            (println "Waiting for ICE Connected state in Clojure...")
+            (let [v (deref ice-connected 10000 :timeout)]
+              (is (= v true) "Clojure ICE state should reach :connected"))
 
             (println "Waiting for SCTP connected...")
-            (let [v (deref sctp-connected 5000 :timeout)]
+            (let [v (deref sctp-connected 10000 :timeout)]
               (is (= v true) "SCTP should connect"))
 
             (println "Sending DataChannel Message from Java -> Clojure")
@@ -239,8 +194,6 @@
             (let [v (deref msg-received 5000 :timeout)]
               (is (= v "Hello from Java!") "Message should match"))))
         (finally
-          (reset! running false)
-          (try (.close channel) (catch Exception _))
-          (try (.close selector) (catch Exception _))
+          (api/close! node)
           (try (.dispose factory) (catch Exception _))
           (try (.dispose adm) (catch Exception _)))))))
