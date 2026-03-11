@@ -14,6 +14,10 @@
                (gen/choose 0 5)
                (gen/elements [:webrtc/string :webrtc/binary]))]))
 
+(defn valid-unacked-data? [state]
+  (let [expected (reduce + (map (fn [s] (reduce + (map #(+ 16 (if-let [p (:payload (:chunk %))] (alength ^bytes p) 0)) (:send-queue s)))) (vals (:streams state))))]
+    (= (get-in state [:metrics :unacked-data] 0) expected)))
+
 (defn queue-size [q]
   (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q)))
 
@@ -149,6 +153,7 @@
                                         (valid-buffer-amounts? next-state)
                                         (valid-buffered-amount-low-events? old-buffered new-buffered low-threshold app-events)
                                         (valid-total-buffered-low-events? old-total new-total total-low-threshold app-events)
+                                        (valid-unacked-data? next-state)
                                         (valid-no-spurious-ack? op-type timers-triggered? next-network-out)
                                         (valid-metrics-increase? op-type next-network-out state next-state))]
                         (if-not valid?
