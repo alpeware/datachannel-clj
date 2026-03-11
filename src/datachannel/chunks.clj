@@ -243,7 +243,7 @@
                       (get state :partial-bytes-acked 0))
 
         all-empty? (every? #(empty? (:send-queue (val %))) new-streams)
-        total-unacked (reduce + (map #(count (:send-queue (val %))) new-streams))
+        total-unacked (reduce + (map (fn [s] (reduce + (map #(+ 16 (if-let [p (:payload (:chunk %))] (alength ^bytes p) 0)) (:send-queue s)))) (vals new-streams)))
 
         s1 (-> state
                (assoc :streams new-streams)

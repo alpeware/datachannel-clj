@@ -109,6 +109,7 @@
                   s1 (-> state
                          (assoc-in [:streams stream-id :send-queue] new-q)
                          (assoc :flight-size new-flight-size)
+                         (update-in [:metrics :unacked-data] #(max 0 (- (or % 0) (reduce + (map (fn [item] (+ 16 (if-let [p (:payload (:chunk item))] (alength ^bytes p) 0))) dropped-items)))))
                          (update :pending-control-chunks conj forward-tsn-chunk))
                   s2 (if (empty? new-q)
                        (update s1 :timers dissoc :sctp/t3-rtx)

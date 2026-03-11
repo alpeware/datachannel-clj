@@ -267,7 +267,7 @@
                                 (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
                                 s1)
                            s3 (-> s2
-                                  (update-in [:metrics :unacked-data] (fnil + 0) (count fragments))
+                                  (update-in [:metrics :unacked-data] (fnil + 0) (reduce + (map #(+ 16 (alength ^bytes %)) fragments)))
                                   (cond-> is-established?
                                     (update-in [:metrics :tx-bytes] (fnil + 0) len)))
                            s4 (if (and is-established? (nil? (get-in s3 [:timers :sctp/t3-rtx])))
