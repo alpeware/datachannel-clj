@@ -74,8 +74,12 @@
 
             ;; Z receives the missing (second) packet
           res-z5 (@#'core/handle-sctp-packet state-z4 (first rtx-packets) timeout-ms)
-          _state-z5 (:new-state res-z5)
-          final-sack-packets (:network-out res-z5)
+          state-z5 (:new-state res-z5)
+
+          ;; Missing packet filled the gap, might trigger delayed sack if unacked-data-chunks is 1
+          res-z5-timeout (core/handle-timeout state-z5 :sctp/t-delayed-sack (+ timeout-ms 200))
+
+          final-sack-packets (concat (:network-out res-z5) (:network-out res-z5-timeout))
           app-events (:app-events res-z5)
           _ (is (seq final-sack-packets) "Z should send a final SACK packet")
           _ (is (some #(= :on-message (:type %)) app-events) "Z should have fired an :on-message event after reassembly")

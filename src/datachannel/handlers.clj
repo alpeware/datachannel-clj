@@ -1,9 +1,22 @@
 (ns datachannel.handlers
   (:require [datachannel.packetize :as packetize]
             [datachannel.stun :as stun]
-            [datachannel.dtls :as dtls]))
+            [datachannel.dtls :as dtls]
+            [datachannel.chunks :as chunks]))
 
 (defmulti handle-timeout-timer (fn [_state timer-id _now-ms] timer-id))
+
+(defmethod handle-timeout-timer :sctp/t-delayed-sack [state _timer-id _now-ms]
+  (let [sack-chunk {:type :sack
+                    :cum-tsn-ack (:remote-tsn state)
+                    :a-rwnd 100000
+                    :gap-blocks (chunks/compute-gap-blocks (:remote-tsn state) (:out-of-order-tsns state))
+                    :duplicate-tsns []}]
+    {:new-state (-> state
+                    (update :pending-control-chunks conj sack-chunk)
+                    (update :timers dissoc :sctp/t-delayed-sack)
+                    (assoc :unacked-data-chunks 0))
+     :app-events []}))
 
 (defmethod handle-timeout-timer :sctp/t2-shutdown [state _timer-id now-ms]
   (let [timer (get-in state [:timers :sctp/t2-shutdown])]

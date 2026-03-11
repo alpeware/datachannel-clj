@@ -31,6 +31,13 @@
                (queue-size (get-in state [:streams s :send-queue] []))))
           (keys (:streams state))))
 
+(defn valid-delayed-sack-state? [state]
+  (let [unacked (get state :unacked-data-chunks 0)
+        has-timer? (contains? (:timers state) :sctp/t-delayed-sack)]
+    (and (>= unacked 0)
+         (<= unacked 1)
+         (= (= unacked 1) has-timer?))))
+
 (defn valid-buffered-amount-low-events? [old-buffered new-buffered threshold app-events]
   (every? (fn [s]
             (let [o (get old-buffered s 0)
@@ -155,7 +162,8 @@
                                         (valid-total-buffered-low-events? old-total new-total total-low-threshold app-events)
                                         (valid-unacked-data? next-state)
                                         (valid-no-spurious-ack? op-type timers-triggered? next-network-out)
-                                        (valid-metrics-increase? op-type next-network-out state next-state))]
+                                        (valid-metrics-increase? op-type next-network-out state next-state)
+                                        (valid-delayed-sack-state? next-state))]
                         (if-not valid?
                           false
                           (recur next-state (rest ops) next-now))))))))

@@ -47,15 +47,20 @@
 
           ;; Z receives the DATA message
           res-z3 (@#'core/handle-sctp-packet state-z2 data-packet now-ms)
-          _state-z3 (:new-state res-z3)
-          sack-packet (first (:network-out res-z3))
+          state-z3 (:new-state res-z3)
+
+          ;; Note: with delayed SACK, Z might not send it immediately, but state-z3 should have timer
+          res-z3-timeout (core/handle-timeout state-z3 :sctp/t-delayed-sack (+ now-ms 200))
+          _state-z4 (:new-state res-z3-timeout)
+
+          sack-packet (first (:network-out res-z3-timeout))
           app-events (:app-events res-z3)
-          _ (is sack-packet "Z should send a SACK packet")
+          _ (is sack-packet "Z should send a SACK packet after timeout")
           _ (is (= :sack (:type (first (:chunks sack-packet)))) "Z should have a SACK chunk")
           _ (is (some #(= :on-message (:type %)) app-events) "Z should have fired an :on-message event")
           _ (is (= "Hello SCTP" (String. ^bytes (:payload (first (filter #(= :on-message (:type %)) app-events))) "UTF-8")) "Z should have received the correct payload")
 
           ;; A receives the SACK packet
-          res-a4 (@#'core/handle-sctp-packet state-a4 sack-packet now-ms)
+          res-a4 (@#'core/handle-sctp-packet state-a4 sack-packet (+ now-ms 200))
           state-a5 (:new-state res-a4)]
       (is (empty? (:send-queue (get-in state-a5 [:streams 0]))) "A should have cleared its stream send-queue after receiving the SACK"))))
