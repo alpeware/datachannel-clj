@@ -95,7 +95,7 @@
     - [x] Retransmission Metrics Are Set For Fast Retransmit
     - [x] Retransmission Metrics Are Set For Normal Retransmit
     - [x] Unack Data Also Includes Send Queue
-    - [ ] Doesnt Send More Than Max Burst Packets
+    - [x] Doesnt Send More Than Max Burst Packets
     - [ ] Is Ready For Handover When Established
     - [ ] Send Messages After Handover
     - [ ] Can Detect Dcsctp Implementation
