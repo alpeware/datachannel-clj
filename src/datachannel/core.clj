@@ -188,6 +188,7 @@
      :seen-candidates #{}
      :data-channels {}
      :client-mode? client-mode?
+     :max-queue-size (get options :max-queue-size)
      :dtls/engine engine}))
 
 (declare send-data)
@@ -236,6 +237,11 @@
       (throw (ex-info "Cannot send empty message" {:type :empty-payload})))
     (when (> len max-size)
       (throw (ex-info "Cannot send too large message" {:type :too-large})))
+    (let [max-queue-size (get state :max-queue-size)
+          old-q (get-in state [:streams stream-id :send-queue] [])
+          old-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) old-q))]
+      (when (and max-queue-size (> (+ old-buffered len) max-queue-size))
+        (throw (ex-info "Queue limit reached" {:type :queue-limit-reached}))))
     (let [_ver-tag (:remote-ver-tag state)
           channel-opts (get-in state [:data-channels stream-id])
           ordered? (if (some? channel-opts) (:ordered channel-opts) true)

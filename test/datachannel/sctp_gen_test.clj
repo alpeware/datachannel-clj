@@ -21,6 +21,14 @@
 (defn queue-size [q]
   (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q)))
 
+(defn valid-queue-limits? [state]
+  (let [max-q (get state :max-queue-size)]
+    (if max-q
+      (every? (fn [s]
+                (<= (dc/get-buffered-amount state s) max-q))
+              (keys (:streams state)))
+      true)))
+
 (defn valid-congestion-metrics? [state]
   (and (>= (get state :flight-size 0) 0)
        (>= (get state :cwnd 0) 0)))
@@ -73,7 +81,7 @@
            (>= new-tx old-tx)))))
 
 (defn setup-established-state []
-  (let [init-state (dc/create-connection {} true)
+  (let [init-state (dc/create-connection {:max-queue-size 50000} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
         state1 (:new-state connect-res)
         init-packet (first (:network-out connect-res))
@@ -139,7 +147,8 @@
                                 (catch clojure.lang.ExceptionInfo e
                                   ;; Expect too large or empty message exceptions
                                   (if (or (= (:type (ex-data e)) :empty-payload)
-                                          (= (:type (ex-data e)) :too-large))
+                                          (= (:type (ex-data e)) :too-large)
+                                          (= (:type (ex-data e)) :queue-limit-reached))
                                     [state now-ms [] []]
                                     (throw e)))))
 
@@ -156,7 +165,8 @@
                                                 (some (fn [[_ t]] (<= (:expires-at t) (+ now-ms arg1))) (:timers state))
                                                 true)
 
-                            valid? (and (valid-congestion-metrics? next-state)
+                            valid? (and (valid-queue-limits? next-state)
+                                        (valid-congestion-metrics? next-state)
                                         (valid-buffer-amounts? next-state)
                                         (valid-buffered-amount-low-events? old-buffered new-buffered low-threshold app-events)
                                         (valid-total-buffered-low-events? old-total new-total total-low-threshold app-events)
