@@ -71,6 +71,8 @@
                                   (cb evt))
         :on-buffered-amount-high (when-let [cb (:on-buffered-amount-high callbacks)]
                                    (cb evt))
+        :on-total-buffered-amount-low (when-let [cb (:on-total-buffered-amount-low callbacks)]
+                                        (cb evt))
         :on-ice-candidate (when-let [cb (:on-ice-candidate callbacks)]
                             (cb evt))
         :on-ice-connection-state-change (when-let [cb (:on-ice-connection-state-change callbacks)]
