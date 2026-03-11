@@ -85,7 +85,6 @@
         data-pkts (count (filter (fn [pkt] (and (map? pkt) (some #(= (:type %) :data) (:chunks pkt)))) next-network-out))]
     (<= data-pkts max-burst)))
 
-
 (defn setup-established-state []
   (let [init-state (dc/create-connection {:max-queue-size 50000} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
