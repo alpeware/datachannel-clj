@@ -78,7 +78,7 @@
     - [ ] Send Many Messages
     - [ ] Sends Messages With Low Lifetime
     - [ ] Discards Messages With Low Lifetime If Must Buffer
-    - [ ] Respects Per Stream Queue Limit
+    - [x] Respects Per Stream Queue Limit
     - [x] Cannot Send Empty Messages
     - [x] Cannot Send Too Large Message
     - [x] Has Reasonable Buffered Amount Values
