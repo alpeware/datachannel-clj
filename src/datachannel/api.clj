@@ -49,9 +49,13 @@
         {:keys [network-out-bytes app-events should-notify-open?]} effects
         channel @(:channel node)
         remote-addr @(:remote-addr node)]
-    (when (and channel remote-addr)
+    (when channel
       (doseq [^ByteBuffer buf network-out-bytes]
-        (.send channel buf remote-addr)))
+        (let [dest-addr (or remote-addr (get @state-atom :remote-addr))]
+          (when dest-addr
+            (when-not remote-addr
+              (reset! (:remote-addr node) dest-addr))
+            (.send channel buf dest-addr)))))
     (doseq [evt app-events]
       (case (:type evt)
         :on-message (when-let [cb (:on-message callbacks)]
@@ -105,7 +109,9 @@
         ^Selector selector (nio/create-selector)
         remote-ip (:ip remote-sdp-params)
         remote-port (:port remote-sdp-params)
-        remote-addr (InetSocketAddress. remote-ip remote-port)]
+        remote-addr (if (and remote-ip remote-port)
+                      (InetSocketAddress. ^String remote-ip (int remote-port))
+                      nil)]
 
     (nio/register-for-read channel selector)
 
