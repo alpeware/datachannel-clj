@@ -50,13 +50,17 @@
                 (is (= :established (:state client-est)))
                 (is (= 1 (count data-packets)) "Client sends the buffered data packet after COOKIE-ACK")
 
-                ;; 7. Server handles the DATA packet, replies with SACK and triggers app event
+                ;; 7. Server handles the DATA packet, triggers app event, and starts SACK timer
                 (let [data-packet (first data-packets)
                       res-s3 (@#'core/handle-sctp-packet server-est data-packet now)
-                      _server-est2 (:new-state res-s3)
-                      sack-packet (first (:network-out res-s3))
-                      events (:app-events res-s3)]
-                  (is sack-packet "Server emits SACK")
+                      server-est2 (:new-state res-s3)
+                      events (:app-events res-s3)
+
+                      ;; Advance time to trigger delayed SACK
+                      res-s3-timeout (core/handle-timeout server-est2 :sctp/t-delayed-sack (+ now 200))
+                      sack-packet (first (:network-out res-s3-timeout))]
+
+                  (is sack-packet "Server emits SACK after timeout")
                   (is (= 1 (count events)))
                   (let [event (first events)]
                     (is (= :on-message (:type event)))

@@ -5,7 +5,7 @@
 
 (defmulti process-chunk (fn [_state chunk _packet _now-ms] (:type chunk)))
 
-(defn- compute-gap-blocks [remote-tsn out-of-order-tsns]
+(defn compute-gap-blocks [remote-tsn out-of-order-tsns]
   (if (empty? out-of-order-tsns)
     []
     (let [tsns (seq out-of-order-tsns)]
@@ -21,7 +21,7 @@
               (recur (rest remaining) current-start offset blocks)
               (recur (rest remaining) offset offset (conj blocks [current-start current-end])))))))))
 
-(defmethod process-chunk :data [state chunk _packet _now-ms]
+(defmethod process-chunk :data [state chunk _packet now-ms]
   (let [_proto (:protocol chunk)
         tsn (:tsn chunk)
         remote-tsn (get state :remote-tsn -1)
@@ -40,10 +40,14 @@
                         :a-rwnd 100000
                         :gap-blocks (compute-gap-blocks remote-tsn ooo-tsns)
                         :duplicate-tsns [tsn]}
-            s1 (update state :pending-control-chunks conj sack-chunk)]
+            s1 (-> state
+                   (update :pending-control-chunks conj sack-chunk)
+                   (update :timers dissoc :sctp/t-delayed-sack)
+                   (assoc :unacked-data-chunks 0))]
         {:next-state s1 :next-events []})
       (let [expected-tsn (if (= remote-tsn -1) tsn (if (= remote-tsn 4294967295) 0 (inc remote-tsn)))
-            s1 (if (= tsn expected-tsn)
+            is-contiguous? (= tsn expected-tsn)
+            s1 (if is-contiguous?
                  ;; Contiguous
                  (loop [curr-tsn tsn
                         curr-ooo ooo-tsns]
@@ -53,12 +57,25 @@
                        (assoc state :remote-tsn curr-tsn :out-of-order-tsns curr-ooo))))
                  ;; Out of order
                  (assoc state :out-of-order-tsns (conj ooo-tsns tsn)))
-            sack-chunk {:type :sack
-                        :cum-tsn-ack (:remote-tsn s1)
-                        :a-rwnd 100000
-                        :gap-blocks (compute-gap-blocks (:remote-tsn s1) (:out-of-order-tsns s1))
-                        :duplicate-tsns []}
-            s2 (update s1 :pending-control-chunks conj sack-chunk)
+
+            unacked-chunks (if is-contiguous? (inc (get s1 :unacked-data-chunks 0)) 2) ; Out-of-order triggers immediate SACK
+            send-sack-now? (>= unacked-chunks 2)
+
+            s2 (if send-sack-now?
+                 (let [sack-chunk {:type :sack
+                                   :cum-tsn-ack (:remote-tsn s1)
+                                   :a-rwnd 100000
+                                   :gap-blocks (compute-gap-blocks (:remote-tsn s1) (:out-of-order-tsns s1))
+                                   :duplicate-tsns []}]
+                   (-> s1
+                       (update :pending-control-chunks conj sack-chunk)
+                       (update :timers dissoc :sctp/t-delayed-sack)
+                       (assoc :unacked-data-chunks 0)))
+                 (let [s-timers (if (contains? (:timers s1) :sctp/t-delayed-sack)
+                                  s1
+                                  (assoc-in s1 [:timers :sctp/t-delayed-sack] {:expires-at (+ now-ms 200) :delay 200}))]
+                   (assoc s-timers :unacked-data-chunks unacked-chunks)))
+
             stream-id (:stream-id chunk)
             ;; We must fetch the queue directly from s2 rather than the incoming state
             recv-q (get-in s2 [:streams stream-id :recv-queue] [])

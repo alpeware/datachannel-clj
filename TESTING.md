@@ -30,7 +30,7 @@
 - [ ] [Tail Loss Probing (TLP)](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_queue.rs)
 - [x] [Unordered Head-of-Line Blocking](https://github.com/webrtc/dcsctp/blob/main/src/rx/reassembly_queue.rs)
 - [x] [TSN Wraparound](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_queue.rs)
-- [ ] [Delayed SACKs](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_timeout.rs)
+- [x] [Delayed SACKs](https://github.com/webrtc/dcsctp/blob/main/src/tx/retransmission_timeout.rs)
 - [ ] [Full Socket State Machine](https://github.com/webrtc/dcsctp/blob/main/src/socket/socket_tests.rs)
     - [x] Establish Connection
     - [x] Send Many Api Method
