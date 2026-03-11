@@ -10,7 +10,7 @@
     (gen/tuple (gen/return :receive-packet)
                (gen/fmap byte-array (gen/vector gen/byte 1 100)))
     (gen/tuple (gen/return :send-data)
-               (gen/fmap byte-array (gen/vector gen/byte 1 1500))
+               (gen/fmap byte-array (gen/vector gen/byte 1 15000))
                (gen/choose 0 5)
                (gen/elements [:webrtc/string :webrtc/binary]))]))
 
@@ -79,6 +79,11 @@
          (if (= op-type :send-data)
            (= new-tx (+ old-tx net-out-size))
            (>= new-tx old-tx)))))
+
+(defn valid-max-burst? [state next-network-out]
+  (let [max-burst (get state :max-burst 4)
+        data-pkts (count (filter (fn [pkt] (and (map? pkt) (some #(= (:type %) :data) (:chunks pkt)))) next-network-out))]
+    (<= data-pkts max-burst)))
 
 (defn setup-established-state []
   (let [init-state (dc/create-connection {:max-queue-size 50000} true)
@@ -173,6 +178,7 @@
                                         (valid-unacked-data? next-state)
                                         (valid-no-spurious-ack? op-type timers-triggered? next-network-out)
                                         (valid-metrics-increase? op-type next-network-out state next-state)
+                                        (valid-max-burst? next-state next-network-out)
                                         (valid-delayed-sack-state? next-state))]
                         (if-not valid?
                           false

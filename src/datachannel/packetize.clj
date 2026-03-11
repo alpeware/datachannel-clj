@@ -83,7 +83,7 @@
                   :network-out net-out
                   :app-events app-events}}))))
 
-(defn packetize [state app-events]
+(defn- packetize-step [state app-events]
   (let [mtu (get state :mtu 1200)
         max-payload-size (- mtu 12)
         pending-ctrl (:pending-control-chunks state)
@@ -104,3 +104,21 @@
             (let [[args-rem-ctrl args-cur-streams args-bundled args-cur-size args-cur-flight] (:args step-result)]
               (recur args-rem-ctrl args-cur-streams args-bundled args-cur-size args-cur-flight))
             (:result step-result)))))))
+
+(defn packetize [state app-events]
+  (let [max-burst (get state :max-burst 4)]
+    (loop [current-state state
+           all-pkts []
+           current-events app-events
+           data-pkts-count 0
+           passes 0]
+      (if (or (> passes 100) (>= data-pkts-count max-burst))
+        {:new-state current-state :network-out all-pkts :app-events current-events}
+        (let [step-res (packetize-step current-state current-events)
+              pkts (:network-out step-res)]
+          (if (empty? pkts)
+            {:new-state current-state :network-out all-pkts :app-events current-events}
+            (let [new-data-pkts (count (filter (fn [pkt] (some #(= (:type %) :data) (:chunks pkt))) pkts))]
+              (if (and (> data-pkts-count 0) (> (+ data-pkts-count new-data-pkts) max-burst))
+                {:new-state current-state :network-out all-pkts :app-events current-events}
+                (recur (:new-state step-res) (into all-pkts pkts) (:app-events step-res) (+ data-pkts-count new-data-pkts) (inc passes))))))))))

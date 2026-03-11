@@ -280,16 +280,7 @@
                                 (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                                 s3)]
                        (if is-established?
-                         (loop [current-state s4
-                                all-pkts []
-                                passes 0]
-                           (if (> passes 100)
-                             {:new-state current-state :network-out all-pkts :app-events []}
-                             (let [pack-res (packetize current-state [])
-                                   pkts (:network-out pack-res)]
-                               (if (empty? pkts)
-                                 {:new-state current-state :network-out all-pkts :app-events []}
-                                 (recur (:new-state pack-res) (into all-pkts pkts) (inc passes))))))
+                         (packetize s4 [])
                          {:new-state s4 :network-out [] :app-events []}))
                      (let [frag (first remaining-frags)
                            total-frags (count fragments)
