@@ -1,12 +1,11 @@
 (ns datachannel.webrtc-integration-test
   (:require [clojure.test :refer [deftest is]]
             [datachannel.api :as api]
-            [datachannel.stun :as stun]
             [datachannel.sdp :as sdp])
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
-           [java.net InetAddress InetSocketAddress]
+           [java.net InetAddress]
            [java.nio ByteBuffer]))
 
 (defn get-local-ip []
