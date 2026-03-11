@@ -2,7 +2,6 @@
   (:require [clojure.test :refer [deftest is]]
             [datachannel.api :as api]
             [datachannel.stun :as stun]
-            [datachannel.nio :as nio]
             [datachannel.sdp :as sdp])
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
