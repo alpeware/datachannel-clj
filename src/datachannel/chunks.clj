@@ -201,17 +201,35 @@
                      new-buffered (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) new-q))
                      low-threshold (get state :buffered-amount-low-threshold 0)
                      evt (when (and (> old-buffered low-threshold) (<= new-buffered low-threshold))
-                           {:type :on-buffered-amount-low :stream-id k})]
+                           {:type :on-buffered-amount-low :stream-id k})
+
+                     max-gap-tsn (if (empty? (:gap-blocks chunk))
+                                   cum-tsn-ack
+                                   (+ cum-tsn-ack (second (last (:gap-blocks chunk)))))
+
+                     fast-rtx-count (atom 0)
+                     new-q-with-missing (mapv (fn [item]
+                                                (let [tsn (:tsn item)
+                                                      in-gap? (some (fn [[start end]] (<= (+ cum-tsn-ack start) tsn (+ cum-tsn-ack end))) (:gap-blocks chunk))]
+                                                  (if (and (:sent? item) (<= tsn max-gap-tsn) (not in-gap?))
+                                                    (let [missing (inc (get item :missing-reports 0))
+                                                          fast-rtx? (and (= missing 3) (:sent? item))]
+                                                      (when fast-rtx? (swap! fast-rtx-count inc))
+                                                      (assoc item :missing-reports missing :sent? (not fast-rtx?) :retries (if fast-rtx? (inc (get item :retries 0)) (get item :retries 0))))
+                                                    (assoc item :missing-reports 0))))
+                                              new-q)]
                  (-> acc
                      (update :acked-bytes + acked-bytes)
+                     (update :fast-retransmits + @fast-rtx-count)
                      (update :new-streams (fn [m]
-                                            (if (empty? new-q)
+                                            (if (empty? new-q-with-missing)
                                               (assoc m k (dissoc v :send-queue))
-                                              (assoc m k (assoc v :send-queue new-q)))))
+                                              (assoc m k (assoc v :send-queue new-q-with-missing)))))
                      (cond-> evt (update :app-events conj evt)))))
-             {:acked-bytes 0 :new-streams {} :app-events []}
+             {:acked-bytes 0 :fast-retransmits 0 :new-streams {} :app-events []}
              streams)
         acked-bytes (:acked-bytes res)
+        fast-retransmits (:fast-retransmits res)
         new-streams (:new-streams res)
         new-total-buffered (reduce + (map (fn [[_ v]] (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) (:send-queue v)))) new-streams))
         total-low-threshold (get state :total-buffered-amount-low-threshold 0)
@@ -249,6 +267,7 @@
                (assoc :streams new-streams)
                (assoc :flight-size flight-size)
                (assoc :cwnd new-cwnd)
+               (update-in [:metrics :retransmissions] (fnil + 0) fast-retransmits)
                (assoc :partial-bytes-acked new-partial)
                (assoc :heartbeat-error-count 0)
                (assoc-in [:metrics :unacked-data] total-unacked))
