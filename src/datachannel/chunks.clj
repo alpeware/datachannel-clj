@@ -123,7 +123,6 @@
         s4 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s3) :established) has-buffered-data?)
              (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
              s3)
-        tx-pkts (reduce + (map #(count (:send-queue (val %))) (:streams s4)))
         tx-bytes (reduce + (map (fn [st]
                                   (reduce + (map (fn [item]
                                                    (let [dc (:chunk item)]
@@ -131,9 +130,7 @@
                                                  (:send-queue (val st)))))
                                 (:streams s4)))
         s5 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s3) :established) has-buffered-data?)
-             (-> s4
-                 (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
-                 (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
+             (update-in s4 [:metrics :tx-bytes] (fnil + 0) tx-bytes)
              s4)]
     {:next-state s5 :next-events [{:type :on-open}]}))
 
@@ -166,7 +163,6 @@
         s5 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s4) :established) has-buffered-data?)
              (assoc-in s4 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
              s4)
-        tx-pkts (reduce + (map #(count (:send-queue (val %))) (:streams s5)))
         tx-bytes (reduce + (map (fn [st]
                                   (reduce + (map (fn [item]
                                                    (let [dc (:chunk item)]
@@ -174,9 +170,7 @@
                                                  (:send-queue (val st)))))
                                 (:streams s5)))
         s6 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s4) :established) has-buffered-data?)
-             (-> s5
-                 (update-in [:metrics :tx-packets] (fnil + 0) tx-pkts)
-                 (update-in [:metrics :tx-bytes] (fnil + 0) tx-bytes))
+             (update-in s5 [:metrics :tx-bytes] (fnil + 0) tx-bytes)
              s5)]
     {:next-state s6 :next-events [{:type :on-open}]}))
 

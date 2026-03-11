@@ -19,10 +19,14 @@
               (conj bundled-chunks chunk)
               (+ current-size chunk-size)
               current-flight-size]}
-      {:action :return
-       :result {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
-                :network-out (build-network-out state bundled-chunks)
-                :app-events app-events}})))
+      (let [net-out (build-network-out state bundled-chunks)
+            new-state (-> state
+                          (assoc :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
+                          (cond-> (seq net-out) (update-in [:metrics :tx-packets] (fnil + 0) (count net-out))))]
+        {:action :return
+         :result {:new-state new-state
+                  :network-out net-out
+                  :app-events app-events}}))))
 
 (defn- process-stream-data
   [remaining-ctrl current-streams bundled-chunks current-size current-flight-size max-payload-size state app-events]
@@ -40,10 +44,14 @@
             cwnd (get state :cwnd 1000000)]
         (if (and (> current-flight-size 0) (> (+ current-flight-size chunk-size) cwnd))
           ;; Congestion window full
-          {:action :return
-           :result {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
-                    :network-out (build-network-out state bundled-chunks)
-                    :app-events app-events}}
+          (let [net-out (build-network-out state bundled-chunks)
+                new-state (-> state
+                              (assoc :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
+                              (cond-> (seq net-out) (update-in [:metrics :tx-packets] (fnil + 0) (count net-out))))]
+            {:action :return
+             :result {:new-state new-state
+                      :network-out net-out
+                      :app-events app-events}})
           (if (or (empty? bundled-chunks) (<= (+ current-size chunk-size) max-payload-size))
             (let [new-q (assoc q data-idx (assoc data-item :sent? true))
                   new-streams (assoc-in current-streams [stream-id :send-queue] new-q)
@@ -57,15 +65,23 @@
                       (+ current-size chunk-size)
                       new-flight-size]})
             ;; Halting when MTU is reached
-            {:action :return
-             :result {:new-state (assoc state :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
-                      :network-out (build-network-out state bundled-chunks)
-                      :app-events app-events}})))
+            (let [net-out (build-network-out state bundled-chunks)
+                  new-state (-> state
+                                (assoc :pending-control-chunks remaining-ctrl :streams current-streams :flight-size current-flight-size)
+                                (cond-> (seq net-out) (update-in [:metrics :tx-packets] (fnil + 0) (count net-out))))]
+              {:action :return
+               :result {:new-state new-state
+                        :network-out net-out
+                        :app-events app-events}}))))
       ;; No more data in streams
-      {:action :return
-       :result {:new-state (assoc state :pending-control-chunks [] :streams current-streams :flight-size current-flight-size)
-                :network-out (build-network-out state bundled-chunks)
-                :app-events app-events}})))
+      (let [net-out (build-network-out state bundled-chunks)
+            new-state (-> state
+                          (assoc :pending-control-chunks [] :streams current-streams :flight-size current-flight-size)
+                          (cond-> (seq net-out) (update-in [:metrics :tx-packets] (fnil + 0) (count net-out))))]
+        {:action :return
+         :result {:new-state new-state
+                  :network-out net-out
+                  :app-events app-events}}))))
 
 (defn packetize [state app-events]
   (let [mtu (get state :mtu 1200)

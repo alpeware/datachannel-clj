@@ -91,7 +91,7 @@
     - [x] Triggers On Total Buffer Amount Low When Crossing Threshold
     - [x] Initial Metrics Are Unset
     - [ ] Message Interleaving Metrics Are Set
-    - [ ] Rx And Tx Packet Metrics Increase
+    - [x] Rx And Tx Packet Metrics Increase
     - [ ] Retransmission Metrics Are Set For Fast Retransmit
     - [ ] Retransmission Metrics Are Set For Normal Retransmit
     - [ ] Unack Data Also Includes Send Queue
