@@ -191,6 +191,7 @@
         mtu (get state :mtu 1200)
         ;; Calculate newly acked bytes and reduce flight size
         ;; Also collect the new queues
+        old-total-buffered (reduce + (map (fn [[_ v]] (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) (:send-queue v)))) streams))
         res (reduce-kv
              (fn [acc k v]
                (let [q (:send-queue v)
@@ -218,6 +219,11 @@
              streams)
         acked-bytes (:acked-bytes res)
         new-streams (:new-streams res)
+        new-total-buffered (reduce + (map (fn [[_ v]] (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) (:send-queue v)))) new-streams))
+        total-low-threshold (get state :total-buffered-amount-low-threshold 0)
+        total-evt (when (and (> old-total-buffered total-low-threshold) (<= new-total-buffered total-low-threshold))
+                    {:type :on-total-buffered-amount-low})
+        app-events (if total-evt (conj (:app-events res) total-evt) (:app-events res))
         flight-size (max 0 (- (get state :flight-size 0) acked-bytes))
         cwnd (get state :cwnd 0)
         ssthresh (get state :ssthresh 65535)
@@ -255,7 +261,7 @@
         s2 (if all-empty?
              (update s1 :timers dissoc :sctp/t3-rtx)
              s1)]
-    {:next-state s2 :next-events (:app-events res)}))
+    {:next-state s2 :next-events app-events}))
 
 (defmethod process-chunk :heartbeat-ack [state _chunk _packet _now-ms]
   (let [s1 (-> state

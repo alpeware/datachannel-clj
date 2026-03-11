@@ -88,7 +88,10 @@
                                     (throw e)))))
 
                             new-buffered (into {} (map (fn [s] [s (dc/get-buffered-amount next-state s)]) (keys (:streams next-state))))
-                            low-threshold (get next-state :buffered-amount-low-threshold 0)]
+                            low-threshold (get next-state :buffered-amount-low-threshold 0)
+                            old-total (reduce + (vals old-buffered))
+                            new-total (reduce + (vals new-buffered))
+                            total-low-threshold (get next-state :total-buffered-amount-low-threshold 0)]
                         (if (or (< (get next-state :flight-size 0) 0)
                                 (< (get next-state :cwnd 0) 0)
                                 (not (every? (fn [s]
@@ -104,7 +107,11 @@
                                                                               (= (:stream-id %) s))
                                                                         app-events)]
                                                  (= crossed? (boolean evt-present?))))
-                                             (keys new-buffered))))
+                                             (keys new-buffered)))
+                                ;; Check total-buffered-amount-low events
+                                (not (let [crossed-total? (and (> old-total total-low-threshold) (<= new-total total-low-threshold))
+                                           total-evt-present? (some #(= (:type %) :on-total-buffered-amount-low) app-events)]
+                                       (= crossed-total? (boolean total-evt-present?)))))
                           false
                           (recur next-state (rest ops) next-now))))))))
 
