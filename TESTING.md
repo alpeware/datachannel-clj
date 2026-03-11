@@ -132,4 +132,4 @@
     - [x] Connection Can Continue From Second Init Ack
     - [ ] Handover Preserves Stream Reset State
     - [ ] Establish Simultaneous Connection With Lost Data
-    - [ ] Advance Time Does Not Trigger Spurious Ack
+    - [x] Advance Time Does Not Trigger Spurious Ack
