@@ -49,6 +49,18 @@
                            (seq next-network-out))]
     (not spurious-ack?)))
 
+(defn valid-metrics-increase? [op-type next-network-out old-state new-state]
+  (let [old-tx (get-in old-state [:metrics :tx-packets] 0)
+        new-tx (get-in new-state [:metrics :tx-packets] 0)
+        old-rx (get-in old-state [:metrics :rx-packets] 0)
+        new-rx (get-in new-state [:metrics :rx-packets] 0)
+        net-out-size (count next-network-out)]
+    (and (>= new-tx old-tx)
+         (>= new-rx old-rx)
+         (if (= op-type :send-data)
+           (= new-tx (+ old-tx net-out-size))
+           (>= new-tx old-tx)))))
+
 (defn setup-established-state []
   (let [init-state (dc/create-connection {} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
@@ -137,7 +149,8 @@
                                         (valid-buffer-amounts? next-state)
                                         (valid-buffered-amount-low-events? old-buffered new-buffered low-threshold app-events)
                                         (valid-total-buffered-low-events? old-total new-total total-low-threshold app-events)
-                                        (valid-no-spurious-ack? op-type timers-triggered? next-network-out))]
+                                        (valid-no-spurious-ack? op-type timers-triggered? next-network-out)
+                                        (valid-metrics-increase? op-type next-network-out state next-state))]
                         (if-not valid?
                           false
                           (recur next-state (rest ops) next-now))))))))

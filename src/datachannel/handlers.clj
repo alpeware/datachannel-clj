@@ -247,8 +247,7 @@
                     (assoc :state :cookie-wait)
                     (assoc :next-tsn init-tsn)
                     (assoc-in [:timers :sctp/t1-init] {:expires-at (+ now-ms 3000) :delay 3000 :retries 0 :packet init-packet})
-                    (update :pending-control-chunks conj init-chunk)
-                    (update-in [:metrics :tx-packets] (fnil inc 0)))
+                    (update :pending-control-chunks conj init-chunk))
      :app-events []}))
 
 (defmethod handle-event-type :shutdown [state _event now-ms]
