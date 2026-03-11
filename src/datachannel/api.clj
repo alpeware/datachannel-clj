@@ -101,7 +101,12 @@
                     (merge (:opts node)
                            {:cert-data (:cert-data node)
                             :ice-ufrag (:ufrag (:ice-creds node))
-                            :ice-pwd (:pwd (:ice-creds node))})
+                            :ice-pwd (:pwd (:ice-creds node))
+                            :remote-ice-ufrag (:remote-ice-ufrag remote-sdp-params)
+                            :remote-ice-pwd (:remote-ice-pwd remote-sdp-params)
+                            :remote-candidates (if (and (:ip remote-sdp-params) (:port remote-sdp-params))
+                                                 [{:ip (:ip remote-sdp-params) :port (:port remote-sdp-params)}]
+                                                 [])})
                     client-mode?)
 
         ;; Set up networking
@@ -198,6 +203,14 @@
   "Returns the :metrics map from the state atom."
   [node]
   (:metrics @(:state-atom node)))
+
+(defn add-remote-candidate!
+  "Adds a remote ICE candidate to the pure connection state for active probing."
+  [node ip port]
+  (apply-action! node
+                 (fn [st]
+                   (datachannel.core/handle-event st {:type :add-remote-candidate :ip ip :port port} (System/currentTimeMillis)))
+                 {}))
 
 (defn create-data-channel!
   "Creates a new data channel matching the W3C RTCDataChannel specification.
