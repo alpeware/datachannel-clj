@@ -197,8 +197,7 @@
        :app-events []})))
 
 (defmethod handle-timeout-timer :stun/keepalive [state _timer-id now-ms]
-  (let [req (stun/make-simple-binding-request)
-        gathering-complete? (= (:ice-gathering-state state) :complete)
+  (let [gathering-complete? (= (:ice-gathering-state state) :complete)
         last-rcv (get state :last-stun-received now-ms)
         disconnected? (and (= (:ice-connection-state state) :connected)
                            (> (- now-ms last-rcv) 30000))
@@ -208,9 +207,14 @@
                       (cond-> disconnected? (assoc :ice-connection-state :disconnected)))
         app-events (cond-> []
                      (not gathering-complete?) (conj {:type :on-ice-gathering-state-change :state :complete})
-                     disconnected? (conj {:type :on-ice-connection-state-change :state :disconnected}))]
+                     disconnected? (conj {:type :on-ice-connection-state-change :state :disconnected}))
+        network-out (if (:ice-lite? state)
+                      []
+                      (if (and (:remote-ice-ufrag state) (:remote-ice-pwd state))
+                        [(stun/make-binding-request (:ice-ufrag state) (:remote-ice-ufrag state) (:remote-ice-pwd state))]
+                        []))]
     {:new-state new-state
-     :network-out [req]
+     :network-out network-out
      :app-events app-events}))
 
 (defmethod handle-timeout-timer :dtls/flight-timeout [state _timer-id now-ms]

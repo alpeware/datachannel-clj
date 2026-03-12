@@ -58,7 +58,7 @@
           port (+ 40000 (rand-int 5000))
 
           ;; Boot the listener
-          listener-node (api/listen! {:port port}
+          listener-node (api/listen! {:port port :ice-lite? true}
                                      {:on-connection
                                       (fn [child-node]
                                         (println "Bootstrap Server got a NEW connection from:" @(:remote-addr child-node))
@@ -132,7 +132,8 @@
                             :port        port
                             :ice-ufrag   ice-ufrag
                             :ice-pwd     ice-pwd
-                            :fingerprint server-cert-fingerprint})
+                            :fingerprint server-cert-fingerprint
+                            :ice-lite?   true})
                   answer (RTCSessionDescription. RTCSdpType/ANSWER sdp-str)]
 
               (set-remote-description pc answer)
