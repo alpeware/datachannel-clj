@@ -2,7 +2,8 @@
   (:require [datachannel.core :as dc]
             [datachannel.nio :as nio]
             [datachannel.sdp :as sdp]
-            [datachannel.dtls :as dtls])
+            [datachannel.dtls :as dtls]
+            [clojure.string :as str])
   (:import [java.nio ByteBuffer]
            [java.nio.channels DatagramChannel Selector SelectionKey]
            [java.net InetSocketAddress]))
@@ -64,7 +65,7 @@
         (if (and (map? buf) (:packet buf))
           (let [{:keys [packet target]} buf
                 dest-addr (if (string? target)
-                            (let [[ip port] (clojure.string/split target #":")]
+                            (let [[ip port] (str/split target #":")]
                               (InetSocketAddress. ^String ip (Integer/parseInt port)))
                             (if (and (map? target) (:ip target) (:port target))
                               (InetSocketAddress. ^String (:ip target) (Integer/parseInt (str (:port target))))
