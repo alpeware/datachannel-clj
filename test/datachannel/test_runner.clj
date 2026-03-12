@@ -1,5 +1,6 @@
 (ns datachannel.test-runner
   (:require [clojure.test :refer [run-tests]]
+            [datachannel.listen-integration-test]
             [datachannel.sctp-test]
             [datachannel.sctp-send-message-with-limited-rtx-test]
             [datachannel.sctp-send-many-fragmented-messages-with-limited-rtx-test]
@@ -62,7 +63,8 @@
 
 (def test-groups
   [;; Group 1: Stateful/Integration tests (run sequentially relative to each other)
-   ['datachannel.stun-webrtc-integration-test
+   ['datachannel.listen-integration-test
+    'datachannel.stun-webrtc-integration-test
     'datachannel.webrtc-integration-test
     'datachannel.webrtc-java-test
     'datachannel.stun-integration-test
