@@ -158,7 +158,8 @@
      :local-ver-tag local-ver-tag
      :next-tsn 0
      :ssn 0
-     :timers (if (seq (get options :remote-candidates [])) {:stun/check-candidates {:expires-at 0}} {})
+     :timers (merge (if (seq (get options :remote-candidates [])) {:stun/check-candidates {:expires-at 0}} {})
+                    {:stun/keepalive {:expires-at (+ (System/currentTimeMillis) 1000)}})
      :heartbeat-interval (get options :heartbeat-interval 30000)
      :heartbeat-error-count 0
      :rto-initial (get options :rto-initial 1000)
@@ -184,6 +185,7 @@
      :cert-data cert-data
      :ice-ufrag (:ice-ufrag options)
      :ice-pwd (:ice-pwd options)
+     :ice-lite? (boolean (:ice-lite? options))
      :ice-gathering-state :new
      :ice-connection-state :new
      :seen-candidates #{}

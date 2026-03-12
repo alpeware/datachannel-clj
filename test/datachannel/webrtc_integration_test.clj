@@ -58,7 +58,7 @@
           local-ip (get-local-ip)
           port (+ 35000 (rand-int 5000))
 
-          node (api/create-node {:port port :setup "passive"})
+          node (api/create-node {:port port :setup "passive" :ice-lite? false})
           ice-ufrag (:ufrag (:ice-creds node))
           ice-pwd (:pwd (:ice-creds node))
           server-cert-fingerprint (:fingerprint (:cert-data node))
@@ -133,7 +133,8 @@
                             :port        port
                             :ice-ufrag   ice-ufrag
                             :ice-pwd     ice-pwd
-                            :fingerprint server-cert-fingerprint})
+                            :fingerprint server-cert-fingerprint
+                            :ice-lite?   false})
                   answer (RTCSessionDescription. RTCSdpType/ANSWER sdp-str)]
 
               (set-remote-description pc answer)

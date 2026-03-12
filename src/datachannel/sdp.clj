@@ -21,7 +21,7 @@
 
 (defn format-answer
   "Generates a complete SDP answer string."
-  [{:keys [local-ip port ice-ufrag ice-pwd fingerprint setup]
+  [{:keys [local-ip port ice-ufrag ice-pwd fingerprint setup ice-lite?]
     :or   {setup "passive"}}]
   (str "v=0\r\n"
        "o=- 123456789 2 IN IP4 " local-ip "\r\n"
@@ -37,5 +37,26 @@
        "a=fingerprint:sha-256 " fingerprint "\r\n"
        "a=ice-ufrag:" ice-ufrag "\r\n"
        "a=ice-pwd:" ice-pwd "\r\n"
-       "a=ice-lite\r\n"
+       (if ice-lite? "a=ice-lite\r\n" "")
+       "a=rtcp-mux\r\n"))
+
+(defn format-offer
+  "Generates a complete SDP offer string."
+  [{:keys [local-ip port ice-ufrag ice-pwd fingerprint setup ice-lite?]
+    :or   {setup "actpass"}}]
+  (str "v=0\r\n"
+       "o=- 123456789 2 IN IP4 " local-ip "\r\n"
+       "s=-\r\n"
+       "t=0 0\r\n"
+       "a=group:BUNDLE 0\r\n"
+       "m=application " port " UDP/DTLS/SCTP webrtc-datachannel\r\n"
+       "c=IN IP4 " local-ip "\r\n"
+       "a=setup:" setup "\r\n"
+       "a=mid:0\r\n"
+       "a=max-message-size:100000\r\n"
+       "a=sctp-port:5000\r\n"
+       "a=fingerprint:sha-256 " fingerprint "\r\n"
+       "a=ice-ufrag:" ice-ufrag "\r\n"
+       "a=ice-pwd:" ice-pwd "\r\n"
+       (if ice-lite? "a=ice-lite\r\n" "")
        "a=rtcp-mux\r\n"))
