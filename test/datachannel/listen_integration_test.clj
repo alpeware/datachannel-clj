@@ -5,11 +5,16 @@
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
-           [java.net InetAddress]
            [java.nio ByteBuffer]))
 
 (defn get-local-ip []
-  (.getHostAddress (InetAddress/getLocalHost)))
+  (try
+    (let [socket (java.net.DatagramSocket.)]
+      (.connect socket (java.net.InetAddress/getByName "8.8.8.8") 10002)
+      (let [ip (.getHostAddress (.getLocalAddress socket))]
+        (.close socket)
+        ip))
+    (catch Exception _ "127.0.0.1")))
 
 (defn extract-ice-credentials [sdp]
   {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))

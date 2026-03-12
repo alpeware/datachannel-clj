@@ -211,7 +211,16 @@
         network-out (if (:ice-lite? state)
                       []
                       (if (and (:remote-ice-ufrag state) (:remote-ice-pwd state))
-                        [(stun/make-binding-request (:ice-ufrag state) (:remote-ice-ufrag state) (:remote-ice-pwd state))]
+                        (let [candidates (:remote-candidates state)]
+                          (if (seq candidates)
+                            (mapv (fn [cand]
+                                    (let [req (stun/make-binding-request (:ice-ufrag state) (:remote-ice-ufrag state) (:remote-ice-pwd state))]
+                                      {:packet req :target cand}))
+                                  candidates)
+                            (if (:remote-addr state)
+                              (let [req (stun/make-binding-request (:ice-ufrag state) (:remote-ice-ufrag state) (:remote-ice-pwd state))]
+                                [{:packet req :target (:remote-addr state)}])
+                              [])))
                         []))]
     {:new-state new-state
      :network-out network-out
