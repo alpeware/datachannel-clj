@@ -62,6 +62,8 @@
         engine (get-in result-map [:new-state :dtls/engine])
         encoded (mapv (fn [item]
                         (cond
+                          (and (map? item) (:packet item)) ; Targeted packet map
+                          item
                           (map? item) ; SCTP packet
                           (let [buf (or opt-buf (ByteBuffer/allocateDirect 65536))]
                             (.clear buf)
@@ -101,6 +103,7 @@
                             (assoc :last-stun-received now-ms)
                             (cond-> response (assoc :remote-addr remote-addr))
                             (cond-> new-candidate? (update :seen-candidates (fnil conj #{}) candidate))
+                            (cond-> new-candidate? (update :remote-candidates (fnil conj []) candidate))
                             (cond-> became-connected? (assoc :ice-connection-state :connected)))
               app-events (cond-> [{:type :stun-packet :payload network-bytes}]
                            new-candidate? (conj {:type :on-ice-candidate :candidate candidate})
@@ -190,6 +193,7 @@
      :ice-gathering-state :new
      :ice-connection-state :new
      :seen-candidates #{}
+     :remote-candidates (or (:remote-candidates options) [])
      :data-channels {}
      :client-mode? client-mode?
      :local-outbound-streams (get options :local-outbound-streams 65535)

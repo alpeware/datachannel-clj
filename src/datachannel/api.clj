@@ -60,10 +60,20 @@
       (when (and pure-remote-addr (not= pure-remote-addr @(:remote-addr node)))
         (reset! (:remote-addr node) pure-remote-addr)))
     (when channel
-      (doseq [^ByteBuffer buf network-out-bytes]
-        (let [dest-addr @(:remote-addr node)]
-          (when dest-addr
-            (.send channel buf dest-addr)))))
+      (doseq [buf network-out-bytes]
+        (if (and (map? buf) (:packet buf))
+          (let [{:keys [packet target]} buf
+                dest-addr (if (string? target)
+                            (let [[ip port] (clojure.string/split target #":")]
+                              (InetSocketAddress. ^String ip (Integer/parseInt port)))
+                            (if (and (map? target) (:ip target) (:port target))
+                              (InetSocketAddress. ^String (:ip target) (Integer/parseInt (str (:port target))))
+                              target))
+                wrapped-packet (if (instance? ByteBuffer packet) packet (ByteBuffer/wrap packet))]
+            (.send channel ^ByteBuffer wrapped-packet dest-addr))
+          (let [dest-addr @(:remote-addr node)]
+            (when dest-addr
+              (.send channel ^ByteBuffer buf dest-addr))))))
     (doseq [evt app-events]
       (case (:type evt)
         :on-message (when-let [cb (:on-message callbacks)]
