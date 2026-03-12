@@ -54,15 +54,15 @@
                         final-st (if should-notify? (assoc new-st :established-notified? true) new-st)]
                     (reset! state-atom final-st)
                     (assoc res-ser :should-notify-open? should-notify?)))
-        {:keys [network-out-bytes app-events should-notify-open?]} effects
-        channel @(:channel node)
-        remote-addr @(:remote-addr node)]
+        {:keys [network-out-bytes app-events should-notify-open? new-state]} effects
+        channel @(:channel node)]
+    (let [pure-remote-addr (:remote-addr new-state)]
+      (when (and pure-remote-addr (not= pure-remote-addr @(:remote-addr node)))
+        (reset! (:remote-addr node) pure-remote-addr)))
     (when channel
       (doseq [^ByteBuffer buf network-out-bytes]
-        (let [dest-addr (or remote-addr (get @state-atom :remote-addr))]
+        (let [dest-addr @(:remote-addr node)]
           (when dest-addr
-            (when-not remote-addr
-              (reset! (:remote-addr node) dest-addr))
             (.send channel buf dest-addr)))))
     (doseq [evt app-events]
       (case (:type evt)

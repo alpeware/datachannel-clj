@@ -99,6 +99,7 @@
                                      (or response candidate))
               new-state (-> state
                             (assoc :last-stun-received now-ms)
+                            (cond-> response (assoc :remote-addr remote-addr))
                             (cond-> new-candidate? (update :seen-candidates (fnil conj #{}) candidate))
                             (cond-> became-connected? (assoc :ice-connection-state :connected)))
               app-events (cond-> [{:type :stun-packet :payload network-bytes}]
