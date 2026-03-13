@@ -1,4 +1,6 @@
 (ns datachannel.dtls
+  (:require
+   [clojure.string :as str])
   (:import
    [java.nio ByteBuffer]
    [java.security KeyStore MessageDigest]
@@ -40,8 +42,8 @@
                     (seq)
                     (first))
           actual-fingerprint (fingerprint cert)]
-      (= (clojure.string/lower-case actual-fingerprint)
-         (clojure.string/lower-case expected-fingerprint)))
+      (= (str/lower-case actual-fingerprint)
+         (str/lower-case expected-fingerprint)))
     (catch Exception _
       false)))
 
