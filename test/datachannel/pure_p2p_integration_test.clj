@@ -76,6 +76,10 @@
     (let [client-a (dc/create-connection {:ice-ufrag "Alice" :ice-pwd "pwdA" :remote-ice-ufrag "Bob" :remote-ice-pwd "pwdB" :ice-lite? false} true)
           client-b (dc/create-connection {:ice-ufrag "Bob" :ice-pwd "pwdB" :remote-ice-ufrag "Alice" :remote-ice-pwd "pwdA" :ice-lite? false} false)
 
+          ;; Extract dynamically generated fingerprints
+          client-a (assoc client-a :remote-fingerprint (:fingerprint (:cert-data client-b)))
+          client-b (assoc client-b :remote-fingerprint (:fingerprint (:cert-data client-a)))
+
           ;; Start connection by triggering a :connect event on A
           now-ms (System/currentTimeMillis)
 

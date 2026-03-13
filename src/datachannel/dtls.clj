@@ -32,6 +32,19 @@
        :key key
        :fingerprint (fingerprint cert)})))
 
+(defn verify-peer-fingerprint [^SSLEngine engine expected-fingerprint]
+  (try
+    (let [cert (->> engine
+                    (.getSession)
+                    (.getPeerCertificates)
+                    (seq)
+                    (first))
+          actual-fingerprint (fingerprint cert)]
+      (= (clojure.string/lower-case actual-fingerprint)
+         (clojure.string/lower-case expected-fingerprint)))
+    (catch Exception _
+      false)))
+
 (defn create-ssl-context [cert key]
   (let [ks (KeyStore/getInstance "PKCS12")
         kmf (KeyManagerFactory/getInstance "SunX509")
