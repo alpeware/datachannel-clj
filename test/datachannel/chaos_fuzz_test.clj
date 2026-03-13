@@ -92,52 +92,52 @@
                  dup-rate (gen/choose 0 10)
                  reorder? gen/boolean
                  rand-seed gen/large-integer]
-    (let [drop-rate (/ drop-rate 100.0)
-          dup-rate (/ dup-rate 100.0)
-          client-a (dc/create-connection {:ice-ufrag "Alice" :ice-pwd "pwdA" :remote-ice-ufrag "Bob" :remote-ice-pwd "pwdB" :ice-lite? false} true)
-          client-b (dc/create-connection {:ice-ufrag "Bob" :ice-pwd "pwdB" :remote-ice-ufrag "Alice" :remote-ice-pwd "pwdA" :ice-lite? false} false)
+                (let [drop-rate (/ drop-rate 100.0)
+                      dup-rate (/ dup-rate 100.0)
+                      client-a (dc/create-connection {:ice-ufrag "Alice" :ice-pwd "pwdA" :remote-ice-ufrag "Bob" :remote-ice-pwd "pwdB" :ice-lite? false} true)
+                      client-b (dc/create-connection {:ice-ufrag "Bob" :ice-pwd "pwdB" :remote-ice-ufrag "Alice" :remote-ice-pwd "pwdA" :ice-lite? false} false)
 
-          now-ms 0
+                      now-ms 0
 
-          client-a (assoc client-a :remote-candidates ["127.0.0.1:5001"])
-          client-b (assoc client-b :remote-candidates ["127.0.0.1:5000"])
+                      client-a (assoc client-a :remote-candidates ["127.0.0.1:5001"])
+                      client-b (assoc client-b :remote-candidates ["127.0.0.1:5000"])
 
-          client-a (assoc-in client-a [:timers :stun/keepalive :expires-at] 0)
-          client-b (assoc-in client-b [:timers :stun/keepalive :expires-at] 0)
+                      client-a (assoc-in client-a [:timers :stun/keepalive :expires-at] 0)
+                      client-b (assoc-in client-b [:timers :stun/keepalive :expires-at] 0)
 
-          init-res-b (-> (dc/handle-timeout client-b :stun/keepalive now-ms nil)
-                         (dc/serialize-network-out))
+                      init-res-b (-> (dc/handle-timeout client-b :stun/keepalive now-ms nil)
+                                     (dc/serialize-network-out))
 
-          init-res-a (-> (dc/handle-event client-a {:type :connect} now-ms)
-                         (dc/serialize-network-out))
+                      init-res-a (-> (dc/handle-event client-a {:type :connect} now-ms)
+                                     (dc/serialize-network-out))
 
-          [conn-a conn-b _] (pump-chaos-network init-res-a init-res-b
-                                                (fn [a b] (not (and (= :connected (:ice-connection-state (:new-state a)))
-                                                                    (= :connected (:ice-connection-state (:new-state b)))
-                                                                    (= :established (:state (:new-state a)))
-                                                                    (= :established (:state (:new-state b))))))
-                                                2000
-                                                now-ms
-                                                drop-rate dup-rate reorder? rand-seed)]
+                      [conn-a conn-b _] (pump-chaos-network init-res-a init-res-b
+                                                            (fn [a b] (not (and (= :connected (:ice-connection-state (:new-state a)))
+                                                                                (= :connected (:ice-connection-state (:new-state b)))
+                                                                                (= :established (:state (:new-state a)))
+                                                                                (= :established (:state (:new-state b))))))
+                                                            2000
+                                                            now-ms
+                                                            drop-rate dup-rate reorder? rand-seed)]
 
-      (if (not (and (= :connected (:ice-connection-state (:new-state conn-a)))
-                    (= :connected (:ice-connection-state (:new-state conn-b)))
-                    (= :established (:state (:new-state conn-a)))
-                    (= :established (:state (:new-state conn-b)))))
-        false
-        (let [msg-bytes (.getBytes "Chaos Message Payload" "UTF-8")
-              send-res-a (-> (dc/send-data (:new-state conn-a) msg-bytes 0 :webrtc/string 0)
-                             (dc/serialize-network-out))
+                  (if (not (and (= :connected (:ice-connection-state (:new-state conn-a)))
+                                (= :connected (:ice-connection-state (:new-state conn-b)))
+                                (= :established (:state (:new-state conn-a)))
+                                (= :established (:state (:new-state conn-b)))))
+                    false
+                    (let [msg-bytes (.getBytes "Chaos Message Payload" "UTF-8")
+                          send-res-a (-> (dc/send-data (:new-state conn-a) msg-bytes 0 :webrtc/string 0)
+                                         (dc/serialize-network-out))
 
-              a-with-send (-> conn-a
-                              (assoc :new-state (:new-state send-res-a))
-                              (update :network-out-bytes into (:network-out-bytes send-res-a [])))
+                          a-with-send (-> conn-a
+                                          (assoc :new-state (:new-state send-res-a))
+                                          (update :network-out-bytes into (:network-out-bytes send-res-a [])))
 
-              [_final-a final-b _] (pump-chaos-network a-with-send conn-b
-                                                       (fn [_a b] (not-any? #(= :on-message (:type %)) (:app-events b)))
-                                                       500
-                                                       0
-                                                       drop-rate dup-rate reorder? rand-seed)]
-          (boolean (some #(= :on-message (:type %)) (:app-events final-b))))))))
+                          [_final-a final-b _] (pump-chaos-network a-with-send conn-b
+                                                                   (fn [_a b] (not-any? #(= :on-message (:type %)) (:app-events b)))
+                                                                   500
+                                                                   0
+                                                                   drop-rate dup-rate reorder? rand-seed)]
+                      (boolean (some #(= :on-message (:type %)) (:app-events final-b))))))))
 
 (defspec test-chaos-connection-establishment (Integer/parseInt (or (System/getenv "FUZZ_ITERS") "20")) prop-chaos-connection)
