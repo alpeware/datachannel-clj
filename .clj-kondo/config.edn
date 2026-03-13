@@ -1,1 +1,1 @@
-{:linters {:unresolved-symbol {:exclude [fuzz-handle-receive-no-crashes test-sctp-state-machine-invariants]}}}
+{:linters {:unresolved-symbol {:exclude [fuzz-handle-receive-no-crashes test-sctp-state-machine-invariants test-chaos-connection-establishment]}}}

@@ -1,5 +1,6 @@
 {:paths ["src"]
- :deps {org.clojure/clojure {:mvn/version "1.12.4"}}
+ :deps {org.clojure/clojure {:mvn/version "1.12.4"}
+        org.clojure/test.check {:mvn/version "1.1.1"}}
  :aliases {:test {:extra-paths ["test"]
                   :jvm-opts ["--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED"
                              "--add-exports=java.base/sun.security.x509=ALL-UNNAMED"]
