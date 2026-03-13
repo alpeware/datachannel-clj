@@ -1,4 +1,6 @@
 (ns datachannel.dtls
+  (:require
+   [clojure.string :as str])
   (:import
    [java.nio ByteBuffer]
    [java.security KeyStore MessageDigest]
@@ -31,6 +33,19 @@
       {:cert cert
        :key key
        :fingerprint (fingerprint cert)})))
+
+(defn verify-peer-fingerprint [^SSLEngine engine expected-fingerprint]
+  (try
+    (let [cert (->> engine
+                    (.getSession)
+                    (.getPeerCertificates)
+                    (seq)
+                    (first))
+          actual-fingerprint (fingerprint cert)]
+      (= (str/lower-case actual-fingerprint)
+         (str/lower-case expected-fingerprint)))
+    (catch Exception _
+      false)))
 
 (defn create-ssl-context [cert key]
   (let [ks (KeyStore/getInstance "PKCS12")

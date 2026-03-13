@@ -97,6 +97,10 @@
                       client-a (dc/create-connection {:ice-ufrag "Alice" :ice-pwd "pwdA" :remote-ice-ufrag "Bob" :remote-ice-pwd "pwdB" :ice-lite? false} true)
                       client-b (dc/create-connection {:ice-ufrag "Bob" :ice-pwd "pwdB" :remote-ice-ufrag "Alice" :remote-ice-pwd "pwdA" :ice-lite? false} false)
 
+                      ;; Extract dynamically generated fingerprints
+                      client-a (assoc client-a :remote-fingerprint (:fingerprint (:cert-data client-b)))
+                      client-b (assoc client-b :remote-fingerprint (:fingerprint (:cert-data client-a)))
+
                       now-ms 0
 
                       client-a (assoc client-a :remote-candidates ["127.0.0.1:5001"])
