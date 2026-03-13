@@ -189,6 +189,8 @@
      :cert-data cert-data
      :ice-ufrag (:ice-ufrag options)
      :ice-pwd (:ice-pwd options)
+     :remote-ice-ufrag (:remote-ice-ufrag options)
+     :remote-ice-pwd (:remote-ice-pwd options)
      :ice-lite? (boolean (:ice-lite? options))
      :ice-gathering-state :new
      :ice-connection-state :new

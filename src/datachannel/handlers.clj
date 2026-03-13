@@ -265,7 +265,7 @@
                     :outbound-streams (or local-outbound-streams 65535)
                     :inbound-streams (or local-inbound-streams 65535)
                     :initial-tsn init-tsn
-                    :params {}}
+                    :params []}
         init-packet {:src-port 5000
                      :dst-port 5000
                      :verification-tag 0
