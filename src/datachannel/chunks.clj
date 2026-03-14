@@ -3,9 +3,11 @@
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(defmulti process-chunk (fn [_state chunk _packet _now-ms] (:type chunk)))
+(defmulti process-chunk "TODO"
+  (fn [_state chunk _packet _now-ms] (:type chunk)))
 
-(defn compute-gap-blocks [remote-tsn out-of-order-tsns]
+(defn compute-gap-blocks "TODO"
+  [remote-tsn out-of-order-tsns]
   (if (empty? out-of-order-tsns)
     []
     (let [tsns (seq out-of-order-tsns)]

@@ -2,7 +2,8 @@
   (:require [datachannel.sctp :as sctp])
   (:import [java.nio ByteBuffer]))
 
-(defn decode-message [^bytes payload]
+(defn decode-message "TODO"
+  [^bytes payload]
   (let [buf (ByteBuffer/wrap payload)
         msg-type (bit-and (.get buf) 0xff)]
     (if (= msg-type 3) ; DATA_CHANNEL_OPEN
@@ -32,7 +33,8 @@
         {:type :ack}
         {:type :unknown}))))
 
-(defn encode-message [msg]
+(defn encode-message "TODO"
+  [msg]
   (if (= (:type msg) :open)
     (let [label-bytes (.getBytes ^String (or (:label msg) "") "UTF-8")
           protocol-bytes (.getBytes ^String (or (:protocol msg) "") "UTF-8")

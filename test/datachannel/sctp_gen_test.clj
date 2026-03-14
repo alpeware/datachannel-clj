@@ -5,6 +5,7 @@
             [datachannel.core :as dc]))
 
 (def gen-op
+  "TODO"
   (gen/one-of
    [(gen/tuple (gen/return :advance-time) (gen/choose 10 1000))
     (gen/tuple (gen/return :receive-packet)
@@ -14,14 +15,17 @@
                (gen/choose 0 5)
                (gen/elements [:webrtc/string :webrtc/binary]))]))
 
-(defn valid-unacked-data? [state]
+(defn valid-unacked-data? "TODO"
+  [state]
   (let [expected (reduce + (map (fn [s] (reduce + (map #(+ 16 (if-let [p (:payload (:chunk %))] (alength ^bytes p) 0)) (:send-queue s)))) (vals (:streams state))))]
     (= (get-in state [:metrics :unacked-data] 0) expected)))
 
-(defn queue-size [q]
+(defn queue-size "TODO"
+  [q]
   (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q)))
 
-(defn valid-queue-limits? [state]
+(defn valid-queue-limits? "TODO"
+  [state]
   (let [max-q (get state :max-queue-size)]
     (if max-q
       (every? (fn [s]
@@ -29,24 +33,28 @@
               (keys (:streams state)))
       true)))
 
-(defn valid-congestion-metrics? [state]
+(defn valid-congestion-metrics? "TODO"
+  [state]
   (and (>= (get state :flight-size 0) 0)
        (>= (get state :cwnd 0) 0)))
 
-(defn valid-buffer-amounts? [state]
+(defn valid-buffer-amounts? "TODO"
+  [state]
   (every? (fn [s]
             (= (dc/get-buffered-amount state s)
                (queue-size (get-in state [:streams s :send-queue] []))))
           (keys (:streams state))))
 
-(defn valid-delayed-sack-state? [state]
+(defn valid-delayed-sack-state? "TODO"
+  [state]
   (let [unacked (get state :unacked-data-chunks 0)
         has-timer? (contains? (:timers state) :sctp/t-delayed-sack)]
     (and (>= unacked 0)
          (<= unacked 1)
          (= (= unacked 1) has-timer?))))
 
-(defn valid-buffered-amount-low-events? [old-buffered new-buffered threshold app-events]
+(defn valid-buffered-amount-low-events? "TODO"
+  [old-buffered new-buffered threshold app-events]
   (every? (fn [s]
             (let [o (get old-buffered s 0)
                   n (get new-buffered s 0)
@@ -57,18 +65,21 @@
               (= crossed? (boolean evt-present?))))
           (keys new-buffered)))
 
-(defn valid-total-buffered-low-events? [old-total new-total threshold app-events]
+(defn valid-total-buffered-low-events? "TODO"
+  [old-total new-total threshold app-events]
   (let [crossed-total? (and (> old-total threshold) (<= new-total threshold))
         total-evt-present? (some #(= (:type %) :on-total-buffered-amount-low) app-events)]
     (= crossed-total? (boolean total-evt-present?))))
 
-(defn valid-no-spurious-ack? [op-type timers-triggered? next-network-out]
+(defn valid-no-spurious-ack? "TODO"
+  [op-type timers-triggered? next-network-out]
   (let [spurious-ack? (and (= op-type :advance-time)
                            (not timers-triggered?)
                            (seq next-network-out))]
     (not spurious-ack?)))
 
-(defn valid-metrics-increase? [op-type next-network-out old-state new-state]
+(defn valid-metrics-increase? "TODO"
+  [op-type next-network-out old-state new-state]
   (let [old-tx (get-in old-state [:metrics :tx-packets] 0)
         new-tx (get-in new-state [:metrics :tx-packets] 0)
         old-rx (get-in old-state [:metrics :rx-packets] 0)
@@ -80,18 +91,21 @@
            (= new-tx (+ old-tx net-out-size))
            (>= new-tx old-tx)))))
 
-(defn valid-max-burst? [state next-network-out]
+(defn valid-max-burst? "TODO"
+  [state next-network-out]
   (let [max-burst (get state :max-burst 4)
         data-pkts (count (filter (fn [pkt] (and (map? pkt) (some #(= (:type %) :data) (:chunks pkt)))) next-network-out))]
     (<= data-pkts max-burst)))
 
-(defn valid-negotiated-streams? [state]
+(defn valid-negotiated-streams? "TODO"
+  [state]
   (if (= (:state state) :established)
     (and (number? (:negotiated-outbound-streams state))
          (number? (:negotiated-inbound-streams state)))
     true))
 
-(defn setup-established-state []
+(defn setup-established-state "TODO"
+  []
   (let [init-state (dc/create-connection {:max-queue-size 50000} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
         state1 (:new-state connect-res)
@@ -122,6 +136,7 @@
     state3))
 
 (def prop-sctp-state-machine-invariants
+  "TODO"
   (prop/for-all [ops (gen/vector gen-op 10 100)]
                 (let [init-state (setup-established-state)]
                   (loop [state init-state

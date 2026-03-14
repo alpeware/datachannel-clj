@@ -5,14 +5,17 @@
             [datachannel.core :as dc]))
 
 (def gen-bytes
+  "TODO"
   (gen/fmap byte-array (gen/vector gen/byte 0 2000)))
 
 (def gen-state
+  "TODO"
   (gen/fmap (fn [client-mode?]
               (dc/create-connection {} client-mode?))
             gen/boolean))
 
 (def prop-no-crashes
+  "TODO"
   (prop/for-all [state gen-state
                  garbage-bytes gen-bytes]
                 (let [now-ms (System/currentTimeMillis)

@@ -11,9 +11,11 @@
    [sun.security.x509 X500Name]
    [java.util Date ArrayList]))
 
-(def DEFAULT-PACKET-SIZE 16384)
+(def DEFAULT-PACKET-SIZE "TODO"
+  16384)
 
-(defn fingerprint [cert]
+(defn fingerprint "TODO"
+  [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
     (->> (.getEncoded cert)
          (.update md))
@@ -21,7 +23,8 @@
         (.withUpperCase)
         (.formatHex (.digest md)))))
 
-(defn generate-cert []
+(defn generate-cert "TODO"
+  []
   (let [key-pair-generator (CertAndKeyGen. "RSA" "SHA256WithRSA" nil)
         x500-name (X500Name. "CN=WebRTC, O=Clojure, C=US")]
     (.generate key-pair-generator 2048)
@@ -34,7 +37,8 @@
        :key key
        :fingerprint (fingerprint cert)})))
 
-(defn verify-peer-fingerprint [^SSLEngine engine expected-fingerprint]
+(defn verify-peer-fingerprint "TODO"
+  [^SSLEngine engine expected-fingerprint]
   (try
     (let [cert (->> engine
                     (.getSession)
@@ -47,7 +51,8 @@
     (catch Exception _
       false)))
 
-(defn create-ssl-context [cert key]
+(defn create-ssl-context "TODO"
+  [cert key]
   (let [ks (KeyStore/getInstance "PKCS12")
         kmf (KeyManagerFactory/getInstance "SunX509")
         tmf (TrustManagerFactory/getInstance "SunX509")
@@ -66,7 +71,8 @@
       (.init ctx (.getKeyManagers kmf) (into-array [tm]) nil))
     ctx))
 
-(defn create-engine [^SSLContext context client-mode]
+(defn create-engine "TODO"
+  [^SSLContext context client-mode]
   (let [engine (.createSSLEngine context)]
     (.setUseClientMode engine client-mode)
     (let [params (.getSSLParameters engine)]
@@ -75,7 +81,8 @@
       (.setSSLParameters engine params)
       engine)))
 
-(def buffer-size 65536)
+(def buffer-size "TODO"
+  65536)
 
 (defn- make-buffer []
   (ByteBuffer/allocateDirect buffer-size))

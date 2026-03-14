@@ -1,28 +1,32 @@
 (ns datachannel.stun-webrtc-integration-test
   (:require [clojure.test :refer [deftest is]]
             [datachannel.core :as dc]
-            [datachannel.stun :as stun]
             [datachannel.dtls :as dtls]
-            [datachannel.nio :as nio])
+            [datachannel.nio :as nio]
+            [datachannel.stun :as stun])
   (:import [dev.onvoid.webrtc PeerConnectionFactory RTCConfiguration PeerConnectionObserver RTCIceServer RTCIceCandidate RTCSessionDescription RTCSdpType]
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.util ArrayList]
            [java.net InetAddress InetSocketAddress]
            [java.nio ByteBuffer]))
 
-(defn get-local-ip []
+(defn get-local-ip "TODO"
+  []
   (.getHostAddress (InetAddress/getLocalHost)))
 
-(defn extract-ice-credentials [sdp]
+(defn extract-ice-credentials "TODO"
+  [sdp]
   {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))
    :pwd (second (re-find #"a=ice-pwd:([^\r\n]+)" sdp))})
 
-(defn parse-candidate [candidate-sdp]
+(defn parse-candidate "TODO"
+  [candidate-sdp]
   (let [parts (.split candidate-sdp " ")]
     {:ip (get parts 4)
      :port (Integer/parseInt (get parts 5))}))
 
-(defn create-offer [pc]
+(defn create-offer "TODO"
+  [pc]
   (let [p (promise)]
     (.createOffer pc (dev.onvoid.webrtc.RTCOfferOptions.)
                   (reify dev.onvoid.webrtc.CreateSessionDescriptionObserver
@@ -30,7 +34,8 @@
                     (onFailure [_ error] (deliver p (ex-info "Create offer failed" {:error error})))))
     @p))
 
-(defn set-local-description [pc description]
+(defn set-local-description "TODO"
+  [pc description]
   (let [p (promise)]
     (.setLocalDescription pc description
                           (reify dev.onvoid.webrtc.SetSessionDescriptionObserver
@@ -38,7 +43,8 @@
                             (onFailure [_ error] (deliver p (ex-info "Set local description failed" {:error error})))))
     @p))
 
-(defn set-remote-description [pc description]
+(defn set-remote-description "TODO"
+  [pc description]
   (let [p (promise)]
     (.setRemoteDescription pc description
                            (reify dev.onvoid.webrtc.SetSessionDescriptionObserver

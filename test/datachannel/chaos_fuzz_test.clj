@@ -10,7 +10,8 @@
     (.get (.duplicate bb) buf)
     buf))
 
-(defn apply-chaos [packets drop-rate dup-rate reorder? rand-seed]
+(defn apply-chaos "TODO"
+  [packets drop-rate dup-rate reorder? rand-seed]
   (let [rng (java.util.Random. rand-seed)
         ;; 1. Drop
         after-drop (filter (fn [_] (> (.nextDouble rng) drop-rate)) packets)
@@ -24,7 +25,8 @@
                         after-dup)]
     after-reorder))
 
-(defn pump-chaos-network [state-a state-b condition? max-iterations start-time drop-rate dup-rate reorder? rand-seed]
+(defn pump-chaos-network "TODO"
+  [state-a state-b condition? max-iterations start-time drop-rate dup-rate reorder? rand-seed]
   (let [rng (java.util.Random. rand-seed)]
     (loop [a state-a
            b state-b
@@ -88,6 +90,7 @@
             (recur a-time b-time (inc i))))))))
 
 (def prop-chaos-connection
+  "TODO"
   (prop/for-all [drop-rate (gen/choose 0 20)
                  dup-rate (gen/choose 0 10)
                  reorder? gen/boolean

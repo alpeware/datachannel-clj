@@ -8,21 +8,33 @@
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(def magic-cookie 0x2112A442)
+(def magic-cookie "TODO"
+  0x2112A442)
 
 ;; Attributes
-(def ATTR_USERNAME 0x0006)
-(def ATTR_MESSAGE_INTEGRITY 0x0008)
-(def ATTR_ERROR_CODE 0x0009)
-(def ATTR_UNKNOWN_ATTRIBUTES 0x000A)
-(def ATTR_XOR_MAPPED_ADDRESS 0x0020)
-(def ATTR_PRIORITY 0x0024)
-(def ATTR_USE_CANDIDATE 0x0025)
-(def ATTR_FINGERPRINT 0x8028)
-(def ATTR_ICE_CONTROLLED 0x8029)
-(def ATTR_ICE_CONTROLLING 0x802A)
+(def ATTR_USERNAME "TODO"
+  0x0006)
+(def ATTR_MESSAGE_INTEGRITY "TODO"
+  0x0008)
+(def ATTR_ERROR_CODE "TODO"
+  0x0009)
+(def ATTR_UNKNOWN_ATTRIBUTES "TODO"
+  0x000A)
+(def ATTR_XOR_MAPPED_ADDRESS "TODO"
+  0x0020)
+(def ATTR_PRIORITY "TODO"
+  0x0024)
+(def ATTR_USE_CANDIDATE "TODO"
+  0x0025)
+(def ATTR_FINGERPRINT "TODO"
+  0x8028)
+(def ATTR_ICE_CONTROLLED "TODO"
+  0x8029)
+(def ATTR_ICE_CONTROLLING "TODO"
+  0x802A)
 
-(def DEFAULT_PRIORITY 1853824767)
+(def DEFAULT_PRIORITY "TODO"
+  1853824767)
 
 (defn- put-unsigned-short [^ByteBuffer buf val]
   (.putShort buf (unchecked-short val)))
@@ -44,7 +56,8 @@
     (.update crc data)
     (bit-xor (.getValue crc) 0x5354554e)))
 
-(defn make-binding-request [local-ufrag remote-ufrag remote-pwd]
+(defn make-binding-request "TODO"
+  [local-ufrag remote-ufrag remote-pwd]
   (let [buf (ByteBuffer/allocate 1024)
         _ (.order buf ByteOrder/BIG_ENDIAN)
         tx-id (byte-array 12)]
@@ -116,7 +129,8 @@
     (.flip buf)
     buf))
 
-(defn make-simple-binding-request []
+(defn make-simple-binding-request "TODO"
+  []
   (let [buf (ByteBuffer/allocate 1024)
         _ (.order buf ByteOrder/BIG_ENDIAN)
         tx-id (byte-array 12)]
@@ -131,7 +145,8 @@
     (.flip buf)
     buf))
 
-(defn decode-xor-mapped-address [val-bytes cookie]
+(defn decode-xor-mapped-address "TODO"
+  [val-bytes cookie]
   (let [buf (ByteBuffer/wrap val-bytes)
         _ (.order buf ByteOrder/BIG_ENDIAN)
         _ (get-unsigned-byte buf) ;; reserved
@@ -152,7 +167,8 @@
           {:family family :port xport :address (java.net.InetAddress/getByAddress decoded-addr)}))
       (throw (ex-info "Only IPv4 supported for now" {:family family})))))
 
-(defn parse-packet [^ByteBuffer buf]
+(defn parse-packet "TODO"
+  [^ByteBuffer buf]
   (let [_ (.order buf ByteOrder/BIG_ENDIAN)
         msg-type (get-unsigned-short buf)
         msg-len (get-unsigned-short buf)
@@ -175,7 +191,8 @@
           (recur (assoc attrs attr-type val-bytes)))
         {:type msg-type :length msg-len :cookie cookie :tx-id tx-id :attributes attrs}))))
 
-(defn make-binding-response [password tx-id ^InetSocketAddress peer-addr]
+(defn make-binding-response "TODO"
+  [password tx-id ^InetSocketAddress peer-addr]
   (let [resp-buf (ByteBuffer/allocate 1024)
         _ (.order resp-buf ByteOrder/BIG_ENDIAN)]
     ;; Header
@@ -231,7 +248,8 @@
     (.flip resp-buf)
     resp-buf))
 
-(defn handle-packet [^ByteBuffer buf ^InetSocketAddress peer-addr connection]
+(defn handle-packet "TODO"
+  [^ByteBuffer buf ^InetSocketAddress peer-addr connection]
   (try
     (let [start-pos (.position buf)
           _ (.order buf ByteOrder/BIG_ENDIAN)

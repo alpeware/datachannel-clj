@@ -4,9 +4,11 @@
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.nio ByteBuffer]))
 
-(defonce factory (PeerConnectionFactory. (HeadlessAudioDeviceModule.)))
+(defonce ^{:doc "TODO"} factory
+  (PeerConnectionFactory. (HeadlessAudioDeviceModule.)))
 
-(defn create-offer [pc]
+(defn create-offer "TODO"
+  [pc]
   (let [p (promise)]
     (.createOffer pc (RTCOfferOptions.)
                   (reify dev.onvoid.webrtc.CreateSessionDescriptionObserver
@@ -14,7 +16,8 @@
                     (onFailure [_ error] (deliver p (ex-info "CreateOffer failed" {:error error})))))
     @p))
 
-(defn create-answer [pc]
+(defn create-answer "TODO"
+  [pc]
   (let [p (promise)]
     (.createAnswer pc (dev.onvoid.webrtc.RTCAnswerOptions.)
                    (reify dev.onvoid.webrtc.CreateSessionDescriptionObserver
@@ -22,7 +25,8 @@
                      (onFailure [_ error] (deliver p (ex-info "CreateAnswer failed" {:error error})))))
     @p))
 
-(defn set-local [pc desc]
+(defn set-local "TODO"
+  [pc desc]
   (let [p (promise)]
     (.setLocalDescription pc desc
                           (reify dev.onvoid.webrtc.SetSessionDescriptionObserver
@@ -30,7 +34,8 @@
                             (onFailure [_ error] (deliver p (ex-info "SetLocal failed" {:error error})))))
     @p))
 
-(defn set-remote [pc desc]
+(defn set-remote "TODO"
+  [pc desc]
   (let [p (promise)]
     (.setRemoteDescription pc desc
                            (reify dev.onvoid.webrtc.SetSessionDescriptionObserver

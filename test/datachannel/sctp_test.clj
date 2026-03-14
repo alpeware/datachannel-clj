@@ -1,14 +1,14 @@
 (ns datachannel.sctp-test
-  (:require [clojure.test :refer [deftest is]]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :refer [deftest is]]
+            [clojure.test.check.clojure-test :as tc-ct]
             [clojure.test.check.generators :as tc-gen]
             [clojure.test.check.properties :as prop]
-            [clojure.test.check.clojure-test :as tc-ct]
             [datachannel.sctp :as sctp])
   (:import [java.nio ByteBuffer]))
 
 ;; Helper to compare byte arrays
-(defn bytes= [b1 b2]
+(defn bytes= "TODO" [b1 b2]
   (if (and (nil? b1) (nil? b2))
     true
     (if (or (nil? b1) (nil? b2))
@@ -44,7 +44,8 @@
 (s/def ::gap-blocks (s/coll-of (s/tuple (s/int-in 0 65536) (s/int-in 0 65536))))
 (s/def ::duplicate-tsns (s/coll-of int?))
 
-(defmulti chunk-type :type)
+(defmulti chunk-type "TODO"
+  :type)
 
 (defmethod chunk-type :init [_]
   (s/keys :req-un [::init-tag ::a-rwnd ::outbound-streams ::inbound-streams ::initial-tsn ::params]))
@@ -83,16 +84,20 @@
 
 ;; Generators
 
-(def byte-array-gen (tc-gen/fmap byte-array (tc-gen/vector (tc-gen/fmap byte (tc-gen/choose -128 127)))))
+(def byte-array-gen "TODO"
+  (tc-gen/fmap byte-array (tc-gen/vector (tc-gen/fmap byte (tc-gen/choose -128 127)))))
 
-(defn data-flags [{:keys [unordered beginning ending]}]
+(defn data-flags "TODO"
+  [{:keys [unordered beginning ending]}]
   (bit-or (if unordered 4 0)
           (if beginning 2 0)
           (if ending 1 0)))
 
-(def uint32-gen (tc-gen/large-integer* {:min 0 :max 4294967295}))
+(def uint32-gen "TODO"
+  (tc-gen/large-integer* {:min 0 :max 4294967295}))
 
 (def chunk-gen
+  "TODO"
   (tc-gen/one-of
    [(tc-gen/hash-map :type (tc-gen/return :init)
                      :init-tag uint32-gen
@@ -132,6 +137,7 @@
                      :params (tc-gen/return {}))]))
 
 (def packet-gen
+  "TODO"
   (tc-gen/hash-map :src-port (tc-gen/choose 0 65535)
                    :dst-port (tc-gen/choose 0 65535)
                    :verification-tag uint32-gen
@@ -139,14 +145,16 @@
 
 ;; Tests
 
-(defn round-trip [packet]
+(defn round-trip "TODO"
+  [packet]
   (let [buf (ByteBuffer/allocate 65536)
         _ (sctp/encode-packet packet buf)
         _ (.flip buf)]
     (sctp/decode-packet buf)))
 
 ;; Deep compare function that handles byte arrays and specific fields
-(defn packet= [p1 p2]
+(defn packet= "TODO"
+  [p1 p2]
   (and (= (dissoc p1 :chunks :checksum) (dissoc p2 :chunks :checksum))
        (= (count (:chunks p1)) (count (:chunks p2)))
        (every? true?

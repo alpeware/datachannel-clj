@@ -1,40 +1,47 @@
 (ns datachannel.core
-  (:require [datachannel.sctp :as sctp]
+  (:require [datachannel.chunks :as chunks]
+            [datachannel.dcep :as dcep]
             [datachannel.dtls :as dtls]
-            [datachannel.stun :as stun]
+            [datachannel.handlers :as handlers]
             [datachannel.packetize :as packetize]
             [datachannel.reassemble :as reassemble]
-            [datachannel.handlers :as handlers]
-            [datachannel.chunks :as chunks]
-            [datachannel.dcep :as dcep])
+            [datachannel.sctp :as sctp]
+            [datachannel.stun :as stun])
   (:import [java.nio ByteBuffer]
            [javax.net.ssl SSLEngineResult$HandshakeStatus]
            [java.security SecureRandom]))
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(def buffer-size 65536)
+(def buffer-size "TODO"
+  65536)
 
-(defn get-buffered-amount [state stream-id]
+(defn get-buffered-amount "TODO"
+  [state stream-id]
   (let [q (get-in state [:streams stream-id :send-queue] [])]
     (reduce + (map (fn [item]
                      (let [payload (get-in item [:chunk :payload])]
                        (if payload (alength ^bytes payload) 0)))
                    q))))
 
-(defn packetize [state app-events now-ms]
+(defn packetize "TODO"
+  [state app-events now-ms]
   (packetize/packetize state app-events now-ms))
 
-(defn handle-event [state event now-ms]
+(defn handle-event "TODO"
+  [state event now-ms]
   (handlers/handle-event state event now-ms))
 
-(defn handle-timeout [state timer-id now-ms & [engine]]
+(defn handle-timeout "TODO"
+  [state timer-id now-ms & [engine]]
   (handlers/handle-timeout state timer-id now-ms engine))
 
-(defn reassemble [state app-events]
+(defn reassemble "TODO"
+  [state app-events]
   (reassemble/reassemble state app-events))
 
-(defn handle-sctp-packet [state packet now-ms]
+(defn handle-sctp-packet "TODO"
+  [state packet now-ms]
   (let [chunks (:chunks packet)
         state-with-rx (-> state
                           (update-in [:metrics :rx-packets] (fnil inc 0))
@@ -84,7 +91,8 @@
                       (:network-out result-map []))]
     (assoc result-map :network-out-bytes encoded)))
 
-(defn handle-receive [state ^bytes network-bytes now-ms & [remote-addr]]
+(defn handle-receive "TODO"
+  [state ^bytes network-bytes now-ms & [remote-addr]]
   (if (zero? (alength network-bytes))
     {:new-state state :network-out [] :app-events []}
     (let [first-byte (bit-and (aget network-bytes 0) 0xFF)
@@ -172,7 +180,8 @@
               packet (sctp/decode-packet buf)]
           (handle-sctp-packet state packet now-ms))))))
 
-(defn create-connection [options client-mode?]
+(defn create-connection "TODO"
+  [options client-mode?]
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
         engine (dtls/create-engine ctx client-mode?)
@@ -225,7 +234,8 @@
 
 (declare send-data)
 
-(defn create-data-channel [state label options]
+(defn create-data-channel "TODO"
+  [state label options]
   (let [opts (merge {:ordered true
                      :max-packet-life-time nil
                      :max-retransmits nil
@@ -259,10 +269,12 @@
             res (send-data new-state payload id :webrtc/dcep now-ms)]
         (assoc res :channel-id id)))))
 
-(defn set-max-message-size [state max-size]
+(defn set-max-message-size "TODO"
+  [state max-size]
   (assoc state :new-state (assoc state :max-message-size max-size)))
 
-(defn send-data [state ^bytes payload stream-id protocol now-ms]
+(defn send-data "TODO"
+  [state ^bytes payload stream-id protocol now-ms]
   (let [len (alength payload)
         max-size (get state :max-message-size 65519)]
     (when (zero? len)

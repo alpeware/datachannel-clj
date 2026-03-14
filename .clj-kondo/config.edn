@@ -1,1 +1,10 @@
-{:linters {:unresolved-symbol {:exclude [fuzz-handle-receive-no-crashes test-sctp-state-machine-invariants test-chaos-connection-establishment]}}}
+{:linters {:unresolved-symbol {:exclude [datachannel.chaos-fuzz-test/test-chaos-connection-establishment
+                                       datachannel.fuzz-test/fuzz-handle-receive-no-crashes
+                                       datachannel.sctp-gen-test/test-sctp-state-machine-invariants
+                                       fuzz-handle-receive-no-crashes
+                                       test-sctp-state-machine-invariants
+                                       test-chaos-connection-establishment]}
+           :large-def {:level :warning :row-threshold 60}
+           :too-many-params {:level :warning :max-params 5}
+           :missing-docstring {:level :warning}
+           :unsorted-required-namespaces {:level :warning}}}
