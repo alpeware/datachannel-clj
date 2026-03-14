@@ -7,7 +7,7 @@
 (def ^:private EMPTY-BYTE-ARRAY (byte-array 0))
 
 ;; Chunk types
-(def chunk-types
+(def chunk-types "TODO"
   {:data 0
    :init 1
    :init-ack 2
@@ -29,10 +29,11 @@
    :asconf 0xc1
    :forward-tsn 192})
 
-(def chunk-type-map (set/map-invert chunk-types))
+(def chunk-type-map "TODO"
+  (set/map-invert chunk-types))
 
 ;; Parameters
-(def parameters
+(def parameters "TODO"
   {:heartbeat 1
    :ipv4 5
    :ipv6 6
@@ -46,27 +47,30 @@
    :hmac-algo 0x8004
    :chunks 0x8003})
 
-(def parameter-map (set/map-invert parameters))
+(def parameter-map "TODO"
+  (set/map-invert parameters))
 
 ;; Protocols
-(def protocols
+(def protocols "TODO"
   {:webrtc/dcep 50
    :webrtc/string 51
    :webrtc/binary 53
    :webrtc/empty-string 56
    :webrtc/empty-binary 57})
 
-(def protocol-map (set/map-invert protocols))
+(def protocol-map "TODO"
+  (set/map-invert protocols))
 
 ;; Data Channel Message Types (DCEP)
-(def dcep-types
+(def dcep-types "TODO"
   {:ack 2
    :open 3})
 
-(def dcep-type-map (set/map-invert dcep-types))
+(def dcep-type-map "TODO"
+  (set/map-invert dcep-types))
 
 ;; Channel Types
-(def channel-types
+(def channel-types "TODO"
   {:reliable 0x00
    :reliable-unordered 0x80
    :partial-reliable 0x01
@@ -74,7 +78,8 @@
    :partial-reliable-timed 0x02
    :partial-reliable-timed-unordered 0x82})
 
-(def channel-type-map (set/map-invert channel-types))
+(def channel-type-map "TODO"
+  (set/map-invert channel-types))
 
 (defn- pad [len]
   (let [rem (mod len 4)]
@@ -89,7 +94,8 @@
 (defn- get-unsigned-byte [^ByteBuffer buf]
   (try (bit-and (.get buf) 0xff) (catch Exception _ 0)))
 
-(defn decode-params [^ByteBuffer buf total-length]
+(defn decode-params "TODO"
+  [^ByteBuffer buf total-length]
   (let [end (+ (.position buf) total-length)]
     (loop [params {}]
       (if (>= (.position buf) end)
@@ -115,7 +121,8 @@
     (.putShort buf (+ start-pos 2) (unchecked-short len))
     (dotimes [_ padding] (.put buf (byte 0)))))
 
-(defn encode-params [^ByteBuffer buf params]
+(defn encode-params "TODO"
+  [^ByteBuffer buf params]
   (doseq [[k v] params]
     (let [start-pos (.position buf)
           type-code (if (keyword? k) (get parameters k) k)
@@ -125,7 +132,8 @@
       (.put buf v-bytes)
       (set-length-and-padding buf start-pos))))
 
-(defmulti decode-chunk-payload (fn [type-key _buf _chunk-data _val-len _chunk-start _flags] type-key))
+(defmulti decode-chunk-payload "TODO"
+  (fn [type-key _buf _chunk-data _val-len _chunk-start _flags] type-key))
 
 (defmethod decode-chunk-payload :cookie-ack [_ _ chunk-data _ _ _]
   chunk-data)
@@ -148,14 +156,16 @@
 (defmethod decode-chunk-payload :shutdown-complete [_ _ chunk-data _ _ _]
   chunk-data)
 
-(defn decode-abort-chunk [^ByteBuffer buf chunk-data val-len chunk-start]
+(defn decode-abort-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len chunk-start]
   (.position buf (+ chunk-start val-len))
   chunk-data)
 
 (defmethod decode-chunk-payload :abort [_ buf chunk-data val-len chunk-start _]
   (decode-abort-chunk buf chunk-data val-len chunk-start))
 
-(defn decode-default-chunk [^ByteBuffer buf chunk-data val-len]
+(defn decode-default-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len]
   (let [body (byte-array val-len)]
     (.get buf body)
     (merge chunk-data {:body body})))
@@ -163,7 +173,8 @@
 (defmethod decode-chunk-payload :default [_ buf chunk-data val-len _ _]
   (decode-default-chunk buf chunk-data val-len))
 
-(defn decode-data-chunk [^ByteBuffer buf chunk-data val-len flags]
+(defn decode-data-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len flags]
   (let [tsn (get-unsigned-int buf)
         stream-id (get-unsigned-short buf)
         seq-num (get-unsigned-short buf)
@@ -184,7 +195,8 @@
 (defmethod decode-chunk-payload :data [_ buf chunk-data val-len _ flags]
   (decode-data-chunk buf chunk-data val-len flags))
 
-(defn decode-init-chunk [^ByteBuffer buf chunk-data val-len]
+(defn decode-init-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len]
   (let [init-tag (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
         outbound-streams (get-unsigned-short buf)
@@ -202,7 +214,8 @@
 (defmethod decode-chunk-payload :init [_ buf chunk-data val-len _ _]
   (decode-init-chunk buf chunk-data val-len))
 
-(defn decode-init-ack-chunk [^ByteBuffer buf chunk-data val-len]
+(defn decode-init-ack-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len]
   (let [init-tag (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
         outbound-streams (get-unsigned-short buf)
@@ -220,7 +233,8 @@
 (defmethod decode-chunk-payload :init-ack [_ buf chunk-data val-len _ _]
   (decode-init-ack-chunk buf chunk-data val-len))
 
-(defn decode-cookie-echo-chunk [^ByteBuffer buf chunk-data val-len]
+(defn decode-cookie-echo-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len]
   (let [cookie (byte-array val-len)]
     (.get buf cookie)
     (merge chunk-data {:cookie cookie})))
@@ -228,7 +242,8 @@
 (defmethod decode-chunk-payload :cookie-echo [_ buf chunk-data val-len _ _]
   (decode-cookie-echo-chunk buf chunk-data val-len))
 
-(defn decode-sack-chunk [^ByteBuffer buf chunk-data]
+(defn decode-sack-chunk "TODO"
+  [^ByteBuffer buf chunk-data]
   (let [cum-tsn-ack (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
         num-gap-ack-blocks (get-unsigned-short buf)
@@ -245,21 +260,24 @@
 (defmethod decode-chunk-payload :sack [_ buf chunk-data _ _ _]
   (decode-sack-chunk buf chunk-data))
 
-(defn decode-heartbeat-chunk [^ByteBuffer buf chunk-data val-len]
+(defn decode-heartbeat-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len]
   (let [params (decode-params buf val-len)]
     (merge chunk-data {:params params})))
 
 (defmethod decode-chunk-payload :heartbeat [_ buf chunk-data val-len _ _]
   (decode-heartbeat-chunk buf chunk-data val-len))
 
-(defn decode-heartbeat-ack-chunk [^ByteBuffer buf chunk-data val-len]
+(defn decode-heartbeat-ack-chunk "TODO"
+  [^ByteBuffer buf chunk-data val-len]
   (let [params (decode-params buf val-len)]
     (merge chunk-data {:params params})))
 
 (defmethod decode-chunk-payload :heartbeat-ack [_ buf chunk-data val-len _ _]
   (decode-heartbeat-ack-chunk buf chunk-data val-len))
 
-(defn decode-chunk [^ByteBuffer buf]
+(defn decode-chunk "TODO"
+  [^ByteBuffer buf]
   (if (< (.remaining buf) 4)
     nil
     (let [type-code (get-unsigned-byte buf)
@@ -288,7 +306,8 @@
 
           parsed-data)))))
 
-(defn update-checksum [^ByteBuffer buf]
+(defn update-checksum "TODO"
+  [^ByteBuffer buf]
   (let [crc (CRC32C.)
         pos (.position buf)
         orig-order (.order buf)]
@@ -305,7 +324,8 @@
       (.position buf pos)
       buf)))
 
-(defn decode-packet [^ByteBuffer buf]
+(defn decode-packet "TODO"
+  [^ByteBuffer buf]
   (let [_orig-order (.order buf)]
     (.order buf ByteOrder/BIG_ENDIAN)
     (let [src-port (get-unsigned-short buf)
@@ -325,7 +345,8 @@
                      chunks)
                    chunks))})))
 
-(defmulti encode-chunk-payload (fn [type-key _buf _chunk] type-key))
+(defmulti encode-chunk-payload "TODO"
+  (fn [type-key _buf _chunk] type-key))
 
 (defmethod encode-chunk-payload :data [_ ^ByteBuffer buf chunk]
   (.putInt buf (unchecked-int (:tsn chunk)))
@@ -384,7 +405,8 @@
   (when (:body chunk)
     (.put buf ^bytes (:body chunk))))
 
-(defn encode-chunk [^ByteBuffer buf chunk]
+(defn encode-chunk "TODO"
+  [^ByteBuffer buf chunk]
   (let [start-pos (.position buf)
         type-key (:type chunk)
         type-code (if (keyword? type-key) (get chunk-types type-key) type-key)
@@ -397,7 +419,7 @@
 
     (set-length-and-padding buf start-pos)))
 
-(defn encode-packet
+(defn encode-packet "TODO"
   ([packet buf] (encode-packet packet buf nil))
   ([packet ^ByteBuffer buf {:keys [zero-checksum?]}]
    (let [orig-order (.order buf)]

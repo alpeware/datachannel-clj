@@ -1,10 +1,11 @@
 (ns datachannel.handlers
-  (:require [datachannel.packetize :as packetize]
-            [datachannel.stun :as stun]
+  (:require [datachannel.chunks :as chunks]
             [datachannel.dtls :as dtls]
-            [datachannel.chunks :as chunks]))
+            [datachannel.packetize :as packetize]
+            [datachannel.stun :as stun]))
 
-(defmulti handle-timeout-timer (fn [_state timer-id _now-ms] timer-id))
+(defmulti handle-timeout-timer "TODO"
+  (fn [_state timer-id _now-ms] timer-id))
 
 (defmethod handle-timeout-timer :sctp/t-delayed-sack [state _timer-id _now-ms]
   (let [sack-chunk {:type :sack
@@ -247,14 +248,16 @@
 (defmethod handle-timeout-timer :default [state _timer-id _now-ms]
   {:new-state state :app-events []})
 
-(defn handle-timeout [state timer-id now-ms & [^javax.net.ssl.SSLEngine _engine]]
+(defn handle-timeout "TODO"
+  [state timer-id now-ms & [^javax.net.ssl.SSLEngine _engine]]
   (let [res (handle-timeout-timer state timer-id now-ms)]
     (if (or (seq (:pending-control-chunks (:new-state res)))
             (= "sctp" (namespace timer-id)))
       (packetize/packetize (:new-state res) (:app-events res) now-ms)
       res)))
 
-(defmulti handle-event-type (fn [_state event _now-ms] (:type event)))
+(defmulti handle-event-type "TODO"
+  (fn [_state event _now-ms] (:type event)))
 
 (defmethod handle-event-type :connect [state _event now-ms]
   (let [{:keys [local-ver-tag initial-tsn next-tsn local-outbound-streams local-inbound-streams]} state
@@ -296,6 +299,7 @@
 (defmethod handle-event-type :default [state _event _now-ms]
   {:new-state state :app-events []})
 
-(defn handle-event [state event now-ms]
+(defn handle-event "TODO"
+  [state event now-ms]
   (let [res (handle-event-type state event now-ms)]
     (packetize/packetize (:new-state res) (:app-events res) now-ms)))

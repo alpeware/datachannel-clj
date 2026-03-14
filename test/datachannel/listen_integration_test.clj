@@ -7,7 +7,8 @@
            [java.util ArrayList]
            [java.nio ByteBuffer]))
 
-(defn get-local-ip []
+(defn get-local-ip "TODO"
+  []
   (try
     (let [socket (java.net.DatagramSocket.)]
       (.connect socket (java.net.InetAddress/getByName "8.8.8.8") 10002)
@@ -16,11 +17,13 @@
         ip))
     (catch Exception _ "127.0.0.1")))
 
-(defn extract-ice-credentials [sdp]
+(defn extract-ice-credentials "TODO"
+  [sdp]
   {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))
    :pwd (second (re-find #"a=ice-pwd:([^\r\n]+)" sdp))})
 
-(defn create-offer [pc]
+(defn create-offer "TODO"
+  [pc]
   (let [p (promise)]
     (.createOffer pc (dev.onvoid.webrtc.RTCOfferOptions.)
                   (reify dev.onvoid.webrtc.CreateSessionDescriptionObserver
@@ -28,7 +31,8 @@
                     (onFailure [_ error] (deliver p (ex-info "Create offer failed" {:error error})))))
     @p))
 
-(defn set-local-description [pc description]
+(defn set-local-description "TODO"
+  [pc description]
   (let [p (promise)]
     (.setLocalDescription pc description
                           (reify dev.onvoid.webrtc.SetSessionDescriptionObserver
@@ -36,7 +40,8 @@
                             (onFailure [_ error] (deliver p (ex-info "Set local description failed" {:error error})))))
     @p))
 
-(defn set-remote-description [pc description]
+(defn set-remote-description "TODO"
+  [pc description]
   (let [p (promise)]
     (.setRemoteDescription pc description
                            (reify dev.onvoid.webrtc.SetSessionDescriptionObserver

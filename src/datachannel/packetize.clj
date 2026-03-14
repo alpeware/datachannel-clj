@@ -149,7 +149,8 @@
               (recur args-rem-ctrl args-cur-streams args-bundled args-cur-size args-cur-flight args-app-events))
             (:result step-result)))))))
 
-(defn packetize [state app-events now-ms]
+(defn packetize "TODO"
+  [state app-events now-ms]
   (let [max-burst (get state :max-burst 4)]
     (loop [current-state state
            all-pkts []

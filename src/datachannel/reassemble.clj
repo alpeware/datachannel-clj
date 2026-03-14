@@ -1,7 +1,8 @@
 (ns datachannel.reassemble
   (:require [datachannel.dcep :as dcep]))
 
-(defn assemble-payload [chunks]
+(defn assemble-payload "TODO"
+  [chunks]
   (let [total-len (reduce + (map #(alength ^bytes (:payload %)) chunks))
         result (byte-array total-len)]
     (loop [cs chunks
@@ -14,7 +15,8 @@
           (System/arraycopy p 0 result offset len)
           (recur (rest cs) (+ offset len)))))))
 
-(defn reassemble-stream [stream-data]
+(defn reassemble-stream "TODO"
+  [stream-data]
   (let [q (:recv-queue stream-data [])
         sorted-q (sort-by :tsn q)]
     (loop [remaining sorted-q
@@ -113,7 +115,8 @@
                      app-events
                      next-ssn))))))))
 
-(defn reassemble [state app-events]
+(defn reassemble "TODO"
+  [state app-events]
   (let [streams (:streams state)]
     (loop [stream-ids (keys streams)
            current-state state

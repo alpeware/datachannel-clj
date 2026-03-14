@@ -3,19 +3,23 @@
            [java.net InetAddress]
            [java.nio.channels UnsupportedAddressTypeException]))
 
-(defn get-local-ip []
+(defn get-local-ip "TODO"
+  []
   (.getHostAddress (InetAddress/getLocalHost)))
 
-(defn extract-ice-credentials [sdp]
+(defn extract-ice-credentials "TODO"
+  [sdp]
   {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))
    :pwd (second (re-find #"a=ice-pwd:([^\r\n]+)" sdp))})
 
-(defn parse-candidate [candidate-sdp]
+(defn parse-candidate "TODO"
+  [candidate-sdp]
   (let [parts (.split candidate-sdp " ")]
     {:ip (get parts 4)
      :port (Integer/parseInt (get parts 5))}))
 
-(defn create-offer [pc]
+(defn create-offer "TODO"
+  [pc]
   (let [p (promise)]
     (.createOffer pc (RTCOfferOptions.)
                   (reify CreateSessionDescriptionObserver
@@ -23,7 +27,8 @@
                     (onFailure [_ err] (deliver p (ex-info "CreateOffer failed" {:error err})))))
     @p))
 
-(defn create-answer [pc]
+(defn create-answer "TODO"
+  [pc]
   (let [p (promise)]
     (.createAnswer pc (RTCAnswerOptions.)
                    (reify CreateSessionDescriptionObserver
@@ -31,7 +36,8 @@
                      (onFailure [_ err] (deliver p (ex-info "CreateAnswer failed" {:error err})))))
     @p))
 
-(defn set-local-description [pc desc]
+(defn set-local-description "TODO"
+  [pc desc]
   (let [p (promise)]
     (.setLocalDescription pc desc
                           (reify SetSessionDescriptionObserver
@@ -39,7 +45,8 @@
                             (onFailure [_ err] (deliver p (ex-info "SetLocal failed" {:error err})))))
     @p))
 
-(defn set-remote-description [pc desc]
+(defn set-remote-description "TODO"
+  [pc desc]
   (let [p (promise)]
     (.setRemoteDescription pc desc
                            (reify SetSessionDescriptionObserver
@@ -47,7 +54,8 @@
                              (onFailure [_ err] (deliver p (ex-info "SetRemote failed" {:error err})))))
     @p))
 
-(defn make-pc-observer [{:keys [on-ice-candidate]}]
+(defn make-pc-observer "TODO"
+  [{:keys [on-ice-candidate]}]
   (reify PeerConnectionObserver
     (onIceCandidate [_ candidate] (when on-ice-candidate
                                     (try
@@ -60,7 +68,8 @@
     (onAddStream [_ _]) (onRemoveStream [_ _]) (onRenegotiationNeeded [_])
     (onAddTrack [_ _ _]) (onTrack [_ _]) (onIceCandidateError [_ _])))
 
-(defn build-answer-sdp [local-ip port fingerprint ice-ufrag ice-pwd]
+(defn build-answer-sdp "TODO"
+  [local-ip port fingerprint ice-ufrag ice-pwd]
   (str "v=0\r\n"
        "o=- 123456789 2 IN IP4 " local-ip "\r\n"
        "s=-\r\n"

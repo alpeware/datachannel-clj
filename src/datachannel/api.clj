@@ -1,9 +1,9 @@
 (ns datachannel.api
-  (:require [datachannel.core :as dc]
-            [datachannel.nio :as nio]
-            [datachannel.sdp :as sdp]
+  (:require [clojure.string :as str]
+            [datachannel.core :as dc]
             [datachannel.dtls :as dtls]
-            [clojure.string :as str])
+            [datachannel.nio :as nio]
+            [datachannel.sdp :as sdp])
   (:import [java.nio ByteBuffer]
            [java.nio.channels DatagramChannel Selector SelectionKey]
            [java.net InetSocketAddress]))
