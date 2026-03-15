@@ -149,9 +149,17 @@
                            (not (:dtls-verified? state)))
                     (if (and (:remote-fingerprint state)
                              (not (dtls/verify-peer-fingerprint engine (:remote-fingerprint state))))
-                      {:new-state (assoc state :state :closed)
-                       :network-out (vec packets)
-                       :app-events [{:type :on-error :message "DTLS Fingerprint Mismatch"} {:type :on-close}]}
+                      (let [state-closed (assoc state :state :closed)
+                            abort-chunk {:type :abort
+                                         :flags 0
+                                         :params []}
+                            packet {:src-port (:local-port state 5000)
+                                    :dst-port (:remote-port state 5000)
+                                    :ver-tag (:remote-ver-tag state 0)
+                                    :chunks [abort-chunk]}]
+                        {:new-state state-closed
+                         :network-out (if (empty? packets) [packet] (conj (vec packets) packet))
+                         :app-events [{:type :on-error :message "DTLS Fingerprint Mismatch"} {:type :on-close}]})
                       ;; Verification passed (or listen mode), transition to :connected normally
                       (let [state-verified (assoc state :dtls-verified? true :state :connected)]
                         (if (and app-data (pos? (alength app-data)))
@@ -172,7 +180,10 @@
                       {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]})))
                 (catch Exception e
                   (println "DTLS HANDSHAKE EXCEPTION" (.getMessage e))
-                  {:new-state state :network-out [] :app-events []})))))
+                  (let [err-msg (if (.getMessage e) (.getMessage e) "DTLS Fingerprint Mismatch")]
+                    {:new-state (assoc state :state :closed)
+                     :network-out []
+                     :app-events [{:type :on-error :message err-msg} {:type :on-close}]}))))))
 
         ;; SCTP (Default, raw)
         :else
