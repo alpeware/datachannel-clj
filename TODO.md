@@ -11,4 +11,4 @@
 
 ## Phase 3: Security & Hardening
 - [x] **LINT-01:** Tighten `.clj-kondo/config.edn` rules and resolve all codebase warnings. Merge this linter rules your config: `{:linters {:large-def {:level :warning :row-threshold 60}  :too-many-params {:level :warning :max-params 5}  :missing-docstring {:level :warning} :unsorted-required-namespaces {:level :warning}}}`
-- [ ] **SEC-01:** Implement negative integration test for DTLS fingerprint mismatch (MITM rejection).
+- [x] **SEC-01:** Implement negative integration test for DTLS fingerprint mismatch (MITM rejection).

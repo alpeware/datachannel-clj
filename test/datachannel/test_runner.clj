@@ -6,6 +6,7 @@
             [datachannel.handshake-test]
             [datachannel.listen-integration-test]
             [datachannel.pure-p2p-integration-test]
+            [datachannel.pure-p2p-mitm-integration-test]
             [datachannel.rehandshake-test]
             [datachannel.sans-io-integration-test]
             [datachannel.sctp-attempt-connect-without-cookie-test]
@@ -70,7 +71,8 @@
     'datachannel.webrtc-java-test
     'datachannel.stun-integration-test
     'datachannel.sans-io-integration-test
-    'datachannel.pure-p2p-integration-test]
+    'datachannel.pure-p2p-integration-test
+    'datachannel.pure-p2p-mitm-integration-test]
 
    ;; Group 2: Pure/Stateless tests part 1
    ['datachannel.sctp-test
