@@ -8,32 +8,44 @@
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(def magic-cookie "TODO"
+(def magic-cookie
+  "RFC 5389 compliant STUN magic cookie (0x2112A442) indicating protocol version 2."
   0x2112A442)
 
 ;; Attributes
-(def ATTR_USERNAME "TODO"
+(def ATTR_USERNAME
+  "RFC 5389 STUN attribute code for USERNAME (0x0006)."
   0x0006)
-(def ATTR_MESSAGE_INTEGRITY "TODO"
+(def ATTR_MESSAGE_INTEGRITY
+  "RFC 5389 STUN attribute code for MESSAGE-INTEGRITY (0x0008)."
   0x0008)
-(def ATTR_ERROR_CODE "TODO"
+(def ATTR_ERROR_CODE
+  "RFC 5389 STUN attribute code for ERROR-CODE (0x0009)."
   0x0009)
-(def ATTR_UNKNOWN_ATTRIBUTES "TODO"
+(def ATTR_UNKNOWN_ATTRIBUTES
+  "RFC 5389 STUN attribute code for UNKNOWN-ATTRIBUTES (0x000A)."
   0x000A)
-(def ATTR_XOR_MAPPED_ADDRESS "TODO"
+(def ATTR_XOR_MAPPED_ADDRESS
+  "RFC 5389 STUN attribute code for XOR-MAPPED-ADDRESS (0x0020)."
   0x0020)
-(def ATTR_PRIORITY "TODO"
+(def ATTR_PRIORITY
+  "RFC 5245 ICE STUN attribute code for PRIORITY (0x0024)."
   0x0024)
-(def ATTR_USE_CANDIDATE "TODO"
+(def ATTR_USE_CANDIDATE
+  "RFC 5245 ICE STUN attribute code for USE-CANDIDATE (0x0025)."
   0x0025)
-(def ATTR_FINGERPRINT "TODO"
+(def ATTR_FINGERPRINT
+  "RFC 5389 STUN attribute code for FINGERPRINT (0x8028)."
   0x8028)
-(def ATTR_ICE_CONTROLLED "TODO"
+(def ATTR_ICE_CONTROLLED
+  "RFC 5245 ICE STUN attribute code for ICE-CONTROLLED (0x8029)."
   0x8029)
-(def ATTR_ICE_CONTROLLING "TODO"
+(def ATTR_ICE_CONTROLLING
+  "RFC 5245 ICE STUN attribute code for ICE-CONTROLLING (0x802A)."
   0x802A)
 
-(def DEFAULT_PRIORITY "TODO"
+(def DEFAULT_PRIORITY
+  "A default integer priority value provided for ICE agent candidate comparisons."
   1853824767)
 
 (defn- put-unsigned-short [^ByteBuffer buf val]
@@ -56,7 +68,8 @@
     (.update crc data)
     (bit-xor (.getValue crc) 0x5354554e)))
 
-(defn make-binding-request "TODO"
+(defn make-binding-request
+  "Constructs an RFC 5389 STUN Binding Request packet containing USERNAME, PRIORITY, ICE-CONTROLLED, MESSAGE-INTEGRITY (signed using HMAC-SHA1 and `remote-pwd`), and a CRC32c FINGERPRINT."
   [local-ufrag remote-ufrag remote-pwd]
   (let [buf (ByteBuffer/allocate 1024)
         _ (.order buf ByteOrder/BIG_ENDIAN)
@@ -129,7 +142,8 @@
     (.flip buf)
     buf))
 
-(defn make-simple-binding-request "TODO"
+(defn make-simple-binding-request
+  "Constructs a minimal, unauthenticated STUN Binding Request lacking extensions or integrity checks."
   []
   (let [buf (ByteBuffer/allocate 1024)
         _ (.order buf ByteOrder/BIG_ENDIAN)
@@ -145,7 +159,8 @@
     (.flip buf)
     buf))
 
-(defn decode-xor-mapped-address "TODO"
+(defn decode-xor-mapped-address
+  "Un-XORs the payload of an RFC 5389 XOR-MAPPED-ADDRESS attribute using the STUN `magic-cookie` and transactional ID, returning a map mapping `:family`, `:port`, and `:address`."
   [val-bytes cookie]
   (let [buf (ByteBuffer/wrap val-bytes)
         _ (.order buf ByteOrder/BIG_ENDIAN)
@@ -167,7 +182,8 @@
           {:family family :port xport :address (java.net.InetAddress/getByAddress decoded-addr)}))
       (throw (ex-info "Only IPv4 supported for now" {:family family})))))
 
-(defn parse-packet "TODO"
+(defn parse-packet
+  "Reads an RFC 5389 STUN message byte stream, separating the header elements and extracting all TLV attributes into an unparsed map."
   [^ByteBuffer buf]
   (let [_ (.order buf ByteOrder/BIG_ENDIAN)
         msg-type (get-unsigned-short buf)
@@ -191,7 +207,8 @@
           (recur (assoc attrs attr-type val-bytes)))
         {:type msg-type :length msg-len :cookie cookie :tx-id tx-id :attributes attrs}))))
 
-(defn make-binding-response "TODO"
+(defn make-binding-response
+  "Constructs an RFC 5389 STUN Success Response mirroring the request's transaction ID, embedding the resolved `peer-addr` inside an XOR-MAPPED-ADDRESS attribute, and finalizing with MESSAGE-INTEGRITY and FINGERPRINT."
   [password tx-id ^InetSocketAddress peer-addr]
   (let [resp-buf (ByteBuffer/allocate 1024)
         _ (.order resp-buf ByteOrder/BIG_ENDIAN)]
@@ -248,7 +265,8 @@
     (.flip resp-buf)
     resp-buf))
 
-(defn handle-packet "TODO"
+(defn handle-packet
+  "Decodes an incoming UDP datagram as STUN bytes. Dispatches ICE Binding Requests to yield a generated `response` if authenticated, and Binding Responses to map newly discovered `candidate` addresses."
   [^ByteBuffer buf ^InetSocketAddress peer-addr connection]
   (try
     (let [start-pos (.position buf)

@@ -149,7 +149,8 @@
               (recur args-rem-ctrl args-cur-streams args-bundled args-cur-size args-cur-flight args-app-events))
             (:result step-result)))))))
 
-(defn packetize "TODO"
+(defn packetize
+  "Recursively generates outgoing network packets by combining pending control chunks and active stream data into SCTP packet wrappers bounded by `mtu`, `cwnd`, and `max-burst` congestion parameters defined in RFC 4960."
   [state app-events now-ms]
   (let [max-burst (get state :max-burst 4)]
     (loop [current-state state

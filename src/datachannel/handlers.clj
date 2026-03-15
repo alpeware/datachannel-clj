@@ -4,7 +4,8 @@
             [datachannel.packetize :as packetize]
             [datachannel.stun :as stun]))
 
-(defmulti handle-timeout-timer "TODO"
+(defmulti handle-timeout-timer
+  "Multimethod dispatching timeouts for specific timers like `:sctp/t-delayed-sack`, `:sctp/t1-init`, and `:dtls/flight-timeout`. Returns the resulting core state transitions."
   (fn [_state timer-id _now-ms] timer-id))
 
 (defmethod handle-timeout-timer :sctp/t-delayed-sack [state _timer-id _now-ms]
@@ -248,7 +249,8 @@
 (defmethod handle-timeout-timer :default [state _timer-id _now-ms]
   {:new-state state :app-events []})
 
-(defn handle-timeout "TODO"
+(defn handle-timeout
+  "Routes timer expiries to `handle-timeout-timer` and feeds the resulting state transitions through the `packetize` network generation pipeline."
   [state timer-id now-ms & [^javax.net.ssl.SSLEngine _engine]]
   (let [res (handle-timeout-timer state timer-id now-ms)]
     (if (or (seq (:pending-control-chunks (:new-state res)))
@@ -256,7 +258,8 @@
       (packetize/packetize (:new-state res) (:app-events res) now-ms)
       res)))
 
-(defmulti handle-event-type "TODO"
+(defmulti handle-event-type
+  "Multimethod dispatching application events like `:connect` and `:shutdown` to trigger SCTP state transitions."
   (fn [_state event _now-ms] (:type event)))
 
 (defmethod handle-event-type :connect [state _event now-ms]
@@ -299,7 +302,8 @@
 (defmethod handle-event-type :default [state _event _now-ms]
   {:new-state state :app-events []})
 
-(defn handle-event "TODO"
+(defn handle-event
+  "Routes application events to `handle-event-type` and feeds the resulting state transitions through the `packetize` network generation pipeline."
   [state event now-ms]
   (let [res (handle-event-type state event now-ms)]
     (packetize/packetize (:new-state res) (:app-events res) now-ms)))

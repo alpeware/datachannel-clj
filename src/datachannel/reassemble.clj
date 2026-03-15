@@ -1,7 +1,8 @@
 (ns datachannel.reassemble
   (:require [datachannel.dcep :as dcep]))
 
-(defn assemble-payload "TODO"
+(defn assemble-payload
+  "Concatenates the payloads of a sequence of ordered SCTP fragments into a single contiguous byte array."
   [chunks]
   (let [total-len (reduce + (map #(alength ^bytes (:payload %)) chunks))
         result (byte-array total-len)]
@@ -15,7 +16,8 @@
           (System/arraycopy p 0 result offset len)
           (recur (rest cs) (+ offset len)))))))
 
-(defn reassemble-stream "TODO"
+(defn reassemble-stream
+  "Processes the receive queue of an SCTP stream according to RFC 4960, un-fragmenting and ordering inbound data chunks based on Stream Sequence Numbers and U/B/E bits."
   [stream-data]
   (let [q (:recv-queue stream-data [])
         sorted-q (sort-by :tsn q)]
@@ -115,7 +117,8 @@
                      app-events
                      next-ssn))))))))
 
-(defn reassemble "TODO"
+(defn reassemble
+  "Iterates over all stream queues in the state machine, running `reassemble-stream` to construct application messages, intercepting DCEP control frames (PPID 50) and emitting the rest to user space."
   [state app-events]
   (let [streams (:streams state)]
     (loop [stream-ids (keys streams)

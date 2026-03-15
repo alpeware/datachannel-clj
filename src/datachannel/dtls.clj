@@ -11,10 +11,12 @@
    [sun.security.x509 X500Name]
    [java.util Date ArrayList]))
 
-(def DEFAULT-PACKET-SIZE "TODO"
+(def DEFAULT-PACKET-SIZE
+  "The default maximum expected packet size for the SSLEngine configuration."
   16384)
 
-(defn fingerprint "TODO"
+(defn fingerprint
+  "Calculates the SHA-256 fingerprint hash of a given `X509Certificate` and returns it as a formatted string separated by colons."
   [cert]
   (let [md (MessageDigest/getInstance "SHA-256")]
     (->> (.getEncoded cert)
@@ -23,7 +25,8 @@
         (.withUpperCase)
         (.formatHex (.digest md)))))
 
-(defn generate-cert "TODO"
+(defn generate-cert
+  "Generates a new self-signed RSA certificate required for WebRTC DTLS setup using `sun.security.tools.keytool` APIs. Returns a map with the certificate, private key, and its SHA-256 fingerprint string."
   []
   (let [key-pair-generator (CertAndKeyGen. "RSA" "SHA256WithRSA" nil)
         x500-name (X500Name. "CN=WebRTC, O=Clojure, C=US")]
@@ -37,7 +40,8 @@
        :key key
        :fingerprint (fingerprint cert)})))
 
-(defn verify-peer-fingerprint "TODO"
+(defn verify-peer-fingerprint
+  "Verifies that the primary peer certificate extracted from the provided `SSLEngine` perfectly matches the expected SDP string fingerprint."
   [^SSLEngine engine expected-fingerprint]
   (try
     (let [cert (->> engine
@@ -51,7 +55,8 @@
     (catch Exception _
       false)))
 
-(defn create-ssl-context "TODO"
+(defn create-ssl-context
+  "Initializes an `SSLContext` from the provided certificate and key with a dynamic password. Disables deep X509 chain trust managers since WebRTC uses peer fingerprint verification over SDP."
   [cert key]
   (let [ks (KeyStore/getInstance "PKCS12")
         kmf (KeyManagerFactory/getInstance "SunX509")
@@ -71,7 +76,8 @@
       (.init ctx (.getKeyManagers kmf) (into-array [tm]) nil))
     ctx))
 
-(defn create-engine "TODO"
+(defn create-engine
+  "Instantiates a new `SSLEngine` bounded by the context, defining client vs server mode behavior and explicitly requiring mutual authentication for DTLS SRTP."
   [^SSLContext context client-mode]
   (let [engine (.createSSLEngine context)]
     (.setUseClientMode engine client-mode)
@@ -81,7 +87,8 @@
       (.setSSLParameters engine params)
       engine)))
 
-(def buffer-size "TODO"
+(def buffer-size
+  "Allocation size for ByteBuffers routing unencrypted chunks into the encryption `SSLEngine` wrapper."
   65536)
 
 (defn- make-buffer []
