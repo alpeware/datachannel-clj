@@ -5,7 +5,7 @@
             [datachannel.core :as dc]))
 
 (def gen-op
-  "TODO"
+  "A generator producing valid sequence operations representing time advancement, inbound packet reception, and outbound data transmission."
   (gen/one-of
    [(gen/tuple (gen/return :advance-time) (gen/choose 10 1000))
     (gen/tuple (gen/return :receive-packet)
@@ -15,16 +15,16 @@
                (gen/choose 0 5)
                (gen/elements [:webrtc/string :webrtc/binary]))]))
 
-(defn valid-unacked-data? "TODO"
+(defn valid-unacked-data? "Evaluates the invariant that the `:unacked-data` counter strictly maps to the exact 16-byte overhead plus payload sizes of all currently unacknowledged chunks."
   [state]
   (let [expected (reduce + (map (fn [s] (reduce + (map #(+ 16 (if-let [p (:payload (:chunk %))] (alength ^bytes p) 0)) (:send-queue s)))) (vals (:streams state))))]
     (= (get-in state [:metrics :unacked-data] 0) expected)))
 
-(defn queue-size "TODO"
+(defn queue-size "Calculates the total size of queued byte payloads within a stream's send-queue."
   [q]
   (reduce + (map #(if-let [p (:payload (:chunk %))] (alength ^bytes p) 0) q)))
 
-(defn valid-queue-limits? "TODO"
+(defn valid-queue-limits? "Evaluates the invariant that no stream queue exceeds the explicitly configured maximum queue capacity limit."
   [state]
   (let [max-q (get state :max-queue-size)]
     (if max-q
@@ -33,19 +33,19 @@
               (keys (:streams state)))
       true)))
 
-(defn valid-congestion-metrics? "TODO"
+(defn valid-congestion-metrics? "Evaluates the invariant that core network congestion parameters (flight size and congestion window) never decrement below zero."
   [state]
   (and (>= (get state :flight-size 0) 0)
        (>= (get state :cwnd 0) 0)))
 
-(defn valid-buffer-amounts? "TODO"
+(defn valid-buffer-amounts? "Evaluates the invariant that the exported `get-buffered-amount` value consistently matches the sum total of unacknowledged queued bytes for a specific stream."
   [state]
   (every? (fn [s]
             (= (dc/get-buffered-amount state s)
                (queue-size (get-in state [:streams s :send-queue] []))))
           (keys (:streams state))))
 
-(defn valid-delayed-sack-state? "TODO"
+(defn valid-delayed-sack-state? "Evaluates the invariant that the unacknowledged data chunks tracker correctly corresponds to delayed-SACK timer activation."
   [state]
   (let [unacked (get state :unacked-data-chunks 0)
         has-timer? (contains? (:timers state) :sctp/t-delayed-sack)]
@@ -53,7 +53,7 @@
          (<= unacked 1)
          (= (= unacked 1) has-timer?))))
 
-(defn valid-buffered-amount-low-events? "TODO"
+(defn valid-buffered-amount-low-events? "Evaluates the invariant that `:on-buffered-amount-low` strictly fires only as an edge trigger crossing the threshold for isolated individual streams."
   [old-buffered new-buffered threshold app-events]
   (every? (fn [s]
             (let [o (get old-buffered s 0)
@@ -65,20 +65,20 @@
               (= crossed? (boolean evt-present?))))
           (keys new-buffered)))
 
-(defn valid-total-buffered-low-events? "TODO"
+(defn valid-total-buffered-low-events? "Evaluates the invariant that `:on-total-buffered-amount-low` fires correctly when crossing thresholds globally across all multiplexed channels."
   [old-total new-total threshold app-events]
   (let [crossed-total? (and (> old-total threshold) (<= new-total threshold))
         total-evt-present? (some #(= (:type %) :on-total-buffered-amount-low) app-events)]
     (= crossed-total? (boolean total-evt-present?))))
 
-(defn valid-no-spurious-ack? "TODO"
+(defn valid-no-spurious-ack? "Evaluates the invariant that isolated time advancements strictly lacking expired scheduled timers do not trigger out-of-band network transmission like spurious ACKs."
   [op-type timers-triggered? next-network-out]
   (let [spurious-ack? (and (= op-type :advance-time)
                            (not timers-triggered?)
                            (seq next-network-out))]
     (not spurious-ack?)))
 
-(defn valid-metrics-increase? "TODO"
+(defn valid-metrics-increase? "Evaluates the invariant that generic aggregate tracking parameters like TX/RX packets only monotonically advance and proportionally relate to purely sent SCTP data packets."
   [op-type next-network-out old-state new-state]
   (let [old-tx (get-in old-state [:metrics :tx-packets] 0)
         new-tx (get-in new-state [:metrics :tx-packets] 0)
@@ -91,20 +91,20 @@
            (= new-tx (+ old-tx net-out-size))
            (>= new-tx old-tx)))))
 
-(defn valid-max-burst? "TODO"
+(defn valid-max-burst? "Evaluates the invariant that single operation dispatches strictly respect RFC 4960 `Max.Burst` chunk egress capacities within `network-out` yields."
   [state next-network-out]
   (let [max-burst (get state :max-burst 4)
         data-pkts (count (filter (fn [pkt] (and (map? pkt) (some #(= (:type %) :data) (:chunks pkt)))) next-network-out))]
     (<= data-pkts max-burst)))
 
-(defn valid-negotiated-streams? "TODO"
+(defn valid-negotiated-streams? "Evaluates the invariant that a successfully established association always tracks non-nil numerical bounds for inbound and outbound multiplexed stream channels."
   [state]
   (if (= (:state state) :established)
     (and (number? (:negotiated-outbound-streams state))
          (number? (:negotiated-inbound-streams state)))
     true))
 
-(defn setup-established-state "TODO"
+(defn setup-established-state "Forces pure initialization steps to deterministically bootstrap a connected and robustly established SCTP association state map for testing."
   []
   (let [init-state (dc/create-connection {:max-queue-size 50000} true)
         connect-res (dc/handle-event init-state {:type :connect} 0)
@@ -136,7 +136,7 @@
     state3))
 
 (def prop-sctp-state-machine-invariants
-  "TODO"
+  "A generative property applying random sequential state transitions to ensure buffer, timer, metric, congestion, queue, SACK, and generic invariant robustness holds true across operations."
   (prop/for-all [ops (gen/vector gen-op 10 100)]
                 (let [init-state (setup-established-state)]
                   (loop [state init-state

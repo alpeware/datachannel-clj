@@ -4,10 +4,10 @@
            [dev.onvoid.webrtc.media.audio HeadlessAudioDeviceModule]
            [java.nio ByteBuffer]))
 
-(defonce ^{:doc "TODO"} factory
+(defonce ^{:doc "A shared WebRTC PeerConnectionFactory using a HeadlessAudioDeviceModule for tests."} factory
   (PeerConnectionFactory. (HeadlessAudioDeviceModule.)))
 
-(defn create-offer "TODO"
+(defn create-offer "Creates a WebRTC offer asynchronously and returns a promise containing the RTCSessionDescription."
   [pc]
   (let [p (promise)]
     (.createOffer pc (RTCOfferOptions.)
@@ -16,7 +16,7 @@
                     (onFailure [_ error] (deliver p (ex-info "CreateOffer failed" {:error error})))))
     @p))
 
-(defn create-answer "TODO"
+(defn create-answer "Creates a WebRTC answer asynchronously and returns a promise containing the RTCSessionDescription."
   [pc]
   (let [p (promise)]
     (.createAnswer pc (dev.onvoid.webrtc.RTCAnswerOptions.)
@@ -25,7 +25,7 @@
                      (onFailure [_ error] (deliver p (ex-info "CreateAnswer failed" {:error error})))))
     @p))
 
-(defn set-local "TODO"
+(defn set-local "Sets the local RTCSessionDescription on the PeerConnection asynchronously, returning a promise that resolves to true on success."
   [pc desc]
   (let [p (promise)]
     (.setLocalDescription pc desc
@@ -34,7 +34,7 @@
                             (onFailure [_ error] (deliver p (ex-info "SetLocal failed" {:error error})))))
     @p))
 
-(defn set-remote "TODO"
+(defn set-remote "Sets the remote RTCSessionDescription on the PeerConnection asynchronously, returning a promise that resolves to true on success."
   [pc desc]
   (let [p (promise)]
     (.setRemoteDescription pc desc

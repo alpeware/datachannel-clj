@@ -10,22 +10,22 @@
            [java.net InetAddress InetSocketAddress]
            [java.nio ByteBuffer]))
 
-(defn get-local-ip "TODO"
+(defn get-local-ip "Resolves the local host IP address via java.net.InetAddress for binding during tests."
   []
   (.getHostAddress (InetAddress/getLocalHost)))
 
-(defn extract-ice-credentials "TODO"
+(defn extract-ice-credentials "Extracts the dynamically generated ICE ufrag and pwd credentials from a remote WebRTC offer SDP."
   [sdp]
   {:ufrag (second (re-find #"a=ice-ufrag:([^\r\n]+)" sdp))
    :pwd (second (re-find #"a=ice-pwd:([^\r\n]+)" sdp))})
 
-(defn parse-candidate "TODO"
+(defn parse-candidate "Parses an ICE candidate SDP attribute string to extract the IP address and port."
   [candidate-sdp]
   (let [parts (.split candidate-sdp " ")]
     {:ip (get parts 4)
      :port (Integer/parseInt (get parts 5))}))
 
-(defn create-offer "TODO"
+(defn create-offer "Creates a WebRTC offer asynchronously and returns a promise containing the RTCSessionDescription."
   [pc]
   (let [p (promise)]
     (.createOffer pc (dev.onvoid.webrtc.RTCOfferOptions.)
@@ -34,7 +34,7 @@
                     (onFailure [_ error] (deliver p (ex-info "Create offer failed" {:error error})))))
     @p))
 
-(defn set-local-description "TODO"
+(defn set-local-description "Sets the local RTCSessionDescription on the PeerConnection asynchronously, returning a promise that resolves to true on success."
   [pc description]
   (let [p (promise)]
     (.setLocalDescription pc description
@@ -43,7 +43,7 @@
                             (onFailure [_ error] (deliver p (ex-info "Set local description failed" {:error error})))))
     @p))
 
-(defn set-remote-description "TODO"
+(defn set-remote-description "Sets the remote RTCSessionDescription on the PeerConnection asynchronously, returning a promise that resolves to true on success."
   [pc description]
   (let [p (promise)]
     (.setRemoteDescription pc description

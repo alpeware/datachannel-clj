@@ -10,7 +10,7 @@
     (.get (.duplicate bb) buf)
     buf))
 
-(defn apply-chaos "TODO"
+(defn apply-chaos "Simulates a hostile network environment by randomly dropping, duplicating, and reordering a sequence of packets."
   [packets drop-rate dup-rate reorder? rand-seed]
   (let [rng (java.util.Random. rand-seed)
         ;; 1. Drop
@@ -25,7 +25,7 @@
                         after-dup)]
     after-reorder))
 
-(defn pump-chaos-network "TODO"
+(defn pump-chaos-network "Simulates a sans-I/O network loop between two pure peers, injecting network chaos (drops, dupes, reordering) on every cycle until the `condition?` becomes false."
   [state-a state-b condition? max-iterations start-time drop-rate dup-rate reorder? rand-seed]
   (let [rng (java.util.Random. rand-seed)]
     (loop [a state-a
@@ -90,7 +90,7 @@
             (recur a-time b-time (inc i))))))))
 
 (def prop-chaos-connection
-  "TODO"
+  "A generative property testing the invariant that STUN, DTLS, and SCTP robustly establish a connection and successfully deliver a data message despite random network drops, duplications, and reordering."
   (prop/for-all [drop-rate (gen/choose 0 20)
                  dup-rate (gen/choose 0 10)
                  reorder? gen/boolean
