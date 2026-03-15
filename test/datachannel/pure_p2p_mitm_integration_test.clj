@@ -9,7 +9,7 @@
     (.get (.duplicate bb) buf)
     buf))
 
-(defn pump-network "TODO"
+(defn pump-network "Simulates a sans-I/O network loop between two pure peers. Iteratively processes inbound bytes and fires state machine timeouts until the `condition?` evaluates to false or the `max-iterations` limit is reached."
   [state-a state-b condition? max-iterations start-time]
   (loop [a state-a
          b state-b

@@ -8,7 +8,7 @@
   (:import [java.nio ByteBuffer]))
 
 ;; Helper to compare byte arrays
-(defn bytes= "TODO" [b1 b2]
+(defn bytes= "Compares two primitive byte arrays for equality, handling nil values appropriately." [b1 b2]
   (if (and (nil? b1) (nil? b2))
     true
     (if (or (nil? b1) (nil? b2))
@@ -44,7 +44,7 @@
 (s/def ::gap-blocks (s/coll-of (s/tuple (s/int-in 0 65536) (s/int-in 0 65536))))
 (s/def ::duplicate-tsns (s/coll-of int?))
 
-(defmulti chunk-type "TODO"
+(defmulti chunk-type "Dispatches clojure.spec validation based on the SCTP chunk `:type`."
   :type)
 
 (defmethod chunk-type :init [_]
@@ -84,20 +84,20 @@
 
 ;; Generators
 
-(def byte-array-gen "TODO"
+(def byte-array-gen "Generates random byte arrays for fuzzy testing."
   (tc-gen/fmap byte-array (tc-gen/vector (tc-gen/fmap byte (tc-gen/choose -128 127)))))
 
-(defn data-flags "TODO"
+(defn data-flags "Computes the 8-bit SCTP flags byte for a DATA chunk based on boolean mapping of unordered, beginning, and ending flags."
   [{:keys [unordered beginning ending]}]
   (bit-or (if unordered 4 0)
           (if beginning 2 0)
           (if ending 1 0)))
 
-(def uint32-gen "TODO"
+(def uint32-gen "Generates a random unsigned 32-bit integer for fuzzy testing."
   (tc-gen/large-integer* {:min 0 :max 4294967295}))
 
 (def chunk-gen
-  "TODO"
+  "Generates valid, randomized SCTP chunk structures for fuzzy serialization testing."
   (tc-gen/one-of
    [(tc-gen/hash-map :type (tc-gen/return :init)
                      :init-tag uint32-gen
@@ -137,7 +137,7 @@
                      :params (tc-gen/return {}))]))
 
 (def packet-gen
-  "TODO"
+  "Generates a valid, randomized SCTP packet with an array of nested chunks."
   (tc-gen/hash-map :src-port (tc-gen/choose 0 65535)
                    :dst-port (tc-gen/choose 0 65535)
                    :verification-tag uint32-gen
@@ -145,7 +145,7 @@
 
 ;; Tests
 
-(defn round-trip "TODO"
+(defn round-trip "Serializes an SCTP packet map to a ByteBuffer and then decodes it back to verify encoding symmetry."
   [packet]
   (let [buf (ByteBuffer/allocate 65536)
         _ (sctp/encode-packet packet buf)
@@ -153,7 +153,7 @@
     (sctp/decode-packet buf)))
 
 ;; Deep compare function that handles byte arrays and specific fields
-(defn packet= "TODO"
+(defn packet= "Performs deep comparison of two SCTP packets, specifically comparing byte array payload values and ignoring calculated transport attributes like flags or checksums."
   [p1 p2]
   (and (= (dissoc p1 :chunks :checksum) (dissoc p2 :chunks :checksum))
        (= (count (:chunks p1)) (count (:chunks p2)))

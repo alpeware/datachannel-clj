@@ -5,17 +5,17 @@
             [datachannel.core :as dc]))
 
 (def gen-bytes
-  "TODO"
+  "Generates random byte arrays of varying lengths to simulate malformed network packets."
   (gen/fmap byte-array (gen/vector gen/byte 0 2000)))
 
 (def gen-state
-  "TODO"
+  "Generates a raw connection state, randomly choosing between client or server mode."
   (gen/fmap (fn [client-mode?]
               (dc/create-connection {} client-mode?))
             gen/boolean))
 
 (def prop-no-crashes
-  "TODO"
+  "A generative property testing the invariant that the pure `handle-receive` function never throws an unhandled exception or crashes when processing completely randomized, hostile byte arrays."
   (prop/for-all [state gen-state
                  garbage-bytes gen-bytes]
                 (let [now-ms (System/currentTimeMillis)

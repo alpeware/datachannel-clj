@@ -63,7 +63,7 @@
             [datachannel.webrtc-java-test]))
 
 (def test-groups
-  "TODO"
+  "Defines grouped sets of test namespaces for pmap execution. Group 1 contains stateful socket tests which must run sequentially to avoid port collision, while pure test groups run concurrently."
   [;; Group 1: Stateful/Integration tests (run sequentially relative to each other)
    ['datachannel.listen-integration-test
     'datachannel.stun-webrtc-integration-test
@@ -135,7 +135,7 @@
     'datachannel.fuzz-test
     'datachannel.sctp-gen-test]])
 
-(defn -main "TODO"
+(defn -main "Executes the test suite in parallel groups, aggregates the failures, and exits with a status code representing total failures plus errors."
   [& _args]
   (let [results (pmap #(apply run-tests %) test-groups)
         fail (reduce + (map :fail results))
