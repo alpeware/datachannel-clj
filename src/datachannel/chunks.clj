@@ -3,10 +3,12 @@
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(defmulti process-chunk "TODO"
+(defmulti process-chunk
+  "The primary multimethod dispatcher for handling incoming SCTP chunks (DATA, INIT, SACK, HEARTBEAT). Returns state transitions."
   (fn [_state chunk _packet _now-ms] (:type chunk)))
 
-(defn compute-gap-blocks "TODO"
+(defn compute-gap-blocks
+  "Calculates the offset arrays for SCTP Selective Acknowledgment (SACK) chunks based on the cumulative `remote-tsn` and the set of `out-of-order-tsns`."
   [remote-tsn out-of-order-tsns]
   (if (empty? out-of-order-tsns)
     []

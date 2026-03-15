@@ -7,7 +7,8 @@
 (def ^:private EMPTY-BYTE-ARRAY (byte-array 0))
 
 ;; Chunk types
-(def chunk-types "TODO"
+(def chunk-types
+  "Mapping of SCTP chunk type keywords to their integer codes as defined in RFC 4960."
   {:data 0
    :init 1
    :init-ack 2
@@ -29,11 +30,13 @@
    :asconf 0xc1
    :forward-tsn 192})
 
-(def chunk-type-map "TODO"
+(def chunk-type-map
+  "Inverted mapping of SCTP chunk integer codes to their keywords."
   (set/map-invert chunk-types))
 
 ;; Parameters
-(def parameters "TODO"
+(def parameters
+  "Mapping of SCTP parameter keywords to their integer codes as defined in RFC 4960."
   {:heartbeat 1
    :ipv4 5
    :ipv6 6
@@ -47,30 +50,36 @@
    :hmac-algo 0x8004
    :chunks 0x8003})
 
-(def parameter-map "TODO"
+(def parameter-map
+  "Inverted mapping of SCTP parameter integer codes to their keywords."
   (set/map-invert parameters))
 
 ;; Protocols
-(def protocols "TODO"
+(def protocols
+  "Mapping of WebRTC payload protocol identifiers (PPIDs) to their integer codes."
   {:webrtc/dcep 50
    :webrtc/string 51
    :webrtc/binary 53
    :webrtc/empty-string 56
    :webrtc/empty-binary 57})
 
-(def protocol-map "TODO"
+(def protocol-map
+  "Inverted mapping of WebRTC PPID integer codes to their keywords."
   (set/map-invert protocols))
 
 ;; Data Channel Message Types (DCEP)
-(def dcep-types "TODO"
+(def dcep-types
+  "Mapping of WebRTC Data Channel Establishment Protocol (DCEP) message types to their integer codes."
   {:ack 2
    :open 3})
 
-(def dcep-type-map "TODO"
+(def dcep-type-map
+  "Inverted mapping of DCEP message integer codes to their keywords."
   (set/map-invert dcep-types))
 
 ;; Channel Types
-(def channel-types "TODO"
+(def channel-types
+  "Mapping of WebRTC Data Channel reliability types to their integer codes."
   {:reliable 0x00
    :reliable-unordered 0x80
    :partial-reliable 0x01
@@ -78,7 +87,8 @@
    :partial-reliable-timed 0x02
    :partial-reliable-timed-unordered 0x82})
 
-(def channel-type-map "TODO"
+(def channel-type-map
+  "Inverted mapping of WebRTC Data Channel reliability integer codes to their keywords."
   (set/map-invert channel-types))
 
 (defn- pad [len]
@@ -94,7 +104,8 @@
 (defn- get-unsigned-byte [^ByteBuffer buf]
   (try (bit-and (.get buf) 0xff) (catch Exception _ 0)))
 
-(defn decode-params "TODO"
+(defn decode-params
+  "Parses a contiguous buffer of TLV-formatted SCTP parameters into a Clojure map. Expects `buf` to be positioned at the start of the parameters and `total-length` to bound the parsing."
   [^ByteBuffer buf total-length]
   (let [end (+ (.position buf) total-length)]
     (loop [params {}]
@@ -121,7 +132,8 @@
     (.putShort buf (+ start-pos 2) (unchecked-short len))
     (dotimes [_ padding] (.put buf (byte 0)))))
 
-(defn encode-params "TODO"
+(defn encode-params
+  "Encodes a map of SCTP parameters into TLV format and writes them sequentially to the provided `ByteBuffer`. Ensures appropriate padding to 4-byte boundaries per RFC 4960."
   [^ByteBuffer buf params]
   (doseq [[k v] params]
     (let [start-pos (.position buf)
@@ -132,7 +144,8 @@
       (.put buf v-bytes)
       (set-length-and-padding buf start-pos))))
 
-(defmulti decode-chunk-payload "TODO"
+(defmulti decode-chunk-payload
+  "Multimethod dispatcher for decoding the type-specific payload of an SCTP chunk. Dispatches based on the chunk's `:type` keyword."
   (fn [type-key _buf _chunk-data _val-len _chunk-start _flags] type-key))
 
 (defmethod decode-chunk-payload :cookie-ack [_ _ chunk-data _ _ _]
@@ -156,7 +169,8 @@
 (defmethod decode-chunk-payload :shutdown-complete [_ _ chunk-data _ _ _]
   chunk-data)
 
-(defn decode-abort-chunk "TODO"
+(defn decode-abort-chunk
+  "Advances the buffer position past an ABORT chunk payload. ABORTs are generally not parsed deeply beyond their presence."
   [^ByteBuffer buf chunk-data val-len chunk-start]
   (.position buf (+ chunk-start val-len))
   chunk-data)
@@ -164,7 +178,8 @@
 (defmethod decode-chunk-payload :abort [_ buf chunk-data val-len chunk-start _]
   (decode-abort-chunk buf chunk-data val-len chunk-start))
 
-(defn decode-default-chunk "TODO"
+(defn decode-default-chunk
+  "Generic fallback for unhandled chunk types, capturing the raw byte payload as `:body` within the chunk map."
   [^ByteBuffer buf chunk-data val-len]
   (let [body (byte-array val-len)]
     (.get buf body)
@@ -173,7 +188,8 @@
 (defmethod decode-chunk-payload :default [_ buf chunk-data val-len _ _]
   (decode-default-chunk buf chunk-data val-len))
 
-(defn decode-data-chunk "TODO"
+(defn decode-data-chunk
+  "Parses the payload of an SCTP DATA chunk according to RFC 4960, extracting the TSN, Stream Identifier, Stream Sequence Number, Payload Protocol Identifier, and the user data payload, mapping U/B/E flags to booleans."
   [^ByteBuffer buf chunk-data val-len flags]
   (let [tsn (get-unsigned-int buf)
         stream-id (get-unsigned-short buf)
@@ -195,7 +211,8 @@
 (defmethod decode-chunk-payload :data [_ buf chunk-data val-len _ flags]
   (decode-data-chunk buf chunk-data val-len flags))
 
-(defn decode-init-chunk "TODO"
+(defn decode-init-chunk
+  "Parses the payload of an SCTP INIT chunk, extracting the Initiate Tag, Advertised Receiver Window Credit (a_rwnd), Number of Outbound/Inbound Streams, Initial TSN, and variable-length TLV parameters."
   [^ByteBuffer buf chunk-data val-len]
   (let [init-tag (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
@@ -214,7 +231,8 @@
 (defmethod decode-chunk-payload :init [_ buf chunk-data val-len _ _]
   (decode-init-chunk buf chunk-data val-len))
 
-(defn decode-init-ack-chunk "TODO"
+(defn decode-init-ack-chunk
+  "Parses the payload of an SCTP INIT ACK chunk, extracting the Initiate Tag, Advertised Receiver Window Credit (a_rwnd), Number of Outbound/Inbound Streams, Initial TSN, and variable-length TLV parameters."
   [^ByteBuffer buf chunk-data val-len]
   (let [init-tag (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
@@ -233,7 +251,8 @@
 (defmethod decode-chunk-payload :init-ack [_ buf chunk-data val-len _ _]
   (decode-init-ack-chunk buf chunk-data val-len))
 
-(defn decode-cookie-echo-chunk "TODO"
+(defn decode-cookie-echo-chunk
+  "Parses the payload of an SCTP COOKIE ECHO chunk, extracting the opaque state cookie byte array."
   [^ByteBuffer buf chunk-data val-len]
   (let [cookie (byte-array val-len)]
     (.get buf cookie)
@@ -242,7 +261,8 @@
 (defmethod decode-chunk-payload :cookie-echo [_ buf chunk-data val-len _ _]
   (decode-cookie-echo-chunk buf chunk-data val-len))
 
-(defn decode-sack-chunk "TODO"
+(defn decode-sack-chunk
+  "Parses the payload of an SCTP SACK chunk, extracting the Cumulative TSN Ack, Advertised Receiver Window Credit (a_rwnd), Gap Ack Blocks, and Duplicate TSNs."
   [^ByteBuffer buf chunk-data]
   (let [cum-tsn-ack (get-unsigned-int buf)
         a-rwnd (get-unsigned-int buf)
@@ -260,7 +280,8 @@
 (defmethod decode-chunk-payload :sack [_ buf chunk-data _ _ _]
   (decode-sack-chunk buf chunk-data))
 
-(defn decode-heartbeat-chunk "TODO"
+(defn decode-heartbeat-chunk
+  "Parses the payload of an SCTP HEARTBEAT chunk, extracting the variable-length sender-specific Heartbeat Information parameter."
   [^ByteBuffer buf chunk-data val-len]
   (let [params (decode-params buf val-len)]
     (merge chunk-data {:params params})))
@@ -268,7 +289,8 @@
 (defmethod decode-chunk-payload :heartbeat [_ buf chunk-data val-len _ _]
   (decode-heartbeat-chunk buf chunk-data val-len))
 
-(defn decode-heartbeat-ack-chunk "TODO"
+(defn decode-heartbeat-ack-chunk
+  "Parses the payload of an SCTP HEARTBEAT ACK chunk, extracting the variable-length sender-specific Heartbeat Information parameter echoed back by the receiver."
   [^ByteBuffer buf chunk-data val-len]
   (let [params (decode-params buf val-len)]
     (merge chunk-data {:params params})))
@@ -276,7 +298,8 @@
 (defmethod decode-chunk-payload :heartbeat-ack [_ buf chunk-data val-len _ _]
   (decode-heartbeat-ack-chunk buf chunk-data val-len))
 
-(defn decode-chunk "TODO"
+(defn decode-chunk
+  "Reads an SCTP chunk header (Type, Flags, Length) from the buffer and delegates the payload parsing to `decode-chunk-payload`. Advances the buffer position past the chunk including any padding."
   [^ByteBuffer buf]
   (if (< (.remaining buf) 4)
     nil
@@ -306,7 +329,8 @@
 
           parsed-data)))))
 
-(defn update-checksum "TODO"
+(defn update-checksum
+  "Calculates and injects the CRC32c checksum into the SCTP common header within the provided `ByteBuffer`. RFC 4960 requires the checksum to be evaluated over the entire packet with the checksum field initialized to zero."
   [^ByteBuffer buf]
   (let [crc (CRC32C.)
         pos (.position buf)
@@ -324,7 +348,8 @@
       (.position buf pos)
       buf)))
 
-(defn decode-packet "TODO"
+(defn decode-packet
+  "Parses an SCTP common header (Source Port, Destination Port, Verification Tag, Checksum) and decodes all contained chunks into a vector."
   [^ByteBuffer buf]
   (let [_orig-order (.order buf)]
     (.order buf ByteOrder/BIG_ENDIAN)
@@ -345,7 +370,8 @@
                      chunks)
                    chunks))})))
 
-(defmulti encode-chunk-payload "TODO"
+(defmulti encode-chunk-payload
+  "Multimethod dispatcher for serializing the type-specific payload of an SCTP chunk into a `ByteBuffer`. Dispatches based on the chunk's `:type` keyword."
   (fn [type-key _buf _chunk] type-key))
 
 (defmethod encode-chunk-payload :data [_ ^ByteBuffer buf chunk]
@@ -405,7 +431,8 @@
   (when (:body chunk)
     (.put buf ^bytes (:body chunk))))
 
-(defn encode-chunk "TODO"
+(defn encode-chunk
+  "Writes an SCTP chunk header (Type, Flags, Length) to the buffer and delegates payload serialization to `encode-chunk-payload`. Ensures the final chunk length is written back to the header and appropriately padded."
   [^ByteBuffer buf chunk]
   (let [start-pos (.position buf)
         type-key (:type chunk)
@@ -419,7 +446,8 @@
 
     (set-length-and-padding buf start-pos)))
 
-(defn encode-packet "TODO"
+(defn encode-packet
+  "Serializes an entire SCTP packet to the provided `ByteBuffer`, writing the common header and delegating chunk serialization. Calculates and updates the CRC32c checksum unless `:zero-checksum?` is explicitly requested and permitted."
   ([packet buf] (encode-packet packet buf nil))
   ([packet ^ByteBuffer buf {:keys [zero-checksum?]}]
    (let [orig-order (.order buf)]

@@ -2,7 +2,8 @@
   (:require [datachannel.sctp :as sctp])
   (:import [java.nio ByteBuffer]))
 
-(defn decode-message "TODO"
+(defn decode-message
+  "Parses RFC 8832 WebRTC Data Channel Establishment Protocol (DCEP) messages from an incoming byte array, decoding `DATA_CHANNEL_OPEN` attributes like reliability and label, and `DATA_CHANNEL_ACK` messages."
   [^bytes payload]
   (let [buf (ByteBuffer/wrap payload)
         msg-type (bit-and (.get buf) 0xff)]
@@ -33,7 +34,8 @@
         {:type :ack}
         {:type :unknown}))))
 
-(defn encode-message "TODO"
+(defn encode-message
+  "Serializes DCEP messages into a byte array for network transmission, mapping WebRTC data channel configuration options to the appropriate RFC 8832 byte encodings."
   [msg]
   (if (= (:type msg) :open)
     (let [label-bytes (.getBytes ^String (or (:label msg) "") "UTF-8")

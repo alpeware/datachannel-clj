@@ -13,10 +13,12 @@
 
 (defonce ^:private secure-rand (SecureRandom.))
 
-(def buffer-size "TODO"
+(def buffer-size
+  "Constant used for ByteBuffer sizing representing a reasonably large standard MTU/packet limit."
   65536)
 
-(defn get-buffered-amount "TODO"
+(defn get-buffered-amount
+  "Calculates the total byte size of all SCTP data chunks currently enqueued for a given stream ID."
   [state stream-id]
   (let [q (get-in state [:streams stream-id :send-queue] [])]
     (reduce + (map (fn [item]
@@ -24,23 +26,28 @@
                        (if payload (alength ^bytes payload) 0)))
                    q))))
 
-(defn packetize "TODO"
+(defn packetize
+  "Delegates to the inner `datachannel.packetize/packetize` logic, processing the connection state to yield outgoing network packets according to congestion limits."
   [state app-events now-ms]
   (packetize/packetize state app-events now-ms))
 
-(defn handle-event "TODO"
+(defn handle-event
+  "Delegates an application event like `:connect` to the state machine routing logic."
   [state event now-ms]
   (handlers/handle-event state event now-ms))
 
-(defn handle-timeout "TODO"
+(defn handle-timeout
+  "Delegates an expired timer event to the state machine logic."
   [state timer-id now-ms & [engine]]
   (handlers/handle-timeout state timer-id now-ms engine))
 
-(defn reassemble "TODO"
+(defn reassemble
+  "Delegates stream reassembly logic, processing queued inbound chunks to reconstruct application payloads."
   [state app-events]
   (reassemble/reassemble state app-events))
 
-(defn handle-sctp-packet "TODO"
+(defn handle-sctp-packet
+  "Injects a decoded incoming SCTP packet into the unified state machine, advancing through all contained chunks."
   [state packet now-ms]
   (let [chunks (:chunks packet)
         state-with-rx (-> state
@@ -91,7 +98,8 @@
                       (:network-out result-map []))]
     (assoc result-map :network-out-bytes encoded)))
 
-(defn handle-receive "TODO"
+(defn handle-receive
+  "Primary entry point for multiplexing inbound UDP data, distinguishing STUN, DTLS, and SCTP bytes based on their first byte, running decryption or packet routing."
   [state ^bytes network-bytes now-ms & [remote-addr]]
   (if (zero? (alength network-bytes))
     {:new-state state :network-out [] :app-events []}
@@ -191,7 +199,8 @@
               packet (sctp/decode-packet buf)]
           (handle-sctp-packet state packet now-ms))))))
 
-(defn create-connection "TODO"
+(defn create-connection
+  "Initializes the flattened SCTP/ICE/DTLS pure state map with configured congestion parameters and cryptography contexts."
   [options client-mode?]
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
@@ -245,7 +254,8 @@
 
 (declare send-data)
 
-(defn create-data-channel "TODO"
+(defn create-data-channel
+  "Applies W3C WebRTC interface logic, creating a data channel stream map and dispatching a DCEP OPEN packet for unnegotiated channels."
   [state label options]
   (let [opts (merge {:ordered true
                      :max-packet-life-time nil
@@ -280,11 +290,13 @@
             res (send-data new-state payload id :webrtc/dcep now-ms)]
         (assoc res :channel-id id)))))
 
-(defn set-max-message-size "TODO"
+(defn set-max-message-size
+  "Configures the maximum permissible size of a single application message, rejecting sends above this limit."
   [state max-size]
   (assoc state :new-state (assoc state :max-message-size max-size)))
 
-(defn send-data "TODO"
+(defn send-data
+  "Accepts user application bytes, calculating fragmentation thresholds based on MTU, wrapping the sequence in correctly flagged SCTP DATA chunks, and enqueuing them to a stream's send queue."
   [state ^bytes payload stream-id protocol now-ms]
   (let [len (alength payload)
         max-size (get state :max-message-size 65519)]
