@@ -14,7 +14,7 @@
 - [x] **SEC-01:** Implement negative integration test for DTLS fingerprint mismatch (MITM rejection).
 
 ## Phase 4: Security Audit Remediation
-- [ ] **[CRITICAL] Prevent Remote DoS in Network Loop:** Move the `try/catch` block inside the `while @running` loop in `api.clj` and add strict bounds checking to binary decoders like `dcep/decode-message` to prevent `BufferUnderflowException` thread crashes.
+- [x] **[CRITICAL] Prevent Remote DoS in Network Loop:** Move the `try/catch` block inside the `while @running` loop in `api.clj` and add strict bounds checking to binary decoders like `dcep/decode-message` to prevent `BufferUnderflowException` thread crashes.
 - [ ] **[CRITICAL] Enforce DTLS / Remove Raw SCTP Fallback:** Delete the `:else` raw SCTP fallback block in `core/handle-receive` to prevent DTLS encryption bypass.
 - [ ] **[CRITICAL] Prevent Routing Table OOM:** Implement an LRU cache or TTL-based background reaper for `@routing-table` in `api.clj` and delay heavy RSA generation until after STUN verification.
 - [ ] **[HIGH] Authenticate STUN Requests:** Update `stun/handle-packet` to validate the `MESSAGE-INTEGRITY` (HMAC-SHA1) attribute of inbound Binding Requests using the `:ice-pwd` before emitting responses.
