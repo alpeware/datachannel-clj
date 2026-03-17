@@ -148,9 +148,9 @@
     ;; Start the loop
     (let [fut
           (future
-            (try
-              (let [recv-buf (ByteBuffer/allocateDirect 65536)]
-                (while @(:running node)
+            (let [recv-buf (ByteBuffer/allocateDirect 65536)]
+              (while @(:running node)
+                (try
                   (let [ready-channels (.select selector 10)
                         now-ms (System/currentTimeMillis)]
 
@@ -182,11 +182,11 @@
                           (apply-action! node
                                          (fn [st]
                                            (dc/handle-timeout st timer-id now-ms (:dtls/engine st)))
-                                         callbacks)))))))
-              (catch Exception e
-                (println "Error in api loop:" (.getMessage e))
-                (when-let [cb (:on-error callbacks)]
-                  (cb {:type :on-error :cause e})))))]
+                                         callbacks)))))
+                  (catch Exception e
+                    (println "Error in api loop:" (.getMessage e))
+                    (when-let [cb (:on-error callbacks)]
+                      (cb {:type :on-error :cause e})))))))]
       (reset! (:loop-future node) fut)
 
       ;; If we are the active side, we should initiate connection
@@ -287,6 +287,73 @@
     (reset! (:selector node) nil)
     (reset! (:loop-future node) nil)))
 
+(defn- listen-loop-body
+  "Processes a single iteration of the multiplexed listen loop, handling IO, pure core logic, and routing to callbacks."
+  [opts cert-data ice-creds channel selector routing-table listener-callbacks]
+  (let [recv-buf (ByteBuffer/allocateDirect 65536)]
+    (while @(:running listener-callbacks)
+      (try
+        (let [ready-channels (.select selector 10)
+              now-ms (System/currentTimeMillis)]
+          (when (> ready-channels 0)
+            (let [selected-keys (.selectedKeys selector)
+                  iter (.iterator selected-keys)]
+              (while (.hasNext iter)
+                (let [^SelectionKey key (.next iter)]
+                  (.remove iter)
+                  (when (.isReadable key)
+                    (.clear recv-buf)
+                    (let [sender-addr (.receive channel recv-buf)]
+                      (when sender-addr
+                        (.flip recv-buf)
+                        (let [len (.remaining recv-buf)
+                              bytes-arr (byte-array len)]
+                          (.get recv-buf bytes-arr)
+                          (let [child-node (or (get @routing-table sender-addr)
+                                               (let [port (get opts :port 5000)
+                                                     new-node {:opts opts
+                                                               :cert-data cert-data
+                                                               :ice-creds ice-creds
+                                                               :local-sdp-params {:port port
+                                                                                  :ice-ufrag (:ufrag ice-creds)
+                                                                                  :ice-pwd (:pwd ice-creds)
+                                                                                  :fingerprint (:fingerprint cert-data)
+                                                                                  :setup "passive"}
+                                                               :running (atom true)
+                                                               :state-atom (atom (dc/create-connection
+                                                                                  (merge opts
+                                                                                         {:cert-data cert-data
+                                                                                          :ice-ufrag (:ufrag ice-creds)
+                                                                                          :ice-pwd (:pwd ice-creds)})
+                                                                                  false))
+                                                               :channel (atom channel)
+                                                               :selector (atom selector)
+                                                               :loop-future (atom nil)
+                                                               :remote-addr (atom sender-addr)
+                                                               :shared-channel? true
+                                                               :callbacks (atom {})}]
+                                                 (swap! routing-table assoc sender-addr new-node)
+                                                 (when-let [cb (:on-connection listener-callbacks)]
+                                                   (cb new-node))
+                                                 new-node))]
+                            (apply-action! child-node
+                                           (fn [st]
+                                             (dc/handle-receive st bytes-arr now-ms sender-addr))
+                                           @(:callbacks child-node)))))))))))
+          (doseq [[_ child-node] @routing-table]
+            (let [current-state @(:state-atom child-node)
+                  timers (:timers current-state)]
+              (doseq [[timer-id timer] timers]
+                (when (>= now-ms (:expires-at timer))
+                  (apply-action! child-node
+                                 (fn [st]
+                                   (dc/handle-timeout st timer-id now-ms (:dtls/engine st)))
+                                 @(:callbacks child-node)))))))
+        (catch Exception e
+          (println "Error in api listen loop:" (.getMessage e))
+          (when-let [cb (:on-error listener-callbacks)]
+            (cb {:type :on-error :cause e})))))))
+
 (defn listen!
   "Starts a UDP listener on the given port that can multiplex multiple incoming connections.
   `opts` should contain `:port`.
@@ -307,71 +374,11 @@
                        :loop-future (atom nil)
                        :shared-channel? false
                        :ice-creds ice-creds
-                       :cert-data cert-data}]
+                       :cert-data cert-data}
+        ;; Ensure listener-callbacks tracks running so we can inject
+        listener-callbacks (assoc listener-callbacks :running running)]
     (nio/register-for-read channel selector)
-    (let [fut
-          (future
-            (try
-              (let [recv-buf (ByteBuffer/allocateDirect 65536)]
-                (while @running
-                  (let [ready-channels (.select selector 10)
-                        now-ms (System/currentTimeMillis)]
-                    (when (> ready-channels 0)
-                      (let [selected-keys (.selectedKeys selector)
-                            iter (.iterator selected-keys)]
-                        (while (.hasNext iter)
-                          (let [^SelectionKey key (.next iter)]
-                            (.remove iter)
-                            (when (.isReadable key)
-                              (.clear recv-buf)
-                              (let [sender-addr (.receive channel recv-buf)]
-                                (when sender-addr
-                                  (.flip recv-buf)
-                                  (let [len (.remaining recv-buf)
-                                        bytes-arr (byte-array len)]
-                                    (.get recv-buf bytes-arr)
-                                    (let [child-node (or (get @routing-table sender-addr)
-                                                         (let [new-node {:opts opts
-                                                                         :cert-data cert-data
-                                                                         :ice-creds ice-creds
-                                                                         :local-sdp-params {:port port
-                                                                                            :ice-ufrag (:ufrag ice-creds)
-                                                                                            :ice-pwd (:pwd ice-creds)
-                                                                                            :fingerprint (:fingerprint cert-data)
-                                                                                            :setup "passive"}
-                                                                         :running (atom true)
-                                                                         :state-atom (atom (dc/create-connection
-                                                                                            (merge opts
-                                                                                                   {:cert-data cert-data
-                                                                                                    :ice-ufrag (:ufrag ice-creds)
-                                                                                                    :ice-pwd (:pwd ice-creds)})
-                                                                                            false))
-                                                                         :channel (atom channel)
-                                                                         :selector (atom selector)
-                                                                         :loop-future (atom nil)
-                                                                         :remote-addr (atom sender-addr)
-                                                                         :shared-channel? true
-                                                                         :callbacks (atom {})}]
-                                                           (swap! routing-table assoc sender-addr new-node)
-                                                           (when-let [cb (:on-connection listener-callbacks)]
-                                                             (cb new-node))
-                                                           new-node))]
-                                      (apply-action! child-node
-                                                     (fn [st]
-                                                       (dc/handle-receive st bytes-arr now-ms sender-addr))
-                                                     @(:callbacks child-node)))))))))))
-                    (doseq [[_ child-node] @routing-table]
-                      (let [current-state @(:state-atom child-node)
-                            timers (:timers current-state)]
-                        (doseq [[timer-id timer] timers]
-                          (when (>= now-ms (:expires-at timer))
-                            (apply-action! child-node
-                                           (fn [st]
-                                             (dc/handle-timeout st timer-id now-ms (:dtls/engine st)))
-                                           @(:callbacks child-node)))))))))
-              (catch Exception e
-                (println "Error in api listen loop:" (.getMessage e))
-                (when-let [cb (:on-error listener-callbacks)]
-                  (cb {:type :on-error :cause e})))))]
+    (let [fut (future
+                (listen-loop-body opts cert-data ice-creds channel selector routing-table listener-callbacks))]
       (reset! (:loop-future listener-node) fut)
       listener-node)))
