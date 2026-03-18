@@ -199,3 +199,29 @@
     (is (true? (:beginning decoded-chunk)))
     (is (true? (:ending decoded-chunk)))
     (is (false? (:unordered decoded-chunk)))))
+
+(deftest invalid-checksum-test
+  (let [data-chunk {:type :data
+                    :tsn 12345
+                    :stream-id 1
+                    :seq-num 10
+                    :protocol :webrtc/string
+                    :payload (.getBytes "Hello" "UTF-8")
+                    :unordered false
+                    :beginning true
+                    :ending true
+                    :flags 3}
+        packet {:src-port 5000
+                :dst-port 5000
+                :verification-tag 999
+                :chunks [data-chunk]}
+        buf (ByteBuffer/allocate 65536)]
+    (sctp/encode-packet packet buf)
+    (.flip buf)
+
+    ;; Corrupt the packet
+    (let [corrupted-buf (.duplicate buf)
+          orig-byte (.get corrupted-buf 12)]
+      (.put corrupted-buf 12 (unchecked-byte (inc orig-byte)))
+      (.position corrupted-buf 0)
+      (is (nil? (sctp/decode-packet corrupted-buf))))))

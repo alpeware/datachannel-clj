@@ -159,7 +159,9 @@
                   (if (and bytes (pos? (alength bytes)))
                     (let [sctp-buf (ByteBuffer/wrap bytes)
                           packet (sctp/decode-packet sctp-buf)]
-                      (handle-sctp-packet state packet now-ms))
+                      (if packet
+                        (handle-sctp-packet state packet now-ms)
+                        {:new-state state :network-out [] :app-events []}))
                     {:new-state state :network-out [] :app-events []}))
                 (catch Exception _
                   {:new-state state :network-out [] :app-events []}))
@@ -193,21 +195,25 @@
                             base-res {:new-state state-verified :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]}]
                         (if (and app-data (pos? (alength app-data)))
                           (let [sctp-buf (ByteBuffer/wrap app-data)
-                                packet (sctp/decode-packet sctp-buf)
-                                sctp-res (handle-sctp-packet (:new-state base-res) packet now-ms)]
-                            (-> sctp-res
-                                (update :network-out (fn [no] (into (:network-out base-res) no)))
-                                (update :app-events (fn [evts] (into (:app-events base-res) evts)))))
+                                packet (sctp/decode-packet sctp-buf)]
+                            (if packet
+                              (let [sctp-res (handle-sctp-packet (:new-state base-res) packet now-ms)]
+                                (-> sctp-res
+                                    (update :network-out (fn [no] (into (:network-out base-res) no)))
+                                    (update :app-events (fn [evts] (into (:app-events base-res) evts)))))
+                              base-res))
                           (if (seq (:pending-control-chunks (:new-state base-res)))
                             (packetize (:new-state base-res) (:app-events base-res) now-ms)
                             base-res))))
                     (if (and app-data (pos? (alength app-data)))
                       (let [sctp-buf (ByteBuffer/wrap app-data)
-                            packet (sctp/decode-packet sctp-buf)
-                            sctp-res (handle-sctp-packet state packet now-ms)]
-                        (-> sctp-res
-                            (update :network-out (fn [no] (into (vec packets) no)))
-                            (update :app-events conj {:type :dtls-handshake-progress})))
+                            packet (sctp/decode-packet sctp-buf)]
+                        (if packet
+                          (let [sctp-res (handle-sctp-packet state packet now-ms)]
+                            (-> sctp-res
+                                (update :network-out (fn [no] (into (vec packets) no)))
+                                (update :app-events conj {:type :dtls-handshake-progress})))
+                          {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]}))
                       {:new-state state :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]})))
                 (catch Exception e
                   (println "DTLS HANDSHAKE EXCEPTION" (.getMessage e))

@@ -348,27 +348,47 @@
       (.position buf pos)
       buf)))
 
-(defn decode-packet
-  "Parses an SCTP common header (Source Port, Destination Port, Verification Tag, Checksum) and decodes all contained chunks into a vector."
+(defn- validate-checksum?
+  "Validates the CRC32c checksum of an incoming SCTP packet within the provided `ByteBuffer`. Returns true if the checksum is valid, false otherwise."
   [^ByteBuffer buf]
-  (let [_orig-order (.order buf)]
-    (.order buf ByteOrder/BIG_ENDIAN)
-    (let [src-port (get-unsigned-short buf)
-          dst-port (get-unsigned-short buf)
-          ver-tag (get-unsigned-int buf)
+  (if (< (.remaining buf) 12)
+    false
+    (let [start-pos (.position buf)
+          orig-order (.order buf)
           _ (.order buf ByteOrder/LITTLE_ENDIAN)
-          checksum (get-unsigned-int buf)
-          _ (.order buf ByteOrder/BIG_ENDIAN)]
-      {:src-port src-port
-       :dst-port dst-port
-       :verification-tag ver-tag
-       :checksum checksum
-       :chunks (loop [chunks []]
-                 (if (.hasRemaining buf)
-                   (if-let [chunk (decode-chunk buf)]
-                     (recur (conj chunks chunk))
-                     chunks)
-                   chunks))})))
+          stored-checksum (bit-and (.getInt buf (+ start-pos 8)) 0xFFFFFFFF)
+          _ (.putInt buf (+ start-pos 8) 0)
+          crc (CRC32C.)
+          _ (.position buf start-pos)
+          _ (.update crc buf)
+          calculated-checksum (.getValue crc)
+          _ (.putInt buf (+ start-pos 8) (unchecked-int stored-checksum))
+          _ (.position buf start-pos)
+          _ (.order buf orig-order)]
+      (= stored-checksum calculated-checksum))))
+
+(defn decode-packet
+  "Parses an SCTP common header (Source Port, Destination Port, Verification Tag, Checksum) and decodes all contained chunks into a vector. Returns nil if the checksum is invalid."
+  [^ByteBuffer buf]
+  (when (validate-checksum? buf)
+    (let [_orig-order (.order buf)]
+      (.order buf ByteOrder/BIG_ENDIAN)
+      (let [src-port (get-unsigned-short buf)
+            dst-port (get-unsigned-short buf)
+            ver-tag (get-unsigned-int buf)
+            _ (.order buf ByteOrder/LITTLE_ENDIAN)
+            checksum (get-unsigned-int buf)
+            _ (.order buf ByteOrder/BIG_ENDIAN)]
+        {:src-port src-port
+         :dst-port dst-port
+         :verification-tag ver-tag
+         :checksum checksum
+         :chunks (loop [chunks []]
+                   (if (.hasRemaining buf)
+                     (if-let [chunk (decode-chunk buf)]
+                       (recur (conj chunks chunk))
+                       chunks)
+                     chunks))}))))
 
 (defmulti encode-chunk-payload
   "Multimethod dispatcher for serializing the type-specific payload of an SCTP chunk into a `ByteBuffer`. Dispatches based on the chunk's `:type` keyword."
