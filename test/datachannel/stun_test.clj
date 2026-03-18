@@ -1,5 +1,5 @@
 (ns datachannel.stun-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest is testing]]
             [datachannel.stun :as stun])
   (:import [java.nio ByteBuffer]))
 
@@ -38,3 +38,26 @@
   (let [val-bytes (byte-array [0 0x02 0 0 0 0 0 0])] ;; Family 0x02 (IPv6)
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Only IPv4 supported for now"
                           (stun/decode-xor-mapped-address val-bytes stun/magic-cookie)))))
+
+(deftest test-message-integrity-validation
+  (let [password "test-password"
+        local-ufrag "local"
+        remote-ufrag "remote"
+        valid-req (stun/make-binding-request local-ufrag remote-ufrag password)
+        peer-addr (java.net.InetSocketAddress. "127.0.0.1" 12345)
+        conn {:ice-pwd password}
+        wrong-conn {:ice-pwd "wrong-password"}]
+
+    (testing "Valid MESSAGE-INTEGRITY"
+      (let [result (stun/handle-packet valid-req peer-addr conn)]
+        (is (contains? result :response) "Should yield a response for a valid request")))
+
+    (testing "Invalid MESSAGE-INTEGRITY (wrong password)"
+      (.position valid-req 0)
+      (let [result (stun/handle-packet valid-req peer-addr wrong-conn)]
+        (is (empty? result) "Should not yield a response for an invalid password")))
+
+    (testing "Missing MESSAGE-INTEGRITY"
+      (let [simple-req (stun/make-simple-binding-request)
+            result (stun/handle-packet simple-req peer-addr conn)]
+        (is (empty? result) "Should not yield a response if MESSAGE-INTEGRITY is missing")))))
