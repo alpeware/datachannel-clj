@@ -1,7 +1,6 @@
 (ns datachannel.sctp-verification-tag-test
-  (:require [clojure.test :refer :all]
-            [datachannel.core :as core]
-            [datachannel.sctp :as sctp]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [datachannel.core :as core]))
 
 (deftest rejects-invalid-verification-tag
   (let [state (core/create-connection {} false)
