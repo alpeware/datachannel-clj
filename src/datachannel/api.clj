@@ -123,6 +123,7 @@
                             :ice-pwd (:pwd (:ice-creds node))
                             :remote-ice-ufrag (:remote-ice-ufrag remote-sdp-params)
                             :remote-ice-pwd (:remote-ice-pwd remote-sdp-params)
+                            :remote-fingerprint (:fingerprint remote-sdp-params)
                             :remote-candidates (if (and (:ip remote-sdp-params) (:port remote-sdp-params))
                                                  [{:ip (:ip remote-sdp-params) :port (:port remote-sdp-params)}]
                                                  [])})

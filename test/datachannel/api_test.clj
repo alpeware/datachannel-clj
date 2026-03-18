@@ -21,8 +21,8 @@
           node-b (api/create-node {:port 5002 :setup "passive"})
 
           ;; Extract remote params to cross-feed
-          remote-a {:ip "127.0.0.1" :port 5002}
-          remote-b {:ip "127.0.0.1" :port 5001}
+          remote-a {:ip "127.0.0.1" :port 5002 :fingerprint (:fingerprint (:cert-data node-b))}
+          remote-b {:ip "127.0.0.1" :port 5001 :fingerprint (:fingerprint (:cert-data node-a))}
 
           ;; Observers
           a-open? (atom false)
