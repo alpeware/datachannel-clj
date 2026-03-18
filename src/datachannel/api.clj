@@ -289,11 +289,25 @@
 (defn- listen-loop-body
   "Processes a single iteration of the multiplexed listen loop, handling IO, pure core logic, and routing to callbacks."
   [opts cert-data ice-creds channel selector routing-table listener-callbacks]
-  (let [recv-buf (ByteBuffer/allocateDirect 65536)]
+  (let [recv-buf (ByteBuffer/allocateDirect 65536)
+        last-reap-time (atom (System/currentTimeMillis))]
     (while @(:running listener-callbacks)
       (try
         (let [ready-channels (.select selector 10)
               now-ms (System/currentTimeMillis)]
+
+          ;; Background reaper for routing-table (every 10 seconds)
+          (when (> (- now-ms @last-reap-time) 10000)
+            (swap! routing-table
+                   (fn [rt]
+                     (into {} (remove (fn [[_ child]]
+                                        (let [st @(:state-atom child)
+                                              last-stun (get st :last-stun-received 0)]
+                                          (and (not= (:ice-connection-state st) :connected)
+                                               (> (- now-ms last-stun) 30000))))
+                                      rt))))
+            (reset! last-reap-time now-ms))
+
           (when (> ready-channels 0)
             (let [selected-keys (.selectedKeys selector)
                   iter (.iterator selected-keys)]
