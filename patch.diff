@@ -1,20 +1,13 @@
---- test/datachannel/sctp_gen_test.clj
-+++ test/datachannel/sctp_gen_test.clj
-@@ -37,7 +37,7 @@
-   (let [max-q (get state :max-receive-queue-size)]
-     (if max-q
-       (every? (fn [s]
--                (<= (reduce + (map #(alength ^bytes (:payload %)) (get-in state [:streams s :recv-queue] []))) max-q))
-+                (<= (reduce + (map #(if-let [p (:payload %)] (alength ^bytes p) 0) (get-in state [:streams s :recv-queue] []))) max-q))
-               (keys (:streams state)))
-       true)))
+--- test/datachannel/sctp_receive_queue_bound_test.clj
++++ test/datachannel/sctp_receive_queue_bound_test.clj
+@@ -1,7 +1,7 @@
+ (ns datachannel.sctp-receive-queue-bound-test
+-  (:require [clojure.test :refer :all]
+-            [datachannel.core :as dc]
+-            [datachannel.chunks :as chunks]))
++  (:require [clojure.test :refer [deftest is testing]]
++            [datachannel.chunks :as chunks]
++            [datachannel.core :as dc]))
 
-@@ -194,7 +194,8 @@
-                                            :seq-num 0
-                                            :protocol :webrtc/binary
-                                            :payload payload}
--                                    packet {:src-port 5000 :dst-port 5000 :verification-tag (:local-ver-tag state)}
-+                                    packet {:src-port 5000 :dst-port 5000 :verification-tag (:local-ver-tag state)
-+                                            :chunks [chunk]}
-                                     res (@#'dc/handle-sctp-packet state packet now-ms)]
-                                 [(:new-state res) now-ms (:app-events res) (:network-out res) (inc remote-tsn)]))
+ (deftest test-receive-queue-bound
+   (testing "SCTP DATA chunks exceeding max-receive-queue-size are rejected or ignored"

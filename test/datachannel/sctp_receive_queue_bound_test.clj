@@ -1,7 +1,7 @@
 (ns datachannel.sctp-receive-queue-bound-test
-  (:require [clojure.test :refer :all]
-            [datachannel.core :as dc]
-            [datachannel.chunks :as chunks]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [datachannel.chunks :as chunks]
+            [datachannel.core :as dc]))
 
 (deftest test-receive-queue-bound
   (testing "SCTP DATA chunks exceeding max-receive-queue-size are rejected or ignored"
