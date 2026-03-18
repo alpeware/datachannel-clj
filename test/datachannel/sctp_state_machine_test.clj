@@ -4,8 +4,8 @@
 
 (deftest establish-connection-with-setup-collision-test
   (testing "Establish Connection With Setup Collision"
-    (let [state-a (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed})
-          state-z (atom {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed})
+    (let [state-a (atom {:local-ver-tag 1111 :remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed})
+          state-z (atom {:local-ver-tag 2222 :remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed})
           out-a (java.util.concurrent.LinkedBlockingQueue.)
           out-z (java.util.concurrent.LinkedBlockingQueue.)
           conn-a {:state state-a :sctp-out out-a   :selector nil}

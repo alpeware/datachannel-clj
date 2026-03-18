@@ -46,28 +46,44 @@
   [state app-events]
   (reassemble/reassemble state app-events))
 
+(defn- valid-verification-tag?
+  "Checks if the incoming packet has a valid verification tag for the given state."
+  [state packet]
+  (let [chunks (:chunks packet)
+        packet-vtag (:verification-tag packet)
+        local-vtag (get state :local-ver-tag 0)
+        fallback-vtag (get state :init-tag 0)
+        has-init? (some #(= (:type %) :init) chunks)]
+    (if has-init?
+      (zero? packet-vtag)
+      (or (= packet-vtag local-vtag)
+          (and (not (zero? fallback-vtag)) (= packet-vtag fallback-vtag))
+          (and (zero? local-vtag) (zero? fallback-vtag))))))
+
 (defn handle-sctp-packet
   "Injects a decoded incoming SCTP packet into the unified state machine, advancing through all contained chunks."
   [state packet now-ms]
-  (let [chunks (:chunks packet)
-        state-with-rx (-> state
-                          (update-in [:metrics :rx-packets] (fnil inc 0))
-                          (assoc :remote-port (:src-port packet))
-                          (assoc :local-port (:dst-port packet)))
-        res (loop [current-state state-with-rx
-                   remaining-chunks chunks
-                   app-events []]
-              (if (empty? remaining-chunks)
-                {:new-state current-state
-                 :app-events app-events}
-                (let [chunk (first remaining-chunks)
-                      {:keys [next-state next-events]}
-                      (chunks/process-chunk current-state chunk packet now-ms)]
-                  (recur next-state
-                         (rest remaining-chunks)
-                         (into app-events next-events)))))
-        reassembled (reassemble (:new-state res) (:app-events res))]
-    (packetize (:new-state reassembled) (:app-events reassembled) now-ms)))
+  (if-not (valid-verification-tag? state packet)
+    {:new-state state :network-out [] :app-events []}
+    (let [chunks (:chunks packet)
+          state-with-rx (-> state
+                            (update-in [:metrics :rx-packets] (fnil inc 0))
+                            (assoc :remote-port (:src-port packet))
+                            (assoc :local-port (:dst-port packet)))
+          res (loop [current-state state-with-rx
+                     remaining-chunks chunks
+                     app-events []]
+                (if (empty? remaining-chunks)
+                  {:new-state current-state
+                   :app-events app-events}
+                  (let [chunk (first remaining-chunks)
+                        {:keys [next-state next-events]}
+                        (chunks/process-chunk current-state chunk packet now-ms)]
+                    (recur next-state
+                           (rest remaining-chunks)
+                           (into app-events next-events)))))
+          reassembled (reassemble (:new-state res) (:app-events res))]
+      (packetize (:new-state reassembled) (:app-events reassembled) now-ms))))
 
 (defn serialize-network-out
   "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
