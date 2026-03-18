@@ -102,8 +102,14 @@
           init-res-b (-> (dc/handle-timeout client-b :stun/keepalive now-ms (:dtls/engine client-b))
                          (dc/serialize-network-out))
 
-          init-res-a (-> (dc/handle-event client-a {:type :connect} now-ms)
+          init-res-a (-> (dc/handle-timeout client-a :stun/keepalive now-ms nil)
                          (dc/serialize-network-out))
+
+          ;; Start DTLS flight on the client
+          init-res-a (-> (dc/handle-timeout (:new-state init-res-a) :dtls/flight-timeout now-ms (:dtls/engine (:new-state init-res-a)))
+                         (dc/serialize-network-out)
+                         (update :app-events into (:app-events init-res-a []))
+                         (update :network-out-bytes into (:network-out-bytes init-res-a [])))
 
           ;; Pump network. We expect the connection to FAIL and one or both to end up in :closed state.
           ;; Pump until either state is :closed or we hit a decent number of iterations.

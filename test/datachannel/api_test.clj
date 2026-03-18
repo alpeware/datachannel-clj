@@ -21,8 +21,16 @@
           node-b (api/create-node {:port 5002 :setup "passive"})
 
           ;; Extract remote params to cross-feed
-          remote-a {:ip "127.0.0.1" :port 5002 :fingerprint (:fingerprint (:cert-data node-b))}
-          remote-b {:ip "127.0.0.1" :port 5001 :fingerprint (:fingerprint (:cert-data node-a))}
+          remote-a {:ip "127.0.0.1"
+                    :port 5002
+                    :fingerprint (:fingerprint (:cert-data node-b))
+                    :remote-ice-ufrag (:ufrag (:ice-creds node-b))
+                    :remote-ice-pwd (:pwd (:ice-creds node-b))}
+          remote-b {:ip "127.0.0.1"
+                    :port 5001
+                    :fingerprint (:fingerprint (:cert-data node-a))
+                    :remote-ice-ufrag (:ufrag (:ice-creds node-a))
+                    :remote-ice-pwd (:pwd (:ice-creds node-a))}
 
           ;; Observers
           a-open? (atom false)
@@ -41,7 +49,7 @@
 
         ;; Wait up to 5s for connection to establish
         (loop [i 0]
-          (when (and (< i 50) (not (and @a-open? @b-open?)))
+          (when (and (< i 100) (not (and @a-open? @b-open?)))
             (Thread/sleep 100)
             (recur (inc i))))
 

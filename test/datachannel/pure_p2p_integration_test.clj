@@ -96,8 +96,16 @@
           init-res-b (-> (dc/handle-timeout client-b :stun/keepalive now-ms nil)
                          (dc/serialize-network-out))
 
-          init-res-a (-> (dc/handle-event client-a {:type :connect} now-ms)
+          init-res-a (-> (dc/handle-timeout client-a :stun/keepalive now-ms nil)
                          (dc/serialize-network-out))
+
+          ;; Start DTLS flight on the client
+          _ (.beginHandshake (:dtls/engine client-a))
+          _ (.beginHandshake (:dtls/engine client-b))
+          init-res-a (-> (dc/handle-timeout (:new-state init-res-a) :dtls/flight-timeout now-ms (:dtls/engine (:new-state init-res-a)))
+                         (dc/serialize-network-out)
+                         (update :app-events into (:app-events init-res-a []))
+                         (update :network-out-bytes into (:network-out-bytes init-res-a [])))
 
           ;; Pump until connection is open (or max iterations)
           [conn-a conn-b] (pump-network init-res-a init-res-b

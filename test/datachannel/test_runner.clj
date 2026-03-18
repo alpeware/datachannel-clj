@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [run-tests]]
             [datachannel.api-test]
             [datachannel.dtls-test]
+            [datachannel.enforce-dtls-test]
             [datachannel.fuzz-test]
             [datachannel.handshake-test]
             [datachannel.listen-integration-test]
@@ -75,7 +76,8 @@
     'datachannel.pure-p2p-mitm-integration-test]
 
    ;; Group 2: Pure/Stateless tests part 1
-   ['datachannel.sctp-test
+   ['datachannel.enforce-dtls-test
+    'datachannel.sctp-test
     'datachannel.sctp-send-message-with-limited-rtx-test
     'datachannel.sctp-send-many-fragmented-messages-with-limited-rtx-test
     'datachannel.dtls-test

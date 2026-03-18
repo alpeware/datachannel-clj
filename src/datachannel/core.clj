@@ -132,8 +132,9 @@
         (if-not engine
           {:new-state state :network-out [] :app-events [{:type :dtls-packet :payload network-bytes}]}
           (let [hs-status (.getHandshakeStatus engine)]
-            (if (or (= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
-                    (= hs-status SSLEngineResult$HandshakeStatus/FINISHED))
+            (if (and (or (= hs-status SSLEngineResult$HandshakeStatus/NOT_HANDSHAKING)
+                         (= hs-status SSLEngineResult$HandshakeStatus/FINISHED))
+                     (:dtls-verified? state))
               ;; Application data
               (try
                 (let [in-buf (ByteBuffer/wrap network-bytes)
@@ -163,21 +164,27 @@
                                          :params []}
                             packet {:src-port (:local-port state 5000)
                                     :dst-port (:remote-port state 5000)
-                                    :ver-tag (:remote-ver-tag state 0)
+                                    :verification-tag (:remote-ver-tag state 0)
                                     :chunks [abort-chunk]}]
                         {:new-state state-closed
                          :network-out (if (empty? packets) [packet] (conj (vec packets) packet))
                          :app-events [{:type :on-error :message "DTLS Fingerprint Mismatch"} {:type :on-close}]})
                       ;; Verification passed (or listen mode), transition to :connected normally
-                      (let [state-verified (assoc state :dtls-verified? true :state :connected)]
+                      (let [state-verified (assoc state :dtls-verified? true)
+                            state-verified (if (and (:client-mode? state-verified) (not (#{:established :cookie-wait :cookie-echoed} (:state state-verified))))
+                                             (:new-state (handle-event state-verified {:type :connect} now-ms))
+                                             (assoc state-verified :state :connected))
+                            base-res {:new-state state-verified :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]}]
                         (if (and app-data (pos? (alength app-data)))
                           (let [sctp-buf (ByteBuffer/wrap app-data)
                                 packet (sctp/decode-packet sctp-buf)
-                                sctp-res (handle-sctp-packet state-verified packet now-ms)]
+                                sctp-res (handle-sctp-packet (:new-state base-res) packet now-ms)]
                             (-> sctp-res
-                                (update :network-out (fn [no] (into (vec packets) no)))
-                                (update :app-events conj {:type :dtls-handshake-progress})))
-                          {:new-state state-verified :network-out (vec packets) :app-events [{:type :dtls-handshake-progress}]})))
+                                (update :network-out (fn [no] (into (:network-out base-res) no)))
+                                (update :app-events (fn [evts] (into (:app-events base-res) evts)))))
+                          (if (seq (:pending-control-chunks (:new-state base-res)))
+                            (packetize (:new-state base-res) (:app-events base-res) now-ms)
+                            base-res))))
                     (if (and app-data (pos? (alength app-data)))
                       (let [sctp-buf (ByteBuffer/wrap app-data)
                             packet (sctp/decode-packet sctp-buf)
@@ -195,9 +202,7 @@
 
         ;; SCTP (Default, raw)
         :else
-        (let [buf (ByteBuffer/wrap network-bytes)
-              packet (sctp/decode-packet buf)]
-          (handle-sctp-packet state packet now-ms))))))
+        {:new-state state :network-out [] :app-events []}))))
 
 (defn create-connection
   "Initializes the flattened SCTP/ICE/DTLS pure state map with configured congestion parameters and cryptography contexts."
