@@ -25,7 +25,7 @@
         (let [res-s1 (@#'core/handle-sctp-packet server-state init-packet now)
               server-ia (:new-state res-s1)
               init-ack-packet (first (:network-out res-s1))]
-          (is (= :cookie-wait (:state server-ia)))
+          (is (= :closed (:state server-ia)))
           (is init-ack-packet "Server emits INIT-ACK packet")
 
           ;; 4. Client handles INIT-ACK, replies with COOKIE-ECHO

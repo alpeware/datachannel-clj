@@ -53,7 +53,7 @@
       ;; Initial packets generated from connect event
       (let [init-packet (first (:network-out init-res))
             ;; Fix initial-tsn missing in packet decoding simulation
-            init-packet (update-in init-packet [:chunks 0] assoc :initial-tsn 0 :inbound-streams 10 :outbound-streams 10)
+            init-packet (update-in init-packet [:chunks 0] assoc :initial-tsn 0 :inbound-streams 10 :outbound-streams 10 :init-tag (:local-ver-tag @state-a-atom))
             initial-packets [{:dest :b :packet init-packet}]
 
             ;; Run the network

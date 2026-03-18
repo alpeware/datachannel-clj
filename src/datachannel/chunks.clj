@@ -1,7 +1,49 @@
 (ns datachannel.chunks
-  (:import [java.security SecureRandom]))
+  (:import [java.nio ByteBuffer]
+           [javax.crypto Mac]
+           [javax.crypto.spec SecretKeySpec]
+           [java.security MessageDigest]))
 
-(defonce ^:private secure-rand (SecureRandom.))
+(defn- generate-cookie
+  "Generates an HMAC-SHA256 signed cookie encapsulating the TCB parameters to prevent SYN-flood state exhaustion."
+  [secret remote-ver-tag remote-tsn negotiated-outbound-streams negotiated-inbound-streams]
+  (let [buf (ByteBuffer/allocate 16)
+        _ (.putInt buf (unchecked-int remote-ver-tag))
+        _ (.putInt buf (unchecked-int remote-tsn))
+        _ (.putInt buf (unchecked-int negotiated-outbound-streams))
+        _ (.putInt buf (unchecked-int negotiated-inbound-streams))
+        payload (.array buf)
+        mac (Mac/getInstance "HmacSHA256")
+        key-spec (SecretKeySpec. ^bytes secret "HmacSHA256")
+        _ (.init mac key-spec)
+        signature (.doFinal mac payload)
+        cookie-buf (ByteBuffer/allocate (+ 16 (alength ^bytes signature)))
+        _ (.put cookie-buf payload)
+        _ (.put cookie-buf signature)]
+    (.array cookie-buf)))
+
+(defn- verify-and-extract-cookie
+  "Verifies the HMAC-SHA256 signature of a received cookie and returns the encapsulated TCB parameters if valid."
+  [secret ^bytes cookie]
+  (if (or (nil? cookie) (< (alength cookie) 48)) ; 16 bytes payload + 32 bytes SHA256 signature
+    nil
+    (let [payload (java.util.Arrays/copyOfRange cookie 0 16)
+          received-sig (java.util.Arrays/copyOfRange cookie 16 (alength cookie))
+          mac (Mac/getInstance "HmacSHA256")
+          key-spec (SecretKeySpec. ^bytes secret "HmacSHA256")
+          _ (.init mac key-spec)
+          expected-sig (.doFinal mac payload)]
+      (if (MessageDigest/isEqual ^bytes expected-sig ^bytes received-sig)
+        (let [buf (ByteBuffer/wrap payload)
+              remote-ver-tag (.getInt buf)
+              remote-tsn (.getInt buf)
+              negotiated-outbound-streams (.getInt buf)
+              negotiated-inbound-streams (.getInt buf)]
+          {:remote-ver-tag (if (< remote-ver-tag 0) (+ 4294967296 remote-ver-tag) remote-ver-tag)
+           :remote-tsn (if (< remote-tsn 0) (+ 4294967296 remote-tsn) remote-tsn)
+           :negotiated-outbound-streams (if (< negotiated-outbound-streams 0) (+ 4294967296 negotiated-outbound-streams) negotiated-outbound-streams)
+           :negotiated-inbound-streams (if (< negotiated-inbound-streams 0) (+ 4294967296 negotiated-inbound-streams) negotiated-inbound-streams)})
+        nil))))
 
 (defmulti process-chunk
   "The primary multimethod dispatcher for handling incoming SCTP chunks (DATA, INIT, SACK, HEARTBEAT). Returns state transitions."
@@ -98,23 +140,20 @@
         remote-in (:inbound-streams chunk 65535)
         negotiated-out (min local-out remote-in)
         negotiated-in (min local-in remote-out)
-        s1 (-> state
-               (assoc :remote-ver-tag (:init-tag chunk)
-                      :remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1)
-                      :ssn 0
-                      :negotiated-outbound-streams negotiated-out
-                      :negotiated-inbound-streams negotiated-in
-                      :state :cookie-wait))
-        cookie-bytes (let [b (byte-array 32)] (.nextBytes secure-rand b) b)
+        remote-ver-tag (:init-tag chunk)
+        remote-tsn (if (:initial-tsn chunk) (dec (:initial-tsn chunk)) -1)
+        cookie-secret (:cookie-secret state (byte-array 32))
+        cookie-bytes (generate-cookie cookie-secret remote-ver-tag remote-tsn negotiated-out negotiated-in)
         init-ack-chunk {:type :init-ack
-                        :init-tag (:local-ver-tag s1)
+                        :dest-ver-tag remote-ver-tag
+                        :init-tag (:local-ver-tag state)
                         :a-rwnd 100000
                         :outbound-streams negotiated-out
                         :inbound-streams negotiated-in
-                        :initial-tsn (:next-tsn s1)
+                        :initial-tsn (:next-tsn state)
                         :params {:cookie cookie-bytes}}
-        s2 (update s1 :pending-control-chunks conj init-ack-chunk)]
-    {:next-state s2 :next-events []}))
+        s1 (update state :pending-control-chunks conj init-ack-chunk)]
+    {:next-state s1 :next-events []}))
 
 (defmethod process-chunk :init-ack [state chunk packet now-ms]
   (let [local-out (get state :local-outbound-streams 65535)
@@ -148,31 +187,40 @@
             s3 (update s2 :pending-control-chunks conj abort-chunk)]
         {:next-state s3 :next-events [{:type :on-error :cause :protocol-violation} {:type :on-close}]}))))
 
-(defmethod process-chunk :cookie-echo [state _chunk _packet now-ms]
-  (let [interval (get state :heartbeat-interval 30000)
-        s1 (-> state
-               (assoc :state :established)
-               (update :timers dissoc :sctp/t1-init)
-               (update :timers dissoc :sctp/t1-cookie))
-        s2 (if (pos? interval)
-             (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
-             s1)
-        cookie-ack-chunk {:type :cookie-ack}
-        s3 (update s2 :pending-control-chunks conj cookie-ack-chunk)
-        has-buffered-data? (some #(seq (:send-queue (val %))) (:streams s3))
-        s4 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s3) :established) has-buffered-data?)
-             (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
-             s3)
-        tx-bytes (reduce + (map (fn [st]
-                                  (reduce + (map (fn [item]
-                                                   (let [dc (:chunk item)]
-                                                     (if (:payload dc) (alength ^bytes (:payload dc)) 0)))
-                                                 (:send-queue (val st)))))
-                                (:streams s4)))
-        s5 (if (and (contains? #{:cookie-wait :cookie-echoed} (:state state)) (= (:state s3) :established) has-buffered-data?)
-             (update-in s4 [:metrics :tx-bytes] (fnil + 0) tx-bytes)
-             s4)]
-    {:next-state s5 :next-events [{:type :on-open}]}))
+(defmethod process-chunk :cookie-echo [state chunk _packet now-ms]
+  (if-let [tcb (verify-and-extract-cookie (:cookie-secret state (byte-array 32)) (:cookie chunk))]
+    (let [interval (get state :heartbeat-interval 30000)
+          s1 (-> state
+                 (assoc :state :established
+                        :remote-ver-tag (:remote-ver-tag tcb)
+                        :remote-tsn (:remote-tsn tcb)
+                        :ssn 0
+                        :negotiated-outbound-streams (:negotiated-outbound-streams tcb)
+                        :negotiated-inbound-streams (:negotiated-inbound-streams tcb))
+                 (update :timers dissoc :sctp/t1-init)
+                 (update :timers dissoc :sctp/t1-cookie))
+          s2 (if (pos? interval)
+               (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
+               s1)
+          cookie-ack-chunk {:type :cookie-ack}
+          s3 (update s2 :pending-control-chunks conj cookie-ack-chunk)
+          has-buffered-data? (some #(seq (:send-queue (val %))) (:streams s3))
+          was-established? (= (:state state) :established)
+          just-established? (and (not was-established?) (= (:state s3) :established))
+          s4 (if (and just-established? has-buffered-data?)
+               (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
+               s3)
+          tx-bytes (reduce + (map (fn [st]
+                                    (reduce + (map (fn [item]
+                                                     (let [dc (:chunk item)]
+                                                       (if (:payload dc) (alength ^bytes (:payload dc)) 0)))
+                                                   (:send-queue (val st)))))
+                                  (:streams s4)))
+          s5 (if (and just-established? has-buffered-data?)
+               (update-in s4 [:metrics :tx-bytes] (fnil + 0) tx-bytes)
+               s4)]
+      {:next-state s5 :next-events (if was-established? [] [{:type :on-open}])})
+    {:next-state state :next-events []}))
 
 (defmethod process-chunk :cookie-ack [state _chunk packet now-ms]
   (let [interval (get state :heartbeat-interval 30000)
