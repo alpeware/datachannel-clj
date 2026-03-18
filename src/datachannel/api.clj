@@ -200,11 +200,9 @@
                          callbacks)
           (apply-action! node
                          (fn [st]
+                           (when-let [engine (:dtls/engine st)]
+                             (.beginHandshake ^javax.net.ssl.SSLEngine engine))
                            (dc/handle-timeout st :dtls/flight-timeout (System/currentTimeMillis) (:dtls/engine st)))
-                         callbacks)
-          (apply-action! node
-                         (fn [st]
-                           (dc/handle-event st {:type :connect} (System/currentTimeMillis)))
                          callbacks)))
       node)))
 
