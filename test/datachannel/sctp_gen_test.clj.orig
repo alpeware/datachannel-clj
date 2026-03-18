@@ -41,7 +41,7 @@
   (let [max-q (get state :max-receive-queue-size)]
     (if max-q
       (every? (fn [s]
-                (<= (reduce + (map #(if-let [p (:payload %)] (alength ^bytes p) 0) (get-in state [:streams s :recv-queue] []))) max-q))
+                (<= (reduce + (map #(alength ^bytes (:payload %)) (get-in state [:streams s :recv-queue] []))) max-q))
               (keys (:streams state)))
       true)))
 
@@ -200,8 +200,7 @@
                                            :seq-num 0
                                            :protocol :webrtc/binary
                                            :payload payload}
-                                    packet {:src-port 5000 :dst-port 5000 :verification-tag (:local-ver-tag state)
-                                            :chunks [chunk]}
+                                    packet {:src-port 5000 :dst-port 5000 :verification-tag (:local-ver-tag state)}
                                     res (@#'dc/handle-sctp-packet state packet now-ms)]
                                 [(:new-state res) now-ms (:app-events res) (:network-out res) (inc remote-tsn)]))
 
