@@ -207,6 +207,42 @@
           (recur (assoc attrs attr-type val-bytes)))
         {:type msg-type :length msg-len :cookie cookie :tx-id tx-id :attributes attrs}))))
 
+(defn check-message-integrity
+  "Validates the MESSAGE-INTEGRITY attribute of a STUN message."
+  [^ByteBuffer buf start-pos msg-len password]
+  (let [packet-end (min (.limit buf) (+ start-pos 20 msg-len))]
+    (try
+      (.position buf (+ start-pos 20))
+      (loop [mi-offset nil
+             received-hmac nil]
+        (if (or mi-offset (>= (.position buf) packet-end))
+          (if (and mi-offset received-hmac)
+            (let [data-to-sign (byte-array (- mi-offset start-pos))]
+              (.position buf start-pos)
+              (.get buf data-to-sign)
+              (let [len-for-hmac (unchecked-short (+ (- mi-offset start-pos 20) 24))]
+                (aset data-to-sign 2 (unchecked-byte (bit-shift-right len-for-hmac 8)))
+                (aset data-to-sign 3 (unchecked-byte (bit-and len-for-hmac 0xff)))
+                (let [calculated-hmac (compute-hmac-sha1 password data-to-sign)]
+                  (java.util.Arrays/equals ^bytes calculated-hmac ^bytes received-hmac))))
+            false)
+          (let [attr-type (get-unsigned-short buf)
+                attr-len (get-unsigned-short buf)
+                padding (mod attr-len 4)
+                pad-len (if (and (> padding 0) (< padding 4)) (- 4 padding) 0)]
+            (if (= attr-type ATTR_MESSAGE_INTEGRITY)
+              (let [offset (- (.position buf) 4)
+                    hmac (byte-array 20)]
+                (.get buf hmac)
+                (recur offset hmac))
+              (do
+                (.position buf (+ (.position buf) attr-len pad-len))
+                (recur nil nil))))))
+      (catch Exception _
+        false)
+      (finally
+        (.position buf start-pos)))))
+
 (defn make-binding-response
   "Constructs an RFC 5389 STUN Success Response mirroring the request's transaction ID, embedding the resolved `peer-addr` inside an XOR-MAPPED-ADDRESS attribute, and finalizing with MESSAGE-INTEGRITY and FINGERPRINT."
   [password tx-id ^InetSocketAddress peer-addr]
@@ -280,8 +316,10 @@
                 ;; Binding Request
                 (= msg-type 0x0001)
                 (if-let [password (:ice-pwd connection)]
-                  (if-let [resp (make-binding-response password tx-id peer-addr)]
-                    {:response resp}
+                  (if (check-message-integrity buf start-pos msg-len password)
+                    (if-let [resp (make-binding-response password tx-id peer-addr)]
+                      {:response resp}
+                      {})
                     {})
                   {})
 
