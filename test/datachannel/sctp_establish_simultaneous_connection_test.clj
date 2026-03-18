@@ -5,8 +5,8 @@
 (deftest establish-simultaneous-connection-test
   (testing "Establish Simultaneous Connection"
     (let [now-ms 1000
-          state-a {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed}
-          state-z {:remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed}
+          state-a {:local-ver-tag 1111 :remote-tsn 0 :remote-ver-tag 0 :next-tsn 1000 :ssn 0 :state :closed}
+          state-z {:local-ver-tag 2222 :remote-tsn 0 :remote-ver-tag 0 :next-tsn 2000 :ssn 0 :state :closed}
 
           ;; A and Z connect simultaneously: both send INIT
           state-a1 (merge state-a {:state :cookie-wait :init-tag 1111})
