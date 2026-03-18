@@ -205,9 +205,9 @@
           cookie-ack-chunk {:type :cookie-ack}
           s3 (update s2 :pending-control-chunks conj cookie-ack-chunk)
           has-buffered-data? (some #(seq (:send-queue (val %))) (:streams s3))
-        was-established? (= (:state state) :established)
-        just-established? (and (not was-established?) (= (:state s3) :established))
-        s4 (if (and just-established? has-buffered-data?)
+          was-established? (= (:state state) :established)
+          just-established? (and (not was-established?) (= (:state s3) :established))
+          s4 (if (and just-established? has-buffered-data?)
                (assoc-in s3 [:timers :sctp/t3-rtx] {:expires-at (+ now-ms 1000) :delay 1000})
                s3)
           tx-bytes (reduce + (map (fn [st]
@@ -216,9 +216,9 @@
                                                        (if (:payload dc) (alength ^bytes (:payload dc)) 0)))
                                                    (:send-queue (val st)))))
                                   (:streams s4)))
-        s5 (if (and just-established? has-buffered-data?)
+          s5 (if (and just-established? has-buffered-data?)
                (update-in s4 [:metrics :tx-bytes] (fnil + 0) tx-bytes)
-             s4)]
+               s4)]
       {:next-state s5 :next-events (if was-established? [] [{:type :on-open}])})
     {:next-state state :next-events []}))
 
