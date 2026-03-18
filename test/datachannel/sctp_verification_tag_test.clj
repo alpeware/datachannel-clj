@@ -28,12 +28,12 @@
         ;; init packet with valid tag (must be 0)
         packet-init-valid {:src-port 5000 :dst-port 5000
                            :verification-tag 0
-                           :chunks [{:type :init :init-tag 54321} ]}
+                           :chunks [{:type :init :init-tag 54321}]}
 
         ;; init packet with invalid tag (must be 0)
         packet-init-invalid {:src-port 5000 :dst-port 5000
                              :verification-tag 123
-                             :chunks [{:type :init :init-tag 54321} ]}]
+                             :chunks [{:type :init :init-tag 54321}]}]
 
     (testing "accepts valid verification tag"
       (let [res (core/handle-sctp-packet state packet-valid 0)]
