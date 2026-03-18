@@ -20,6 +20,6 @@
 - [x] **[HIGH] Authenticate STUN Requests:** Update `stun/handle-packet` to validate the `MESSAGE-INTEGRITY` (HMAC-SHA1) attribute of inbound Binding Requests using the `:ice-pwd` before emitting responses.
 - [x] **[HIGH] Validate SCTP Verification Tags:** Update `core/handle-sctp-packet` to explicitly assert that the incoming `verification-tag` matches the expected `:local-ver-tag` (except for INIT chunks).
 - [x] **[HIGH] Enforce DTLS Fingerprint Verification:** Fix the TOCTOU bypass in `core/handle-receive` by explicitly requiring `:remote-fingerprint` to be non-nil and successfully verified before transitioning to `(:dtls-verified? true)`.
-- [ ] **[MEDIUM] Bound SCTP Receive Queues:** Enforce a maximum byte limit on the `:recv-queue` vector in `chunks/process-chunk` to prevent memory exhaustion from infinite fragmented DATA chunks.
+- [x] **[MEDIUM] Bound SCTP Receive Queues:** Enforce a maximum byte limit on the `:recv-queue` vector in `chunks/process-chunk` to prevent memory exhaustion from infinite fragmented DATA chunks.
 - [ ] **[MEDIUM] Validate SCTP CRC32c Checksums:** Compute and validate the CRC32c checksum of incoming SCTP packets in `sctp/decode-packet` to drop corrupted data.
 - [ ] **[MEDIUM] Secure SCTP State Cookies:** Prevent SYN-flood state exhaustion by properly signing the TCB state with an HMAC-SHA256 secret in the `INIT-ACK` and remaining stateless until a valid `COOKIE-ECHO` is received.

@@ -84,7 +84,10 @@
             ;; We must fetch the queue directly from s2 rather than the incoming state
             recv-q (get-in s2 [:streams stream-id :recv-queue] [])
             ;; Ensure that ANY chunk we receive (contiguous or not) goes into the receive queue for reassembly
-            new-recv-q (if (some #(= (:tsn %) tsn) recv-q) recv-q (conj recv-q chunk))
+            max-recv-q (get state :max-receive-queue-size)
+            new-chunk-len (if-let [p (:payload chunk)] (alength ^bytes p) 0)
+            recv-q-size (reduce + (map #(if-let [p (:payload %)] (alength ^bytes p) 0) recv-q))
+            new-recv-q (if (and max-recv-q (> (+ recv-q-size new-chunk-len) max-recv-q)) recv-q (if (some #(= (:tsn %) tsn) recv-q) recv-q (conj recv-q chunk)))
             s3 (assoc-in s2 [:streams stream-id :recv-queue] new-recv-q)]
         {:next-state s3 :next-events []}))))
 

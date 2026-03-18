@@ -271,6 +271,7 @@
      :local-outbound-streams (get options :local-outbound-streams 65535)
      :local-inbound-streams (get options :local-inbound-streams 65535)
      :max-queue-size (get options :max-queue-size)
+     :max-receive-queue-size (get options :max-receive-queue-size)
      :dtls/engine engine}))
 
 (declare send-data)
