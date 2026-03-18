@@ -29,8 +29,8 @@
                                        nil)))))]
 
       ;; Both start connection simultaneously
-      (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111}))
-      (reset! state-z (merge @state-z {:state :cookie-wait :init-tag 2222}))
+      (reset! state-a (merge @state-a {:state :cookie-wait :init-tag 1111 :remote-ver-tag 2222 :remote-tsn 1999}))
+      (reset! state-z (merge @state-z {:state :cookie-wait :init-tag 2222 :remote-ver-tag 1111 :remote-tsn 999}))
 
       (let [init-packet-a {:src-port 5000 :dst-port 5001 :verification-tag 0
                            :chunks [{:type :init :init-tag 1111 :a-rwnd 100000

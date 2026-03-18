@@ -82,6 +82,8 @@
                     (recur next-state
                            (rest remaining-chunks)
                            (into app-events next-events)))))
+          ;; Only pass on events/network packets if the chunk processor didn't short-circuit the connection processing
+          ;; Note: For INIT and COOKIE-ECHO chunks we now process them immutably.
           reassembled (reassemble (:new-state res) (:app-events res))]
       (packetize (:new-state reassembled) (:app-events reassembled) now-ms))))
 
@@ -232,8 +234,10 @@
   (let [cert-data (or (:cert-data options) (dtls/generate-cert))
         ctx (dtls/create-ssl-context (:cert cert-data) (:key cert-data))
         engine (dtls/create-engine ctx client-mode?)
-        local-ver-tag (.nextInt secure-rand 2147483647)]
-    {:remote-ver-tag 0
+        local-ver-tag (.nextInt secure-rand 2147483647)
+        cookie-secret (let [b (byte-array 32)] (.nextBytes secure-rand b) b)]
+    {:cookie-secret cookie-secret
+     :remote-ver-tag 0
      :local-ver-tag local-ver-tag
      :next-tsn 0
      :ssn 0

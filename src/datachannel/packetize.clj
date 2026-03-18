@@ -2,10 +2,16 @@
 
 (defn- build-network-out [state bundled-chunks]
   (if (seq bundled-chunks)
-    [{:src-port (get state :local-port 5000)
-      :dst-port (get state :remote-port 5000)
-      :verification-tag (get state :remote-ver-tag 0)
-      :chunks bundled-chunks}]
+    ;; Special case: INIT-ACK routing dynamically targets the peer's init-tag without mutating global state.
+    ;; ABORT might also need this in the future if generated completely out of context.
+    (let [first-chunk (first bundled-chunks)
+          v-tag (if (and (= (:type first-chunk) :init-ack) (:dest-ver-tag first-chunk))
+                  (:dest-ver-tag first-chunk)
+                  (get state :remote-ver-tag 0))]
+      [{:src-port (get state :local-port 5000)
+        :dst-port (get state :remote-port 5000)
+        :verification-tag v-tag
+        :chunks bundled-chunks}])
     []))
 
 (defn- process-control-chunks
