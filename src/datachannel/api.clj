@@ -364,6 +364,7 @@
                                  @(:callbacks child-node)))))))
         (catch Exception e
           (println "Error in api listen loop:" (.getMessage e))
+          (.printStackTrace e)
           (when-let [cb (:on-error listener-callbacks)]
             (cb {:type :on-error :cause e})))))))
 

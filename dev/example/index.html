@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>datachannel-clj WebRTC Demo</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; text-align: center; background: #f9f9f9; }
+        h1 { color: #333; }
+        .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 20px; }
+        button { background: #4CAF50; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #45a049; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        pre { background: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 4px; overflow-x: auto; text-align: left; font-size: 14px; min-height: 300px; }
+    </style>
+</head>
+<body>
+    <h1>WebRTC Data Channel</h1>
+    <p>This page will connect natively to the Clojure backend via WebRTC UDP DataChannel.</p>
+    
+    <div class="card">
+        <button id="connectBtn">Connect to Server</button>
+        <pre id="logTerminal"></pre>
+    </div>
+
+    <script>
+        const serverSdp = `SERVER_SDP_PLACEHOLDER`;
+        const logTerminal = document.getElementById('logTerminal');
+        const connectBtn = document.getElementById('connectBtn');
+
+        function log(msg) {
+            logTerminal.textContent += `[${new Date().toISOString().split('T')[1].split('.')[0]}] ${msg}\n`;
+            logTerminal.scrollTop = logTerminal.scrollHeight;
+        }
+
+        connectBtn.onclick = async () => {
+            connectBtn.disabled = true;
+            log("Initializing RTCPeerConnection...");
+            
+            const pc = new RTCPeerConnection({
+                iceServers: [] // Local connection doesn't need external STUN
+            });
+
+            // The datachannel-clj implementation does not perform in-band negotiation
+            // for the default channel, so we set negotiated: true to match its behavior.
+            log("Creating new DataChannel (id: 0, negotiated: true)...");
+            const dc = pc.createDataChannel("test-channel");
+
+            let pingInterval;
+
+            dc.onmessage = (e) => {
+                log("<< Received message! e.data = " + e.data + " (Type: " + typeof(e.data) + ")");
+                console.log("Recv msg:", e);
+            };
+
+            dc.onclose = () => { log("🔴 Data channel closed."); clearInterval(pingInterval); connectBtn.disabled = false; };
+            dc.onerror = (e) => { log("⚠️ Data channel error: " + e); console.error("DC error", e); };
+            dc.onopen = () => {
+                log("🟢 DataChannel IS OPEN!");
+                const msg = "Hello from the Browser JS!";
+                log(">> Sending: " + msg);
+                dc.send(msg);
+                
+                let counter = 1;
+                pingInterval = setInterval(() => {
+                    const text = `Ping ${counter++}`;
+                    log(">> Sending: " + text);
+                    dc.send(text);
+                }, 3000);
+            };
+            
+            pc.oniceconnectionstatechange = () => { log("🧊 ICE Connection State: " + pc.iceConnectionState); };
+            pc.onconnectionstatechange = () => { log("🔌 Peer Connection State: " + pc.connectionState); };
+
+            try {
+                // Client creates an exact offer (so it binds its own ports)
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                log("Successfully created and set Local Offer.");
+
+                log("Setting Remote Description (Server's static SDP)...");
+                await pc.setRemoteDescription({
+                    type: 'answer',
+                    sdp: serverSdp
+                });
+                log("Remote Description applied! Handshake started.");
+            } catch (err) {
+                log("❌ Error during WebRTC negotiation: " + err);
+                connectBtn.disabled = false;
+            }
+        };
+    </script>
+</body>
+</html>
