@@ -175,7 +175,7 @@
   (let [interval (get state :heartbeat-interval 30000)
         rto (get state :rto-initial 1000)
         hb-chunk {:type :heartbeat
-                  :params [{:type :heartbeat-info :info (byte-array 8)}]}]
+                  :params {:heartbeat (byte-array 8)}}]
     {:new-state (-> state
                     (assoc-in [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
                     (assoc-in [:timers :sctp/t-heartbeat-rtx] {:expires-at (+ now-ms rto)})

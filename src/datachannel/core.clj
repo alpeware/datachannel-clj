@@ -89,8 +89,9 @@
 
 (defn serialize-network-out
   "Encodes items in :network-out into ByteBuffers and stores them in :network-out-bytes"
-  [result-map & [^ByteBuffer opt-buf]]
-  (let [zero-checksum? (get-in result-map [:new-state :metrics :uses-zero-checksum])
+  [result-map & opt-args]
+  (let [opt-buf (first opt-args)
+        zero-checksum? (get-in result-map [:new-state :metrics :uses-zero-checksum])
         engine (get-in result-map [:new-state :dtls/engine])
         encoded (mapv (fn [item]
                         (cond
@@ -344,7 +345,7 @@
     (let [_ver-tag (:remote-ver-tag state)
           channel-opts (get-in state [:data-channels stream-id])
           ordered? (if (some? channel-opts) (:ordered channel-opts) true)
-          ssn (if ordered? (get-in state [:streams stream-id :next-ssn] 0) 0)
+          ssn (if ordered? (get-in state [:streams stream-id :next-tx-ssn] 0) 0)
           mtu (get state :mtu 1200)
           max-payload-per-chunk (- mtu 16)
           is-established? (= (:state state) :established)
@@ -366,7 +367,7 @@
                    (if (empty? remaining-frags)
                      (let [s1 (-> current-state
                                   (assoc :next-tsn current-tsn)
-                                  (cond-> ordered? (assoc-in [:streams stream-id :next-ssn] (inc ssn))))
+                                  (cond-> ordered? (assoc-in [:streams stream-id :next-tx-ssn] (inc ssn))))
                            interval (get s1 :heartbeat-interval 30000)
                            s2 (if (and (pos? interval) (contains? (:timers s1) :sctp/t-heartbeat))
                                 (assoc-in s1 [:timers :sctp/t-heartbeat] {:expires-at (+ now-ms interval)})
